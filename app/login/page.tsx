@@ -72,7 +72,7 @@ function LoginContent() {
           <div className="text-center mb-8">
             <Link href="/" className="inline-block mb-3">
               <span className="text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-400">
-                ACE Relay
+                LCE Relay
               </span>
             </Link>
             <p className="text-slate-500 text-sm font-light opacity-0 animate-float-up animate-delay-200">

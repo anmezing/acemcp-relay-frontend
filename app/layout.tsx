@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ACE Relay",
-  description: "ACE Relay Service - Modern MCP Relay Infrastructure",
+  title: "LCE Relay",
+  description: "LCE Relay Service - Code Context Engine Relay Infrastructure",
 };
 
 export default function RootLayout({

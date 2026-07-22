@@ -114,24 +114,22 @@ export default function ConsolePage() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [logsPage, setLogsPage] = useState(1);
-  const [copiedInstall, setCopiedInstall] = useState(false);
   const [copiedConfig, setCopiedConfig] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [logDetail, setLogDetail] = useState<LogDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  const installCommand = "npm install -g @augmentcode/auggie@latest";
-  const mcpConfig = `{
-  "mcpServers": {
-    "augment-context-engine": {
-      "command": "auggie",
-      "args": ["--mcp", "--mcp-auto-workspace"],
-      "env": {
-        "AUGMENT_SESSION_AUTH": "{\\"accessToken\\":\\"your-access-token\\",\\"tenantURL\\":\\"https://acemcp.heroman.wtf/relay/\\",\\"scopes\\":[\\"email\\"]}"
-      }
-    }
-  }
-}`;
+  const relayURL = "https://513689.xyz";
+  const mcpConfig = JSON.stringify({
+    mcpServers: {
+      "lce-relay": {
+        url: `${relayURL}/mcp`,
+        headers: {
+          Authorization: "Bearer YOUR_API_KEY",
+        },
+      },
+    },
+  }, null, 2);
 
   const fetchUserInfo = useCallback(async () => {
     try {
@@ -365,7 +363,7 @@ export default function ConsolePage() {
       <header className="relative border-b border-white/[0.06] flex-shrink-0 bg-[#0a0f1a]/80 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex items-center justify-between">
           <Link href="/" className="text-lg sm:text-xl font-semibold whitespace-nowrap text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-400">
-            ACE Relay
+            LCE Relay
           </Link>
           <div className="flex items-center gap-3 sm:gap-6">
             {/* Tab Navigation */}
@@ -526,93 +524,22 @@ export default function ConsolePage() {
                     <h2 className="text-lg font-medium text-white mb-6">配置说明</h2>
 
                     <div className="space-y-6">
-                      {/* Step 1: Install Auggie */}
+                      {/* Step 1: MCP Config */}
                       <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
                         <CardContent className="p-5">
                           <div className="flex items-center gap-3 mb-3">
                             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
                               1
                             </span>
-                            <h3 className="text-white font-medium">安装 Auggie</h3>
+                            <h3 className="text-white font-medium">添加远程 MCP 服务器</h3>
                           </div>
                           <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-                            首先，全局安装 Auggie CLI 工具。
-                          </p>
-                          <div className="relative group">
-                            <div className="bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-3 font-mono text-sm">
-                              <code className="text-cyan-300">{installCommand}</code>
-                            </div>
-                            <Button
-                              variant="glass"
-                              size="sm"
-                              onClick={async () => {
-                                await navigator.clipboard.writeText(installCommand);
-                                setCopiedInstall(true);
-                                setTimeout(() => setCopiedInstall(false), 2000);
-                              }}
-                              className="absolute top-2 right-2"
-                            >
-                              {copiedInstall ? "已复制" : "复制"}
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Step 2: Configure MCP */}
-                      <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
-                        <CardContent className="p-5">
-                          <div className="flex items-center gap-3 mb-3">
-                            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
-                              2
-                            </span>
-                            <h3 className="text-white font-medium">配置 MCP</h3>
-                          </div>
-                          <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-                            在你的 MCP 配置文件中添加以下配置：
+                            在 Cursor / Claude Desktop 的 MCP 设置中添加以下配置，将 <code className="text-amber-400 font-mono">YOUR_API_KEY</code> 替换为「密钥管理」中生成的 API Key：
                           </p>
                           <div className="relative group">
                             <div className="bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-3 font-mono text-sm overflow-x-auto">
-                              <pre className="text-slate-300">
-                                <code>
-                                  <span className="text-slate-500">{"{"}</span>{"\n"}
-                                  <span className="text-slate-300">{"  "}</span>
-                                  <span className="text-cyan-400">&quot;mcpServers&quot;</span>
-                                  <span className="text-slate-500">:</span>
-                                  <span className="text-slate-500">{" {"}</span>{"\n"}
-                                  <span className="text-slate-300">{"    "}</span>
-                                  <span className="text-cyan-400">&quot;augment-context-engine&quot;</span>
-                                  <span className="text-slate-500">:</span>
-                                  <span className="text-slate-500">{" {"}</span>{"\n"}
-                                  <span className="text-slate-300">{"      "}</span>
-                                  <span className="text-cyan-400">&quot;command&quot;</span>
-                                  <span className="text-slate-500">:</span>
-                                  <span className="text-emerald-400">{" \"auggie\""}</span>
-                                  <span className="text-slate-500">,</span>{"\n"}
-                                  <span className="text-slate-300">{"      "}</span>
-                                  <span className="text-cyan-400">&quot;args&quot;</span>
-                                  <span className="text-slate-500">:</span>
-                                  <span className="text-slate-500">{" ["}</span>
-                                  <span className="text-emerald-400">&quot;--mcp&quot;</span>
-                                  <span className="text-slate-500">,</span>
-                                  <span className="text-emerald-400">{" \"--mcp-auto-workspace\""}</span>
-                                  <span className="text-slate-500">{"]"}</span>
-                                  <span className="text-slate-500">,</span>{"\n"}
-                                  <span className="text-slate-300">{"      "}</span>
-                                  <span className="text-cyan-400">&quot;env&quot;</span>
-                                  <span className="text-slate-500">:</span>
-                                  <span className="text-slate-500">{" {"}</span>{"\n"}
-                                  <span className="text-slate-300">{"        "}</span>
-                                  <span className="text-cyan-400">&quot;AUGMENT_SESSION_AUTH&quot;</span>
-                                  <span className="text-slate-500">:</span>
-                                  <span className="text-amber-400">{" \"{\\\"accessToken\\\":\\\"your-access-token\\\",\\\"tenantURL\\\":\\\"https://acemcp.heroman.wtf/relay/\\\",\\\"scopes\\\":[\\\"email\\\"]}\""}</span>{"\n"}
-                                  <span className="text-slate-300">{"      "}</span>
-                                  <span className="text-slate-500">{"}"}</span>{"\n"}
-                                  <span className="text-slate-300">{"    "}</span>
-                                  <span className="text-slate-500">{"}"}</span>{"\n"}
-                                  <span className="text-slate-300">{"  "}</span>
-                                  <span className="text-slate-500">{"}"}</span>{"\n"}
-                                  <span className="text-slate-500">{"}"}</span>
-                                </code>
+                              <pre className="text-slate-300 whitespace-pre-wrap break-all">
+                                <code>{mcpConfig}</code>
                               </pre>
                             </div>
                             <Button
@@ -628,42 +555,33 @@ export default function ConsolePage() {
                               {copiedConfig ? "已复制" : "复制"}
                             </Button>
                           </div>
+                        </CardContent>
+                      </Card>
 
-                          {/* Configuration notes */}
-                          <div className="mt-5 space-y-3">
+                      {/* Step 2: Available tools */}
+                      <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
+                        <CardContent className="p-5">
+                          <div className="flex items-center gap-3 mb-3">
+                            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
+                              2
+                            </span>
+                            <h3 className="text-white font-medium">可用工具</h3>
+                          </div>
+                          <p className="text-slate-400 text-sm mb-4 leading-relaxed">
+                            连接后，IDE 会自动发现以下 MCP 工具：
+                          </p>
+                          <div className="space-y-2">
                             <div className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
-                              <code className="text-cyan-400 text-xs font-mono shrink-0">AUGMENT_SESSION_AUTH</code>
-                              <p className="text-slate-400 text-xs">
-                                JSON 格式的认证信息，包含以下字段：
-                              </p>
+                              <code className="text-cyan-400 text-xs font-mono shrink-0">codebase-retrieval</code>
+                              <p className="text-slate-400 text-xs">语义检索代码上下文</p>
                             </div>
-                            <div className="ml-4 space-y-2">
-                              <div className="flex gap-3 p-2.5 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
-                                <code className="text-amber-400 text-xs font-mono shrink-0">accessToken</code>
-                                <p className="text-slate-400 text-xs">
-                                  你的 API 密钥，在「密钥管理」中生成
-                                </p>
-                              </div>
-                              <div className="flex gap-3 p-2.5 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
-                                <code className="text-amber-400 text-xs font-mono shrink-0">tenantURL</code>
-                                <p className="text-slate-400 text-xs">
-                                  固定为 <code className="text-emerald-400">https://acemcp.heroman.wtf/relay/</code>
-                                </p>
-                              </div>
-                              <div className="flex gap-3 p-2.5 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
-                                <code className="text-amber-400 text-xs font-mono shrink-0">scopes</code>
-                                <p className="text-slate-400 text-xs">
-                                  固定为 <code className="text-emerald-400">[&quot;email&quot;]</code>
-                                </p>
-                              </div>
+                            <div className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
+                              <code className="text-cyan-400 text-xs font-mono shrink-0">codebase_find_missing</code>
+                              <p className="text-slate-400 text-xs">查询哪些文件尚未索引</p>
                             </div>
-                            <div className="p-3 bg-yellow-500/[0.06] border border-yellow-500/20 rounded-lg space-y-2">
-                              <p className="text-yellow-400/80 text-xs">
-                                旧版 auggie（&lt;=0.19.0）使用的 <code className="font-mono">AUGMENT_API_TOKEN</code> 和 <code className="font-mono">AUGMENT_API_URL</code> 已废弃，建议升级到最新版使用 <code className="font-mono">AUGMENT_SESSION_AUTH</code>。
-                              </p>
-                              <p className="text-yellow-400/60 text-xs">
-                                如需使用旧版，请将 env 替换为：<code className="font-mono text-yellow-400/80">&quot;AUGMENT_API_TOKEN&quot;: &quot;your-access-token&quot;</code>，<code className="font-mono text-yellow-400/80">&quot;AUGMENT_API_URL&quot;: &quot;https://acemcp.heroman.wtf/relay/&quot;</code>
-                              </p>
+                            <div className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
+                              <code className="text-cyan-400 text-xs font-mono shrink-0">codebase_remote_index</code>
+                              <p className="text-slate-400 text-xs">上传文件到远程索引</p>
                             </div>
                           </div>
                         </CardContent>
@@ -674,20 +592,24 @@ export default function ConsolePage() {
                         <CardContent className="p-4">
                           <h4 className="text-white text-sm font-medium mb-3 flex items-center gap-2">
                             <Info className="w-4 h-4 text-cyan-400" />
-                            温馨提示
+                            说明
                           </h4>
                           <ul className="text-slate-400 text-xs space-y-2">
                             <li className="flex items-start gap-2">
                               <span className="text-cyan-400 mt-0.5">•</span>
-                              <span>配置完成后，重启 IDE 或编辑器以使配置生效</span>
+                              <span>每个 API Key 对应独立的租户存储空间，数据互相隔离</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                              <span className="text-cyan-400 mt-0.5">•</span>
+                              <span>客户端只需配置 MCP 服务器地址和 API Key，无需安装任何 LCE 组件</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                              <span className="text-cyan-400 mt-0.5">•</span>
+                              <span>tenant_id 由 Relay 从 API Key 自动注入，客户端无需传递</span>
                             </li>
                             <li className="flex items-start gap-2">
                               <span className="text-cyan-400 mt-0.5">•</span>
                               <span>请妥善保管 API 密钥，不要在公开场合分享</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                              <span className="text-cyan-400 mt-0.5">•</span>
-                              <span>如遇问题，可在「请求日志」中查看排查</span>
                             </li>
                           </ul>
                         </CardContent>

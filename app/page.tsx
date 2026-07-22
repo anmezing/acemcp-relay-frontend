@@ -35,7 +35,7 @@ export default function Home() {
 
             <h1 className="relative text-6xl md:text-8xl font-semibold tracking-tight">
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-cyan-400 to-blue-400">
-                ACE Relay
+                LCE Relay
               </span>
             </h1>
           </div>
@@ -49,7 +49,7 @@ export default function Home() {
 
           {/* Subtitle */}
           <p className="text-lg md:text-xl text-slate-400 font-light tracking-wide opacity-0 animate-float-up animate-delay-200">
-            Augment Context Engine 请求转发服务
+            代码上下文引擎中继服务
           </p>
 
           {/* Feature pills */}
