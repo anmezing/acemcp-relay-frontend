@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github } from "lucide-react";
+import { Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github, Trash2 } from "lucide-react";
 
 // shadcn/ui components
 import { Button } from "@/components/ui/button";
@@ -118,6 +118,9 @@ export default function ConsolePage() {
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [logDetail, setLogDetail] = useState<LogDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearLoading, setClearLoading] = useState(false);
+  const [clearResult, setClearResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const relayURL = "https://513689.xyz";
   const mcpConfig = JSON.stringify({
@@ -330,6 +333,26 @@ export default function ConsolePage() {
     });
   };
 
+  const handleClearIndex = async () => {
+    setClearLoading(true);
+    setClearResult(null);
+    try {
+      const res = await fetch("/api/clear-index", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setClearResult({ success: true, message: data.message || "索引和日志已清除" });
+        setLogsData(null);
+      } else {
+        setClearResult({ success: false, message: data.error || "清除失败" });
+      }
+    } catch {
+      setClearResult({ success: false, message: "网络错误" });
+    } finally {
+      setClearLoading(false);
+      setShowClearConfirm(false);
+    }
+  };
+
   if (isPending) {
     return (
       <div className="min-h-screen bg-[#0a0f1a] flex items-center justify-center">
@@ -496,6 +519,41 @@ export default function ConsolePage() {
                         <p className="text-slate-600 text-xs">
                           重置后旧密钥将立即失效，请谨慎操作
                         </p>
+
+                        {/* Clear index */}
+                        <div className="mt-8 pt-6 border-t border-white/[0.06]">
+                          <h3 className="text-sm font-medium text-red-400 mb-3">危险操作</h3>
+                          <Card className="bg-red-500/[0.04] border-red-500/20">
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="min-w-0">
+                                  <p className="text-white text-sm font-medium">清除远程索引</p>
+                                  <p className="text-slate-500 text-xs mt-1">
+                                    删除所有已索引的代码数据和请求日志，72 小时内只能操作一次
+                                  </p>
+                                </div>
+                                <Button
+                                  variant="warning"
+                                  size="sm"
+                                  onClick={() => setShowClearConfirm(true)}
+                                  disabled={clearLoading}
+                                  className="shrink-0"
+                                >
+                                  <Trash2 className="w-4 h-4 mr-1" />
+                                  {clearLoading ? "清除中..." : "清除索引"}
+                                </Button>
+                              </div>
+                              {clearResult && (
+                                <p className={cn(
+                                  "text-xs mt-3",
+                                  clearResult.success ? "text-green-400" : "text-red-400"
+                                )}>
+                                  {clearResult.message}
+                                </p>
+                              )}
+                            </CardContent>
+                          </Card>
+                        </div>
                       </div>
                     ) : (
                       <div className="text-center py-8">
@@ -582,6 +640,10 @@ export default function ConsolePage() {
                             <div className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
                               <code className="text-cyan-400 text-xs font-mono shrink-0">codebase_remote_index</code>
                               <p className="text-slate-400 text-xs">上传文件到远程索引</p>
+                            </div>
+                            <div className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
+                              <code className="text-cyan-400 text-xs font-mono shrink-0">codebase_clear_index</code>
+                              <p className="text-slate-400 text-xs">清除远程索引数据</p>
                             </div>
                           </div>
                         </CardContent>
@@ -854,6 +916,30 @@ export default function ConsolePage() {
               className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-white"
             >
               确认退出
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Clear index confirm dialog */}
+      <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
+        <AlertDialogContent className="bg-[#0d1424] border-white/[0.08]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">确认清除索引</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              此操作将删除所有已索引的代码数据和请求日志，且 72 小时内无法再次执行。清除后需要重新上传代码才能使用检索功能。确定要继续吗？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-transparent border-white/[0.08] text-slate-400 hover:text-white hover:bg-white/[0.06]">
+              取消
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleClearIndex}
+              disabled={clearLoading}
+              className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-white"
+            >
+              {clearLoading ? "清除中..." : "确认清除"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
