@@ -770,7 +770,7 @@ export default function ConsolePage() {
                           <ul className="text-slate-400 text-xs space-y-2">
                             <li className="flex items-start gap-2">
                               <span className="text-cyan-400 mt-0.5">•</span>
-                              <span>每个 API Key 对应独立的租户存储空间，数据互相隔离</span>
+                              <span>每个 API Key 拥有独立的检索索引，互不影响</span>
                             </li>
                             <li className="flex items-start gap-2">
                               <span className="text-cyan-400 mt-0.5">•</span>
@@ -1038,7 +1038,7 @@ export default function ConsolePage() {
           <AlertDialogHeader>
             <AlertDialogTitle className="text-white">确认清除索引</AlertDialogTitle>
             <AlertDialogDescription className="text-slate-400">
-              此操作将删除所有已索引的代码数据和请求日志，且 72 小时内无法再次执行。清除后需要重新上传代码才能使用检索功能。确定要继续吗？
+              此操作将删除所有已索引的代码数据和请求日志，且 72 小时内无法再次执行。清除后需要重新建立代码索引才能使用检索功能。确定要继续吗？
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

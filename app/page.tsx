@@ -49,7 +49,7 @@ export default function Home() {
             {[
               { label: "语义检索", color: "emerald", delay: "animate-delay-300" },
               { label: "符号图谱", color: "cyan", delay: "animate-delay-400" },
-              { label: "多租户隔离", color: "blue", delay: "animate-delay-500" },
+              { label: "零配置接入", color: "blue", delay: "animate-delay-500" },
             ].map((item) => (
               <Badge
                 key={item.label}
@@ -121,7 +121,7 @@ export default function Home() {
             <SectionTitle>开始使用</SectionTitle>
             <div className="space-y-4">
               <StepCard step={1} title="注册并获取 API Key">
-                登录控制台，在「密钥管理」中生成你的 API Key。每个 Key 对应独立的存储空间，数据互相隔离。
+                登录控制台，在「密钥管理」中生成你的 API Key。
               </StepCard>
               <StepCard step={2} title="在 IDE 中添加 MCP 服务器">
                 <div className="space-y-3">
@@ -191,7 +191,7 @@ export default function Home() {
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>
-                    <span>代码索引存储在服务端独立租户空间中，请勿将包含敏感凭证的文件纳入索引</span>
+                    <span>请勿将包含敏感凭证的文件（如 .env、密钥文件）纳入索引</span>
                   </li>
                 </ul>
               </CardContent>
