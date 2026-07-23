@@ -746,13 +746,11 @@ export default function ConsolePage() {
                           </p>
                           <div className="space-y-2">
                             {[
-                              { name: "codebase-retrieval", desc: "语义检索代码上下文（混合搜索引擎）" },
-                              { name: "codebase_remote_index", desc: "上传文件到远程索引" },
-                              { name: "codebase_find_missing", desc: "查询哪些文件尚未索引" },
+                              { name: "codebase-retrieval", desc: "语义检索代码上下文" },
                               { name: "codebase_git_context", desc: "Git 上下文：状态、diff、提交历史、blame" },
                               { name: "codebase_symbol_graph", desc: "符号图查询：调用关系、依赖分析" },
                               { name: "codebase_review_changes", desc: "变更审查：diff + 检索 + 测试计划" },
-                              { name: "codebase_tenant_stats", desc: "索引统计：文件数、分块数、语言分布" },
+                              { name: "codebase_find_missing", desc: "查询哪些文件尚未索引" },
                               { name: "codebase_clear_index", desc: "清除远程索引数据" },
                             ].map((tool) => (
                               <div key={tool.name} className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
