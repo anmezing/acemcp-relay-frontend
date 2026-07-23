@@ -121,6 +121,15 @@ export default function ConsolePage() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearLoading, setClearLoading] = useState(false);
   const [clearResult, setClearResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [tenantStats, setTenantStats] = useState<{
+    exists: boolean;
+    fileCount: number;
+    chunkCount: number;
+    vectorIndexedCount: number;
+    totalSizeBytes: number;
+    languages: Record<string, number>;
+    indexingCount?: number;
+  } | null>(null);
 
   const relayURL = "https://513689.xyz";
   const configKey = fullKey || "YOUR_API_KEY";
@@ -206,6 +215,18 @@ export default function ConsolePage() {
     }
   }, []);
 
+  const fetchTenantStats = useCallback(async () => {
+    try {
+      const res = await fetch("/api/tenant-stats");
+      if (res.ok) {
+        const data = await res.json();
+        setTenantStats(data);
+      }
+    } catch (error) {
+      console.error("获取索引统计失败:", error);
+    }
+  }, []);
+
   const fetchLogs = useCallback(async (page = 1, forceRefreshStats = false) => {
     setLogsLoading(true);
     const startTime = Date.now();
@@ -288,8 +309,9 @@ export default function ConsolePage() {
     } else if (session) {
       fetchUserInfo();
       fetchKeyInfo();
+      fetchTenantStats();
     }
-  }, [isPending, session, router, fetchUserInfo, fetchKeyInfo]);
+  }, [isPending, session, router, fetchUserInfo, fetchKeyInfo, fetchTenantStats]);
 
   const handleShowKey = async () => {
     if (showKey) {
@@ -556,6 +578,55 @@ export default function ConsolePage() {
                           </CardContent>
                         </Card>
 
+                        {/* Index stats */}
+                        {tenantStats && tenantStats.exists && (
+                          <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
+                            <CardContent className="p-4">
+                              <p className="text-slate-500 text-xs mb-3">索引统计</p>
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <div>
+                                  <p className="text-2xl font-semibold text-white">{tenantStats.fileCount.toLocaleString()}</p>
+                                  <p className="text-slate-500 text-xs">已索引文件</p>
+                                </div>
+                                <div>
+                                  <p className="text-2xl font-semibold text-white">{tenantStats.chunkCount.toLocaleString()}</p>
+                                  <p className="text-slate-500 text-xs">代码分块</p>
+                                </div>
+                                <div>
+                                  <p className="text-2xl font-semibold text-cyan-400">{tenantStats.vectorIndexedCount.toLocaleString()}</p>
+                                  <p className="text-slate-500 text-xs">向量索引</p>
+                                </div>
+                                <div>
+                                  <p className="text-2xl font-semibold text-white">
+                                    {tenantStats.totalSizeBytes >= 1048576
+                                      ? `${(tenantStats.totalSizeBytes / 1048576).toFixed(1)} MB`
+                                      : `${(tenantStats.totalSizeBytes / 1024).toFixed(0)} KB`}
+                                  </p>
+                                  <p className="text-slate-500 text-xs">存储大小</p>
+                                </div>
+                                {tenantStats.indexingCount != null && (
+                                  <div>
+                                    <p className="text-2xl font-semibold text-white">{tenantStats.indexingCount.toLocaleString()}</p>
+                                    <p className="text-slate-500 text-xs">索引请求次数</p>
+                                  </div>
+                                )}
+                              </div>
+                              {Object.keys(tenantStats.languages).length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-white/[0.04]">
+                                  <p className="text-slate-500 text-xs mb-2">语言分布</p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {Object.entries(tenantStats.languages).slice(0, 10).map(([lang, count]) => (
+                                      <span key={lang} className="text-[11px] px-2 py-0.5 rounded bg-white/[0.04] text-slate-400">
+                                        {lang} <span className="text-slate-600">{count}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </CardContent>
+                          </Card>
+                        )}
+
                         {/* Reset button */}
                         <Button
                           variant="warning"
@@ -674,22 +745,21 @@ export default function ConsolePage() {
                             连接后，IDE 会自动发现以下 MCP 工具：
                           </p>
                           <div className="space-y-2">
-                            <div className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
-                              <code className="text-cyan-400 text-xs font-mono shrink-0">codebase-retrieval</code>
-                              <p className="text-slate-400 text-xs">语义检索代码上下文</p>
-                            </div>
-                            <div className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
-                              <code className="text-cyan-400 text-xs font-mono shrink-0">codebase_find_missing</code>
-                              <p className="text-slate-400 text-xs">查询哪些文件尚未索引</p>
-                            </div>
-                            <div className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
-                              <code className="text-cyan-400 text-xs font-mono shrink-0">codebase_remote_index</code>
-                              <p className="text-slate-400 text-xs">上传文件到远程索引</p>
-                            </div>
-                            <div className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
-                              <code className="text-cyan-400 text-xs font-mono shrink-0">codebase_clear_index</code>
-                              <p className="text-slate-400 text-xs">清除远程索引数据</p>
-                            </div>
+                            {[
+                              { name: "codebase-retrieval", desc: "语义检索代码上下文（混合搜索引擎）" },
+                              { name: "codebase_remote_index", desc: "上传文件到远程索引" },
+                              { name: "codebase_find_missing", desc: "查询哪些文件尚未索引" },
+                              { name: "codebase_git_context", desc: "Git 上下文：状态、diff、提交历史、blame" },
+                              { name: "codebase_symbol_graph", desc: "符号图查询：调用关系、依赖分析" },
+                              { name: "codebase_review_changes", desc: "变更审查：diff + 检索 + 测试计划" },
+                              { name: "codebase_tenant_stats", desc: "索引统计：文件数、分块数、语言分布" },
+                              { name: "codebase_clear_index", desc: "清除远程索引数据" },
+                            ].map((tool) => (
+                              <div key={tool.name} className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
+                                <code className="text-cyan-400 text-xs font-mono shrink-0">{tool.name}</code>
+                                <p className="text-slate-400 text-xs">{tool.desc}</p>
+                              </div>
+                            ))}
                           </div>
                         </CardContent>
                       </Card>
