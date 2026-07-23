@@ -123,17 +123,64 @@ export default function ConsolePage() {
   const [clearResult, setClearResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const relayURL = "https://513689.xyz";
-  const displayKey = fullKey || (keyInfo?.maskedKey ? keyInfo.maskedKey : "YOUR_API_KEY");
+  const configKey = fullKey || "YOUR_API_KEY";
   const mcpConfig = JSON.stringify({
     mcpServers: {
       "lce-relay": {
         url: `${relayURL}/mcp`,
         headers: {
-          Authorization: `Bearer ${displayKey}`,
+          Authorization: `Bearer ${configKey}`,
         },
       },
     },
   }, null, 2);
+
+  const generateAndCopyConfig = async () => {
+    setCopiedConfig(false);
+    let key = fullKey;
+
+    if (!key && keyInfo?.hasKey) {
+      const res = await fetch("/api/key/reveal");
+      if (res.ok) {
+        const data = await res.json();
+        key = data.apiKey;
+        setFullKey(key);
+      }
+    }
+
+    if (!key) {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/key", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "create" }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          key = data.apiKey;
+          setFullKey(key);
+          await fetchKeyInfo();
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (key) {
+      const filled = JSON.stringify({
+        mcpServers: {
+          "lce-relay": {
+            url: `${relayURL}/mcp`,
+            headers: { Authorization: `Bearer ${key}` },
+          },
+        },
+      }, null, 2);
+      await navigator.clipboard.writeText(filled);
+      setCopiedConfig(true);
+      setTimeout(() => setCopiedConfig(false), 2000);
+    }
+  };
 
   const fetchUserInfo = useCallback(async () => {
     try {
@@ -593,7 +640,7 @@ export default function ConsolePage() {
                             <h3 className="text-white font-medium">添加远程 MCP 服务器</h3>
                           </div>
                           <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-                            在 Cursor / Claude Desktop 的 MCP 设置中添加以下配置{keyInfo?.hasKey ? "：" : "，生成密钥后 API Key 会自动填充："}
+                            在 Cursor / Claude Desktop 的 MCP 设置中添加以下配置，点击「一键复制」自动生成密钥并填充：
                           </p>
                           <div className="relative group">
                             <div className="bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-3 font-mono text-sm overflow-x-auto">
@@ -604,14 +651,11 @@ export default function ConsolePage() {
                             <Button
                               variant="glass"
                               size="sm"
-                              onClick={async () => {
-                                await navigator.clipboard.writeText(mcpConfig);
-                                setCopiedConfig(true);
-                                setTimeout(() => setCopiedConfig(false), 2000);
-                              }}
+                              onClick={generateAndCopyConfig}
+                              disabled={loading}
                               className="absolute top-2 right-2"
                             >
-                              {copiedConfig ? "已复制" : "复制"}
+                              {copiedConfig ? "已复制" : loading ? "生成中..." : "一键复制"}
                             </Button>
                           </div>
                         </CardContent>
