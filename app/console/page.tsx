@@ -1065,7 +1065,7 @@ export default function ConsolePage() {
                       </div>
                     ) : tenantStats && !tenantStats.exists ? (
                       <div className="text-center py-8 text-slate-500">
-                        尚未建立索引。请使用 Augment 插件登录并打开项目，索引将自动创建。
+                        尚未建立索引。请在 VS Code 插件中登录 LCE 并打开项目，索引将自动创建。
                       </div>
                     ) : (
                       <div className="space-y-4">
