@@ -22,11 +22,12 @@ function parseAuthError(raw: string | null): string | null {
 function LoginContent() {
   const params = useSearchParams();
   const errorMessage = parseAuthError(params.get("error"));
+  const callbackUrl = params.get("callbackUrl") || "/";
 
   const handleLinuxDoLogin = () => {
     authClient.signIn.oauth2({
       providerId: "linuxdo",
-      callbackURL: "/",
+      callbackURL: callbackUrl,
       errorCallbackURL: "/login",
     });
   };
@@ -34,7 +35,7 @@ function LoginContent() {
   const handleGithubLogin = () => {
     authClient.signIn.social({
       provider: "github",
-      callbackURL: "/",
+      callbackURL: callbackUrl,
       errorCallbackURL: "/login",
     });
   };
