@@ -93,6 +93,29 @@ export default function Home() {
             </div>
           </section>
 
+          {/* Core capabilities */}
+          <section>
+            <SectionTitle>核心能力</SectionTitle>
+            <div className="grid md:grid-cols-2 gap-4">
+              <FeatureCard
+                title="语义代码理解"
+                description={`不只是关键词匹配。用自然语言描述意图——"处理支付失败后的重试逻辑"——引擎理解语义，从整个仓库中找到最相关的代码片段并附带上下文。`}
+              />
+              <FeatureCard
+                title="Bug 溯源"
+                description="结合 Git 历史和符号图谱，追溯一个 bug 是什么时候、由谁、在哪次提交中引入的。不再手动翻 git log，AI 代理直接给出引入变更和影响范围。"
+              />
+              <FeatureCard
+                title="符号关系图谱"
+                description="基于 AST 和编译器分析构建的代码图谱。追踪函数调用链、类型引用、导入依赖——修改一个函数前，先看清谁在调用它、影响哪些模块。"
+              />
+              <FeatureCard
+                title="变更影响分析"
+                description="提交代码前，自动分析变更影响的范围：关联的调用者、受影响的测试、潜在的回归风险。让 AI 代理的 code review 真正有据可依。"
+              />
+            </div>
+          </section>
+
           {/* How to start */}
           <section>
             <SectionTitle>开始使用</SectionTitle>
@@ -192,6 +215,17 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
       <h2 className="text-xl md:text-2xl font-medium text-white">{children}</h2>
       <div className="flex-1 h-px bg-gradient-to-r from-white/[0.08] to-transparent" />
     </div>
+  );
+}
+
+function FeatureCard({ title, description }: { title: string; description: string }) {
+  return (
+    <Card className="bg-[#0d1424]/60 border-white/[0.06] hover:border-white/[0.12] transition-colors">
+      <CardContent className="p-5">
+        <h3 className="text-white font-medium mb-2">{title}</h3>
+        <p className="text-slate-400 text-sm leading-relaxed">{description}</p>
+      </CardContent>
+    </Card>
   );
 }
 
