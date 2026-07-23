@@ -4,6 +4,9 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
+ENV BETTER_AUTH_SECRET=build-placeholder
+ENV POSTGRES_HOST=localhost
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
 
 FROM node:22-slim
