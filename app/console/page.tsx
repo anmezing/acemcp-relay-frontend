@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github, Trash2 } from "lucide-react";
+import {
+  Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github, Trash2,
+  Key, FileText, User, Database, ScrollText, Building2, Users, Coins,
+  Gauge, Cpu, Settings, Terminal, Shield
+} from "lucide-react";
 
 // shadcn/ui components
 import { Button } from "@/components/ui/button";
@@ -27,7 +31,54 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type Tab = "keys" | "profile" | "logs" | "docs";
+type Tab =
+  | "keys" | "docs" | "profile"
+  | "index" | "logs"
+  | "org" | "users" | "token-cost" | "quota" | "models"
+  | "system-settings" | "system-logs";
+
+interface SidebarSection {
+  label: string;
+  admin?: boolean;
+  items: { id: Tab; label: string; icon: React.ReactNode }[];
+}
+
+const ALL_SECTIONS: SidebarSection[] = [
+  {
+    label: "我的",
+    items: [
+      { id: "keys", label: "密钥管理", icon: <Key className="w-4 h-4" /> },
+      { id: "docs", label: "配置说明", icon: <FileText className="w-4 h-4" /> },
+      { id: "profile", label: "用户信息", icon: <User className="w-4 h-4" /> },
+    ],
+  },
+  {
+    label: "数据",
+    items: [
+      { id: "index", label: "索引管理", icon: <Database className="w-4 h-4" /> },
+      { id: "logs", label: "请求日志", icon: <ScrollText className="w-4 h-4" /> },
+    ],
+  },
+  {
+    label: "管理",
+    admin: true,
+    items: [
+      { id: "org", label: "组织概览", icon: <Building2 className="w-4 h-4" /> },
+      { id: "users", label: "用户管理", icon: <Users className="w-4 h-4" /> },
+      { id: "token-cost", label: "Token 成本", icon: <Coins className="w-4 h-4" /> },
+      { id: "quota", label: "配额管理", icon: <Gauge className="w-4 h-4" /> },
+      { id: "models", label: "模型设置", icon: <Cpu className="w-4 h-4" /> },
+    ],
+  },
+  {
+    label: "系统",
+    admin: true,
+    items: [
+      { id: "system-settings", label: "系统设置", icon: <Settings className="w-4 h-4" /> },
+      { id: "system-logs", label: "系统日志", icon: <Terminal className="w-4 h-4" /> },
+    ],
+  },
+];
 
 interface RequestLog {
   id: string;
@@ -118,6 +169,7 @@ export default function ConsolePage() {
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [logDetail, setLogDetail] = useState<LogDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearLoading, setClearLoading] = useState(false);
   const [clearResult, setClearResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -227,6 +279,18 @@ export default function ConsolePage() {
     }
   }, []);
 
+  const fetchAdmin = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/check");
+      if (res.ok) {
+        const data = await res.json();
+        setIsAdmin(data.isAdmin);
+      }
+    } catch {}
+  }, []);
+
+  const sections = isAdmin ? ALL_SECTIONS : ALL_SECTIONS.filter((s) => !s.admin);
+
   const fetchLogs = useCallback(async (page = 1, forceRefreshStats = false) => {
     setLogsLoading(true);
     const startTime = Date.now();
@@ -310,8 +374,9 @@ export default function ConsolePage() {
       fetchUserInfo();
       fetchKeyInfo();
       fetchTenantStats();
+      fetchAdmin();
     }
-  }, [isPending, session, router, fetchUserInfo, fetchKeyInfo, fetchTenantStats]);
+  }, [isPending, session, router, fetchUserInfo, fetchKeyInfo, fetchTenantStats, fetchAdmin]);
 
   const handleShowKey = async () => {
     if (showKey) {
@@ -437,12 +502,7 @@ export default function ConsolePage() {
 
   if (!session) return null;
 
-  const tabs = [
-    { id: "keys" as const, label: "密钥管理" },
-    { id: "docs" as const, label: "配置说明" },
-    { id: "logs" as const, label: "请求日志" },
-    { id: "profile" as const, label: "用户信息" },
-  ];
+  const allItems = sections.flatMap((s) => s.items);
 
   return (
     <div className="h-screen bg-[#0a0f1a] flex flex-col overflow-hidden">
@@ -497,32 +557,44 @@ export default function ConsolePage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-8 h-full flex flex-col">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)} className="flex-1 flex flex-col min-h-0">
             {/* Mobile tabs - horizontal scrollable */}
-            <TabsList className="flex md:hidden gap-2 mb-4 overflow-x-auto scrollbar-none pb-2 flex-shrink-0 bg-transparent h-auto p-0">
-              {tabs.map((tab) => (
+            <TabsList className="flex md:hidden gap-1 mb-4 overflow-x-auto scrollbar-none pb-2 flex-shrink-0 bg-transparent h-auto p-0">
+              {allItems.map((item) => (
                 <TabsTrigger
-                  key={tab.id}
-                  value={tab.id}
-                  className="flex-shrink-0 px-3 py-2 text-sm rounded-lg whitespace-nowrap data-[state=active]:bg-white/[0.06] data-[state=active]:text-white data-[state=inactive]:text-slate-400 border border-transparent data-[state=active]:border-white/[0.08]"
+                  key={item.id}
+                  value={item.id}
+                  className="flex-shrink-0 px-2.5 py-1.5 text-xs rounded-lg whitespace-nowrap gap-1.5 data-[state=active]:bg-white/[0.06] data-[state=active]:text-white data-[state=inactive]:text-slate-400 border border-transparent data-[state=active]:border-white/[0.08]"
                 >
-                  {tab.label}
+                  {item.icon}
+                  {item.label}
                 </TabsTrigger>
               ))}
             </TabsList>
 
             <div className="flex gap-4 flex-1 min-h-0">
               {/* Sidebar - desktop only */}
-              <aside className="hidden md:block flex-shrink-0">
-                <TabsList className="flex flex-col gap-1 bg-transparent h-auto p-0">
-                  {tabs.map((tab) => (
-                    <TabsTrigger
-                      key={tab.id}
-                      value={tab.id}
-                      className="justify-start px-8 py-3 text-base rounded-xl data-[state=active]:bg-white/[0.06] data-[state=active]:text-white data-[state=inactive]:text-slate-400 border border-transparent data-[state=active]:border-white/[0.08]"
-                    >
-                      {tab.label}
-                    </TabsTrigger>
+              <aside className="hidden md:block flex-shrink-0 w-44 overflow-y-auto scrollbar-thin">
+                <nav className="flex flex-col gap-3">
+                  {sections.map((section) => (
+                    <div key={section.label}>
+                      <p className="text-[10px] text-slate-600 px-3 mb-1 uppercase tracking-widest font-medium">
+                        {section.label}
+                        {section.admin && <Shield className="w-3 h-3 inline ml-1 -mt-0.5 text-amber-500/60" />}
+                      </p>
+                      <TabsList className="flex flex-col gap-0.5 bg-transparent h-auto p-0">
+                        {section.items.map((item) => (
+                          <TabsTrigger
+                            key={item.id}
+                            value={item.id}
+                            className="justify-start gap-2.5 px-3 py-2 text-sm rounded-lg data-[state=active]:bg-white/[0.06] data-[state=active]:text-white data-[state=inactive]:text-slate-500 data-[state=inactive]:hover:text-slate-300 border border-transparent data-[state=active]:border-white/[0.08] transition-colors"
+                          >
+                            {item.icon}
+                            {item.label}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                    </div>
                   ))}
-                </TabsList>
+                </nav>
               </aside>
 
               {/* Content area */}
@@ -578,55 +650,6 @@ export default function ConsolePage() {
                           </CardContent>
                         </Card>
 
-                        {/* Index stats */}
-                        {tenantStats && tenantStats.exists && (
-                          <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
-                            <CardContent className="p-4">
-                              <p className="text-slate-500 text-xs mb-3">索引统计</p>
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                <div>
-                                  <p className="text-2xl font-semibold text-white">{tenantStats.fileCount.toLocaleString()}</p>
-                                  <p className="text-slate-500 text-xs">已索引文件</p>
-                                </div>
-                                <div>
-                                  <p className="text-2xl font-semibold text-white">{tenantStats.chunkCount.toLocaleString()}</p>
-                                  <p className="text-slate-500 text-xs">代码分块</p>
-                                </div>
-                                <div>
-                                  <p className="text-2xl font-semibold text-cyan-400">{tenantStats.vectorIndexedCount.toLocaleString()}</p>
-                                  <p className="text-slate-500 text-xs">向量索引</p>
-                                </div>
-                                <div>
-                                  <p className="text-2xl font-semibold text-white">
-                                    {tenantStats.totalSizeBytes >= 1048576
-                                      ? `${(tenantStats.totalSizeBytes / 1048576).toFixed(1)} MB`
-                                      : `${(tenantStats.totalSizeBytes / 1024).toFixed(0)} KB`}
-                                  </p>
-                                  <p className="text-slate-500 text-xs">存储大小</p>
-                                </div>
-                                {tenantStats.indexingCount != null && (
-                                  <div>
-                                    <p className="text-2xl font-semibold text-white">{tenantStats.indexingCount.toLocaleString()}</p>
-                                    <p className="text-slate-500 text-xs">索引请求次数</p>
-                                  </div>
-                                )}
-                              </div>
-                              {Object.keys(tenantStats.languages).length > 0 && (
-                                <div className="mt-3 pt-3 border-t border-white/[0.04]">
-                                  <p className="text-slate-500 text-xs mb-2">语言分布</p>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {Object.entries(tenantStats.languages).slice(0, 10).map(([lang, count]) => (
-                                      <span key={lang} className="text-[11px] px-2 py-0.5 rounded bg-white/[0.04] text-slate-400">
-                                        {lang} <span className="text-slate-600">{count}</span>
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                            </CardContent>
-                          </Card>
-                        )}
-
                         {/* Reset button */}
                         <Button
                           variant="warning"
@@ -638,41 +661,6 @@ export default function ConsolePage() {
                         <p className="text-slate-600 text-xs">
                           重置后旧密钥将立即失效，请谨慎操作
                         </p>
-
-                        {/* Clear index */}
-                        <div className="mt-8 pt-6 border-t border-white/[0.06]">
-                          <h3 className="text-sm font-medium text-red-400 mb-3">危险操作</h3>
-                          <Card className="bg-red-500/[0.04] border-red-500/20">
-                            <CardContent className="p-4">
-                              <div className="flex items-center justify-between gap-4">
-                                <div className="min-w-0">
-                                  <p className="text-white text-sm font-medium">清除远程索引</p>
-                                  <p className="text-slate-500 text-xs mt-1">
-                                    删除所有已索引的代码数据和请求日志，72 小时内只能操作一次
-                                  </p>
-                                </div>
-                                <Button
-                                  variant="warning"
-                                  size="sm"
-                                  onClick={() => setShowClearConfirm(true)}
-                                  disabled={clearLoading}
-                                  className="shrink-0"
-                                >
-                                  <Trash2 className="w-4 h-4 mr-1" />
-                                  {clearLoading ? "清除中..." : "清除索引"}
-                                </Button>
-                              </div>
-                              {clearResult && (
-                                <p className={cn(
-                                  "text-xs mt-3",
-                                  clearResult.success ? "text-green-400" : "text-red-400"
-                                )}>
-                                  {clearResult.message}
-                                </p>
-                              )}
-                            </CardContent>
-                          </Card>
-                        </div>
                       </div>
                     ) : (
                       <div className="text-center py-8">
@@ -978,6 +966,170 @@ export default function ConsolePage() {
                       </div>
                     )}
                   </TabsContent>
+
+                  {/* 索引管理 */}
+                  <TabsContent value="index" className="animate-tab-fade-in m-0 flex-1 overflow-y-auto scrollbar-thin pr-2">
+                    <h2 className="text-lg font-medium text-white mb-6">索引管理</h2>
+
+                    {tenantStats && tenantStats.exists ? (
+                      <div className="space-y-4">
+                        <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
+                          <CardContent className="p-4">
+                            <p className="text-slate-500 text-xs mb-3">索引统计</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                              <div>
+                                <p className="text-2xl font-semibold text-white">{tenantStats.fileCount.toLocaleString()}</p>
+                                <p className="text-slate-500 text-xs">已索引文件</p>
+                              </div>
+                              <div>
+                                <p className="text-2xl font-semibold text-white">{tenantStats.chunkCount.toLocaleString()}</p>
+                                <p className="text-slate-500 text-xs">代码分块</p>
+                              </div>
+                              <div>
+                                <p className="text-2xl font-semibold text-cyan-400">{tenantStats.vectorIndexedCount.toLocaleString()}</p>
+                                <p className="text-slate-500 text-xs">向量索引</p>
+                              </div>
+                              <div>
+                                <p className="text-2xl font-semibold text-white">
+                                  {tenantStats.totalSizeBytes >= 1048576
+                                    ? `${(tenantStats.totalSizeBytes / 1048576).toFixed(1)} MB`
+                                    : `${(tenantStats.totalSizeBytes / 1024).toFixed(0)} KB`}
+                                </p>
+                                <p className="text-slate-500 text-xs">索引大小</p>
+                              </div>
+                              {tenantStats.indexingCount != null && (
+                                <div>
+                                  <p className="text-2xl font-semibold text-white">{tenantStats.indexingCount.toLocaleString()}</p>
+                                  <p className="text-slate-500 text-xs">索引请求次数</p>
+                                </div>
+                              )}
+                            </div>
+                            {Object.keys(tenantStats.languages).length > 0 && (
+                              <div className="mt-3 pt-3 border-t border-white/[0.04]">
+                                <p className="text-slate-500 text-xs mb-2">语言分布</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {Object.entries(tenantStats.languages).slice(0, 10).map(([lang, count]) => (
+                                    <span key={lang} className="text-[11px] px-2 py-0.5 rounded bg-white/[0.04] text-slate-400">
+                                      {lang} <span className="text-slate-600">{count}</span>
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+
+                        <Button
+                          variant="glass"
+                          size="sm"
+                          onClick={() => fetchTenantStats()}
+                        >
+                          <RefreshCw className="w-4 h-4 mr-1" />
+                          刷新统计
+                        </Button>
+
+                        {/* Clear index */}
+                        <div className="mt-6 pt-6 border-t border-white/[0.06]">
+                          <h3 className="text-sm font-medium text-red-400 mb-3">危险操作</h3>
+                          <Card className="bg-red-500/[0.04] border-red-500/20">
+                            <CardContent className="p-4">
+                              <div className="flex items-center justify-between gap-4">
+                                <div className="min-w-0">
+                                  <p className="text-white text-sm font-medium">清除远程索引</p>
+                                  <p className="text-slate-500 text-xs mt-1">
+                                    删除所有已索引的代码数据和请求日志，72 小时内只能操作一次
+                                  </p>
+                                </div>
+                                <Button
+                                  variant="warning"
+                                  size="sm"
+                                  onClick={() => setShowClearConfirm(true)}
+                                  disabled={clearLoading}
+                                  className="shrink-0"
+                                >
+                                  <Trash2 className="w-4 h-4 mr-1" />
+                                  {clearLoading ? "清除中..." : "清除索引"}
+                                </Button>
+                              </div>
+                              {clearResult && (
+                                <p className={cn(
+                                  "text-xs mt-3",
+                                  clearResult.success ? "text-green-400" : "text-red-400"
+                                )}>
+                                  {clearResult.message}
+                                </p>
+                              )}
+                            </CardContent>
+                          </Card>
+                        </div>
+                      </div>
+                    ) : tenantStats && !tenantStats.exists ? (
+                      <div className="text-center py-8 text-slate-500">
+                        尚未建立索引。请使用 Augment 插件登录并打开项目，索引将自动创建。
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <Skeleton className="h-32 w-full bg-white/[0.06]" />
+                        <Skeleton className="h-20 w-full bg-white/[0.06]" />
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  {/* 管理员 - 组织概览 */}
+                  {isAdmin && (
+                    <TabsContent value="org" className="animate-tab-fade-in m-0 flex-1">
+                      <h2 className="text-lg font-medium text-white mb-6">组织概览</h2>
+                      <PlaceholderAdmin description="用户数、索引总量、请求量、成本概览" />
+                    </TabsContent>
+                  )}
+
+                  {/* 管理员 - 用户管理 */}
+                  {isAdmin && (
+                    <TabsContent value="users" className="animate-tab-fade-in m-0 flex-1">
+                      <h2 className="text-lg font-medium text-white mb-6">用户管理</h2>
+                      <PlaceholderAdmin description="用户列表、禁用/启用、用量查看" />
+                    </TabsContent>
+                  )}
+
+                  {/* 管理员 - Token 成本 */}
+                  {isAdmin && (
+                    <TabsContent value="token-cost" className="animate-tab-fade-in m-0 flex-1">
+                      <h2 className="text-lg font-medium text-white mb-6">Token 成本</h2>
+                      <PlaceholderAdmin description="按用户/时段的 embedding/rerank 调用统计" />
+                    </TabsContent>
+                  )}
+
+                  {/* 管理员 - 配额管理 */}
+                  {isAdmin && (
+                    <TabsContent value="quota" className="animate-tab-fade-in m-0 flex-1">
+                      <h2 className="text-lg font-medium text-white mb-6">配额管理</h2>
+                      <PlaceholderAdmin description="每用户索引上限、请求频率限制" />
+                    </TabsContent>
+                  )}
+
+                  {/* 管理员 - 模型设置 */}
+                  {isAdmin && (
+                    <TabsContent value="models" className="animate-tab-fade-in m-0 flex-1">
+                      <h2 className="text-lg font-medium text-white mb-6">模型设置</h2>
+                      <PlaceholderAdmin description="embedding/rerank 模型选择、端点配置" />
+                    </TabsContent>
+                  )}
+
+                  {/* 管理员 - 系统设置 */}
+                  {isAdmin && (
+                    <TabsContent value="system-settings" className="animate-tab-fade-in m-0 flex-1">
+                      <h2 className="text-lg font-medium text-white mb-6">系统设置</h2>
+                      <PlaceholderAdmin description="注册开关（开放/关闭/邀请制）、遥测开关" />
+                    </TabsContent>
+                  )}
+
+                  {/* 管理员 - 系统日志 */}
+                  {isAdmin && (
+                    <TabsContent value="system-logs" className="animate-tab-fade-in m-0 flex-1">
+                      <h2 className="text-lg font-medium text-white mb-6">系统日志</h2>
+                      <PlaceholderAdmin description="relay/LCE 运行日志、错误日志、按级别筛选、管理员可删除" />
+                    </TabsContent>
+                  )}
                 </div>
               </main>
             </div>
@@ -1342,6 +1494,18 @@ function LogEntry({ log, onClick }: { log: RequestLog; onClick?: () => void }) {
             <span className="hidden lg:block w-28 text-right text-slate-600 font-mono">{log.clientIp}</span>
           </div>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function PlaceholderAdmin({ description }: { description: string }) {
+  return (
+    <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
+      <CardContent className="p-8 text-center">
+        <Settings className="w-8 h-8 text-slate-600 mx-auto mb-3" />
+        <p className="text-slate-400 text-sm">{description}</p>
+        <p className="text-slate-600 text-xs mt-2">即将上线</p>
       </CardContent>
     </Card>
   );
