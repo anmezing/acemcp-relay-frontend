@@ -123,12 +123,13 @@ export default function ConsolePage() {
   const [clearResult, setClearResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const relayURL = "https://513689.xyz";
+  const displayKey = fullKey || (keyInfo?.maskedKey ? keyInfo.maskedKey : "YOUR_API_KEY");
   const mcpConfig = JSON.stringify({
     mcpServers: {
       "lce-relay": {
         url: `${relayURL}/mcp`,
         headers: {
-          Authorization: "Bearer YOUR_API_KEY",
+          Authorization: `Bearer ${displayKey}`,
         },
       },
     },
@@ -592,7 +593,7 @@ export default function ConsolePage() {
                             <h3 className="text-white font-medium">添加远程 MCP 服务器</h3>
                           </div>
                           <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-                            在 Cursor / Claude Desktop 的 MCP 设置中添加以下配置，将 <code className="text-amber-400 font-mono">YOUR_API_KEY</code> 替换为「密钥管理」中生成的 API Key：
+                            在 Cursor / Claude Desktop 的 MCP 设置中添加以下配置{keyInfo?.hasKey ? "：" : "，生成密钥后 API Key 会自动填充："}
                           </p>
                           <div className="relative group">
                             <div className="bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-3 font-mono text-sm overflow-x-auto">
