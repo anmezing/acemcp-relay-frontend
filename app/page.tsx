@@ -125,7 +125,7 @@ export default function Home() {
               </StepCard>
               <StepCard step={2} title="在 IDE 中添加 MCP 服务器">
                 <div className="space-y-3">
-                  <span>在 Cursor 或 Claude Desktop 的 MCP 设置中添加以下配置，将 <code className="text-amber-400 font-mono">YOUR_API_KEY</code> 替换为你的密钥：</span>
+                  <span>在 Cursor 或 Claude Desktop 的 MCP 设置中添加以下配置。登录控制台后，可在「配置说明」中一键复制已填充密钥的完整配置：</span>
                   <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-sm overflow-x-auto">
                     <pre className="text-slate-300 whitespace-pre">{`{
   "mcpServers": {
@@ -142,30 +142,27 @@ export default function Home() {
               </StepCard>
               <StepCard step={3} title="初始化代码索引">
                 <div className="space-y-3">
-                  <span>首次使用时需要将代码上传到远程进行索引。连接 MCP 后，让 AI 代理执行索引即可——代理会自动完成以下过程：</span>
+                  <span>首次使用时，AI 代理会自动建立代码索引。连接 MCP 后，让代理执行索引即可——整个过程全自动：</span>
                   <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 space-y-3">
                     <div className="flex gap-3">
                       <span className="text-cyan-400 font-mono text-xs shrink-0 mt-0.5">1.</span>
                       <p className="text-slate-400 text-sm">
-                        调用 <code className="text-cyan-300 font-mono">codebase_find_missing</code> 查询哪些文件尚未索引
+                        代理扫描项目，检查哪些文件需要索引
                       </p>
                     </div>
                     <div className="flex gap-3">
                       <span className="text-cyan-400 font-mono text-xs shrink-0 mt-0.5">2.</span>
                       <p className="text-slate-400 text-sm">
-                        读取缺失文件的内容，通过 <code className="text-cyan-300 font-mono">codebase_remote_index</code> 批量上传
+                        自动完成语义分析、全文索引和向量嵌入
                       </p>
                     </div>
                     <div className="flex gap-3">
                       <span className="text-cyan-400 font-mono text-xs shrink-0 mt-0.5">3.</span>
                       <p className="text-slate-400 text-sm">
-                        服务端自动完成语义切分、全文索引和向量嵌入
+                        后续修改会增量更新，无需重新索引全部代码
                       </p>
                     </div>
                   </div>
-                  <p className="text-slate-500 text-sm">
-                    索引完成后，后续修改的文件会增量更新，无需重新上传全部代码。
-                  </p>
                 </div>
               </StepCard>
               <StepCard step={4} title="开始检索">
@@ -186,7 +183,7 @@ export default function Home() {
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>
-                    <span>检索质量取决于索引覆盖率——未上传的文件不会出现在搜索结果中</span>
+                    <span>检索质量取决于索引覆盖率——未索引的文件不会出现在搜索结果中</span>
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>
@@ -194,7 +191,7 @@ export default function Home() {
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>
-                    <span>代码存储在服务端独立租户空间中，请勿上传包含敏感凭证的文件</span>
+                    <span>代码索引存储在服务端独立租户空间中，请勿将包含敏感凭证的文件纳入索引</span>
                   </li>
                 </ul>
               </CardContent>
