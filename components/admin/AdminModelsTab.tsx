@@ -35,13 +35,16 @@ function ModelCard({ title, side }: { title: string; side: ModelSide }) {
 
 export function AdminModelsTab() {
   const [models, setModels] = useState<{ embeddings: ModelSide; rerank: ModelSide } | null>(null);
+  const [byoModels, setByoModels] = useState<{ enabled: boolean; customModelUsers: number } | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/settings");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setModels((await res.json()).models);
+      const data = await res.json();
+      setModels(data.models);
+      setByoModels(data.byoModels || null);
       setError("");
     } catch {
       setError("加载失败，请重试");
@@ -66,6 +69,15 @@ export function AdminModelsTab() {
   return (
     <div className="space-y-4">
       {error && <p className="text-red-400 text-sm">{error}</p>}
+      {byoModels && (
+        <p className="text-slate-400 text-xs">
+          按用户自定义模型（BYO）：
+          {byoModels.enabled
+            ? <span className="text-cyan-400">已启用，{byoModels.customModelUsers} 位用户使用自定义配置</span>
+            : <span className="text-slate-500">未启用（需设置 MODEL_CONFIG_SECRET）</span>}
+          。以下为平台默认模型（未自定义的用户使用）：
+        </p>
+      )}
       {models && (
         <div className="grid md:grid-cols-2 gap-4">
           <ModelCard title="Embeddings" side={models.embeddings} />

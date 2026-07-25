@@ -38,9 +38,10 @@ import { AdminQuotaTab } from "@/components/admin/AdminQuotaTab";
 import { AdminModelsTab } from "@/components/admin/AdminModelsTab";
 import { AdminSettingsTab } from "@/components/admin/AdminSettingsTab";
 import { AGENT_RULES_SNIPPET } from "@/lib/agent-rules";
+import { UserModelConfigTab } from "@/components/UserModelConfigTab";
 
 type Tab =
-  | "keys" | "docs" | "profile"
+  | "keys" | "docs" | "profile" | "model-config"
   | "index" | "logs"
   | "org" | "users" | "token-cost" | "quota" | "models"
   | "system-settings" | "system-logs";
@@ -57,6 +58,7 @@ const ALL_SECTIONS: SidebarSection[] = [
     items: [
       { id: "keys", label: "密钥管理", icon: <Key className="w-4 h-4" /> },
       { id: "docs", label: "配置说明", icon: <FileText className="w-4 h-4" /> },
+      { id: "model-config", label: "模型设置", icon: <Cpu className="w-4 h-4" /> },
       { id: "profile", label: "用户信息", icon: <User className="w-4 h-4" /> },
     ],
   },
@@ -1084,6 +1086,12 @@ export default function ConsolePage() {
                         <Skeleton className="h-20 w-full bg-white/[0.06]" />
                       </div>
                     )}
+                  </TabsContent>
+
+                  {/* 我的 - 模型设置（BYO 模型） */}
+                  <TabsContent value="model-config" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
+                    <h2 className="text-lg font-medium text-white mb-6">模型设置</h2>
+                    <UserModelConfigTab />
                   </TabsContent>
 
                   {/* 管理员 - 组织概览 */}

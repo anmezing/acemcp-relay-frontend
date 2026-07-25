@@ -68,6 +68,16 @@ export async function deleteQuotaLimitCache(userId: string) {
   }
 }
 
+// 删除模型配置缓存（relay 侧以 modelcfg:{userId} 缓存，保存后立即生效）
+export async function deleteModelConfigCache(userId: string) {
+  try {
+    const redis = await getRedisClient();
+    await redis.del(`modelcfg:${userId}`);
+  } catch (error) {
+    console.error("Failed to delete model config cache:", error);
+  }
+}
+
 let dbInitialized = false;
 
 export async function initDB() {
@@ -139,6 +149,16 @@ export async function initDB() {
       CREATE TABLE IF NOT EXISTS system_settings (
         key VARCHAR(64) PRIMARY KEY,
         value TEXT NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+    // 与 acemcp-relay 的 migrateModelConfigTables 相同 DDL
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_model_configs (
+        user_id VARCHAR(255) PRIMARY KEY,
+        config_enc TEXT,
+        fingerprint VARCHAR(80) NOT NULL,
+        applied_fingerprint VARCHAR(80),
         updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
       )
     `);

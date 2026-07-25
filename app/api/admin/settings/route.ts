@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/admin";
 import { getSystemSetting, setSystemSetting } from "@/lib/db";
+import { countUserModelConfigs } from "@/lib/model-config-db";
+import { modelConfigEnabled } from "@/lib/model-config-crypto";
 
 // 模型配置只读展示：LCE 的模型由容器环境变量决定，改动需编辑 deploy/.env
 // 并重启 lce，因此这里不提供在线修改。API key 一律不下发。
@@ -26,9 +28,13 @@ export async function GET() {
   try {
     const registrationEnabled =
       (await getSystemSetting("registration_enabled")) !== "false";
+    const customModelUsers = modelConfigEnabled()
+      ? await countUserModelConfigs().catch(() => 0)
+      : 0;
     return NextResponse.json({
       registrationEnabled,
       models: modelConfig(),
+      byoModels: { enabled: modelConfigEnabled(), customModelUsers },
     });
   } catch (error) {
     console.error("admin settings read failed:", error);
