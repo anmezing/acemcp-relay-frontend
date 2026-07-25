@@ -2,6 +2,7 @@ import { Header } from "@/components/Header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { AGENT_RULES_SNIPPET } from "@/lib/agent-rules";
 
 export default function Home() {
   return (
@@ -140,7 +141,20 @@ export default function Home() {
                   </div>
                 </div>
               </StepCard>
-              <StepCard step={3} title="初始化代码索引">
+              <StepCard step={3} title="要求 AI 代理优先使用 LCE">
+                <div className="space-y-3">
+                  <span>
+                    只添加 MCP 服务器并不保证代理会用它。在项目根目录的 CLAUDE.md 或
+                    AGENTS.md（Cursor 用户也可放入 .cursor/rules）中加入以下规则，
+                    要求代理查找、理解代码时必须优先使用 LCE 工具，而不是 grep 或逐文件浏览。
+                    登录控制台后可在「配置说明」中一键复制：
+                  </span>
+                  <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-xs overflow-x-auto">
+                    <pre className="text-slate-300 whitespace-pre-wrap break-words">{AGENT_RULES_SNIPPET}</pre>
+                  </div>
+                </div>
+              </StepCard>
+              <StepCard step={4} title="初始化代码索引">
                 <div className="space-y-3">
                   <span>首次使用时，AI 代理会自动建立代码索引。连接 MCP 后，让代理执行索引即可——整个过程全自动：</span>
                   <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 space-y-3">
@@ -165,7 +179,7 @@ export default function Home() {
                   </div>
                 </div>
               </StepCard>
-              <StepCard step={4} title="开始检索">
+              <StepCard step={5} title="开始检索">
                 索引就绪后，AI 代理在编码过程中会自动调用语义检索搜索相关代码。你也可以直接要求代理搜索特定功能或符号。
               </StepCard>
             </div>

@@ -37,6 +37,7 @@ import { AdminStatsTab } from "@/components/admin/AdminStatsTab";
 import { AdminQuotaTab } from "@/components/admin/AdminQuotaTab";
 import { AdminModelsTab } from "@/components/admin/AdminModelsTab";
 import { AdminSettingsTab } from "@/components/admin/AdminSettingsTab";
+import { AGENT_RULES_SNIPPET } from "@/lib/agent-rules";
 
 type Tab =
   | "keys" | "docs" | "profile"
@@ -754,6 +755,9 @@ export default function ConsolePage() {
                           </div>
                         </CardContent>
                       </Card>
+
+                      {/* Step 3: Agent rules */}
+                      <AgentRulesCard />
 
                       {/* Tips */}
                       <Card className="bg-gradient-to-br from-cyan-500/[0.06] to-blue-500/[0.06] border-cyan-500/20">
@@ -1500,6 +1504,48 @@ function LogEntry({ log, onClick }: { log: RequestLog; onClick?: () => void }) {
             </span>
             <span className="hidden lg:block w-28 text-right text-slate-600 font-mono">{log.clientIp}</span>
           </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// 配置说明第 3 步：引导用户在 CLAUDE.md / AGENTS.md 中声明 LCE 使用规则
+// （只加 MCP 配置不保证代理会用，需要项目规则显式要求）
+function AgentRulesCard() {
+  const [copied, setCopied] = useState(false);
+  const copyRules = async () => {
+    try {
+      await navigator.clipboard.writeText(AGENT_RULES_SNIPPET);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {}
+  };
+  return (
+    <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
+      <CardContent className="p-5">
+        <div className="flex items-center gap-3 mb-3">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
+            3
+          </span>
+          <h3 className="text-white font-medium">让 AI 代理优先使用 LCE</h3>
+        </div>
+        <p className="text-slate-400 text-sm mb-4 leading-relaxed">
+          只添加 MCP 服务器并不保证代理会用它。把以下规则加入项目根目录的{" "}
+          <code className="text-cyan-400 text-xs">CLAUDE.md</code> /{" "}
+          <code className="text-cyan-400 text-xs">AGENTS.md</code>
+          （Cursor 用户也可放入 <code className="text-cyan-400 text-xs">.cursor/rules</code>），
+          要求代理查找代码时优先走 LCE 语义检索：
+        </p>
+        <div className="relative group">
+          <div className="bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-3 font-mono text-xs overflow-x-auto">
+            <pre className="text-slate-300 whitespace-pre-wrap break-words">
+              <code>{AGENT_RULES_SNIPPET}</code>
+            </pre>
+          </div>
+          <Button variant="glass" size="sm" onClick={copyRules} className="absolute top-2 right-2">
+            {copied ? "已复制" : "复制"}
+          </Button>
         </div>
       </CardContent>
     </Card>
