@@ -33,6 +33,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AdminOverviewTab } from "@/components/admin/AdminOverviewTab";
 import { AdminUsersTab } from "@/components/admin/AdminUsersTab";
 import { AdminLogsTab } from "@/components/admin/AdminLogsTab";
+import { AdminStatsTab } from "@/components/admin/AdminStatsTab";
+import { AdminQuotaTab } from "@/components/admin/AdminQuotaTab";
+import { AdminModelsTab } from "@/components/admin/AdminModelsTab";
+import { AdminSettingsTab } from "@/components/admin/AdminSettingsTab";
 
 type Tab =
   | "keys" | "docs" | "profile"
@@ -68,7 +72,7 @@ const ALL_SECTIONS: SidebarSection[] = [
     items: [
       { id: "org", label: "组织概览", icon: <Building2 className="w-4 h-4" /> },
       { id: "users", label: "用户管理", icon: <Users className="w-4 h-4" /> },
-      { id: "token-cost", label: "Token 成本", icon: <Coins className="w-4 h-4" /> },
+      { id: "token-cost", label: "调用统计", icon: <Coins className="w-4 h-4" /> },
       { id: "quota", label: "配额管理", icon: <Gauge className="w-4 h-4" /> },
       { id: "models", label: "模型设置", icon: <Cpu className="w-4 h-4" /> },
     ],
@@ -1094,35 +1098,35 @@ export default function ConsolePage() {
                     </TabsContent>
                   )}
 
-                  {/* 管理员 - Token 成本 */}
+                  {/* 管理员 - Token 成本（调用统计） */}
                   {isAdmin && (
-                    <TabsContent value="token-cost" className="animate-tab-fade-in m-0 flex-1">
-                      <h2 className="text-lg font-medium text-white mb-6">Token 成本</h2>
-                      <PlaceholderAdmin description="按用户/时段的 embedding/rerank 调用统计" />
+                    <TabsContent value="token-cost" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
+                      <h2 className="text-lg font-medium text-white mb-6">调用统计</h2>
+                      <AdminStatsTab />
                     </TabsContent>
                   )}
 
                   {/* 管理员 - 配额管理 */}
                   {isAdmin && (
-                    <TabsContent value="quota" className="animate-tab-fade-in m-0 flex-1">
+                    <TabsContent value="quota" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                       <h2 className="text-lg font-medium text-white mb-6">配额管理</h2>
-                      <PlaceholderAdmin description="每用户索引上限、请求频率限制" />
+                      <AdminQuotaTab />
                     </TabsContent>
                   )}
 
                   {/* 管理员 - 模型设置 */}
                   {isAdmin && (
-                    <TabsContent value="models" className="animate-tab-fade-in m-0 flex-1">
+                    <TabsContent value="models" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                       <h2 className="text-lg font-medium text-white mb-6">模型设置</h2>
-                      <PlaceholderAdmin description="embedding/rerank 模型选择、端点配置" />
+                      <AdminModelsTab />
                     </TabsContent>
                   )}
 
                   {/* 管理员 - 系统设置 */}
                   {isAdmin && (
-                    <TabsContent value="system-settings" className="animate-tab-fade-in m-0 flex-1">
+                    <TabsContent value="system-settings" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                       <h2 className="text-lg font-medium text-white mb-6">系统设置</h2>
-                      <PlaceholderAdmin description="注册开关（开放/关闭/邀请制）、遥测开关" />
+                      <AdminSettingsTab />
                     </TabsContent>
                   )}
 
@@ -1497,18 +1501,6 @@ function LogEntry({ log, onClick }: { log: RequestLog; onClick?: () => void }) {
             <span className="hidden lg:block w-28 text-right text-slate-600 font-mono">{log.clientIp}</span>
           </div>
         </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function PlaceholderAdmin({ description }: { description: string }) {
-  return (
-    <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
-      <CardContent className="p-8 text-center">
-        <Settings className="w-8 h-8 text-slate-600 mx-auto mb-3" />
-        <p className="text-slate-400 text-sm">{description}</p>
-        <p className="text-slate-600 text-xs mt-2">即将上线</p>
       </CardContent>
     </Card>
   );

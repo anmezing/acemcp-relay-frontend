@@ -16,6 +16,9 @@ function parseAuthError(raw: string | null): string | null {
     }
     return `登录失败：GitHub 账号需至少注册 ${required} 天（当前账号仅 ${actual} 天）`;
   }
+  if (raw.includes("REGISTRATION_DISABLED")) {
+    return "当前未开放新用户注册，已有账号可正常登录";
+  }
   return "登录失败，请稍后重试";
 }
 

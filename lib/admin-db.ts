@@ -1,8 +1,13 @@
 import pool, {
   deleteBannedCache,
   deleteDeviceRegCache,
+  deleteQuotaLimitCache,
   resetApiKey,
 } from "@/lib/db";
+
+// 统计/配额里的“今天”统一按 Asia/Shanghai 自然日，与 relay 配额计数、
+// leaderboard 口径一致。
+const TZ = "Asia/Shanghai";
 
 // 管理端聚合查询。调用方（/api/admin/*）必须先通过 requireAdminSession。
 
@@ -222,6 +227,148 @@ export async function listGlobalLogs(
       [limit, offset]
     );
     return result.rows;
+  } finally {
+    client.release();
+  }
+}
+
+// ── 调用统计（token-cost tab 的真实数据源：请求量，无 token 计量）────────
+
+export interface CallStats {
+  totals: { today: number; last30d: number; total: number };
+  daily: { date: string; count: number }[];
+  byPath: { path: string; count: number }[];
+  topUsers: { user_id: string; email: string | null; count: number }[];
+}
+
+export async function getCallStats(): Promise<CallStats> {
+  const client = await pool.connect();
+  try {
+    const totals = await client.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE (request_timestamp AT TIME ZONE '${TZ}')::date
+          = (NOW() AT TIME ZONE '${TZ}')::date) AS today,
+        COUNT(*) FILTER (WHERE request_timestamp > NOW() - INTERVAL '30 days') AS last30d,
+        COUNT(*) AS total
+      FROM request_logs
+    `);
+    const daily = await client.query(`
+      SELECT to_char((request_timestamp AT TIME ZONE '${TZ}')::date, 'YYYY-MM-DD') AS date,
+             COUNT(*) AS count
+      FROM request_logs
+      WHERE request_timestamp > NOW() - INTERVAL '14 days'
+      GROUP BY 1 ORDER BY 1
+    `);
+    const byPath = await client.query(`
+      SELECT request_path AS path, COUNT(*) AS count
+      FROM request_logs
+      WHERE request_timestamp > NOW() - INTERVAL '30 days'
+      GROUP BY 1 ORDER BY 2 DESC LIMIT 10
+    `);
+    const topUsers = await client.query(`
+      SELECT rl.user_id, u.email, COUNT(*) AS count
+      FROM request_logs rl
+      LEFT JOIN "user" u ON u.id = rl.user_id
+      WHERE rl.request_timestamp > NOW() - INTERVAL '30 days'
+      GROUP BY rl.user_id, u.email ORDER BY 3 DESC LIMIT 10
+    `);
+    const t = totals.rows[0];
+    return {
+      totals: {
+        today: parseInt(t.today),
+        last30d: parseInt(t.last30d),
+        total: parseInt(t.total),
+      },
+      daily: daily.rows.map((r) => ({ date: r.date, count: parseInt(r.count) })),
+      byPath: byPath.rows.map((r) => ({ path: r.path, count: parseInt(r.count) })),
+      topUsers: topUsers.rows.map((r) => ({
+        user_id: r.user_id,
+        email: r.email,
+        count: parseInt(r.count),
+      })),
+    };
+  } finally {
+    client.release();
+  }
+}
+
+// ── 配额管理 ─────────────────────────────────────────────────────────────
+
+export interface QuotaRow {
+  user_id: string;
+  email: string | null;
+  today_count: number;
+  daily_limit: number | null; // null = 使用默认值
+}
+
+export async function listQuotas(): Promise<QuotaRow[]> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(`
+      SELECT u.id AS user_id, u.email, q.daily_limit,
+        COALESCE(t.cnt, 0)::int AS today_count
+      FROM "user" u
+      LEFT JOIN user_quotas q ON q.user_id = u.id
+      LEFT JOIN (
+        SELECT user_id, COUNT(*) AS cnt FROM request_logs
+        WHERE (request_timestamp AT TIME ZONE '${TZ}')::date
+          = (NOW() AT TIME ZONE '${TZ}')::date
+        GROUP BY user_id
+      ) t ON t.user_id = u.id
+      ORDER BY t.cnt DESC NULLS LAST, u."createdAt" DESC
+    `);
+    return result.rows;
+  } finally {
+    client.release();
+  }
+}
+
+// limit: null = 恢复默认；0 = 不限；正整数 = 每日上限
+export async function setUserQuota(userId: string, limit: number | null) {
+  const client = await pool.connect();
+  try {
+    if (limit === null) {
+      await client.query(`DELETE FROM user_quotas WHERE user_id = $1`, [userId]);
+    } else {
+      await client.query(
+        `INSERT INTO user_quotas (user_id, daily_limit) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET daily_limit = $2, updated_at = NOW()`,
+        [userId, limit]
+      );
+    }
+  } finally {
+    client.release();
+  }
+  await deleteQuotaLimitCache(userId);
+}
+
+// ── 日志/告警清理 ─────────────────────────────────────────────────────────
+
+// olderThanDays: undefined = 全部清空。error_details 有外键，先删。
+export async function clearRequestLogs(olderThanDays?: number): Promise<number> {
+  const client = await pool.connect();
+  try {
+    const cond =
+      olderThanDays && olderThanDays > 0
+        ? `WHERE request_timestamp < NOW() - INTERVAL '1 day' * ${Math.floor(olderThanDays)}`
+        : "";
+    await client.query(`
+      DELETE FROM error_details WHERE request_id IN (
+        SELECT id FROM request_logs ${cond}
+      )
+    `);
+    const result = await client.query(`DELETE FROM request_logs ${cond}`);
+    return result.rowCount || 0;
+  } finally {
+    client.release();
+  }
+}
+
+export async function clearDeviceAlerts(): Promise<number> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(`DELETE FROM device_alerts`);
+    return result.rowCount || 0;
   } finally {
     client.release();
   }

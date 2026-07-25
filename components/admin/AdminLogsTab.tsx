@@ -31,6 +31,7 @@ export function AdminLogsTab() {
   const [errorsOnly, setErrorsOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
+  const [notice, setNotice] = useState("");
 
   // load 首个语句即 await（setState 均在 await 之后，满足
   // react-hooks/set-state-in-effect）；loading 态只在按钮回调里设置。
@@ -53,6 +54,30 @@ export function AdminLogsTab() {
       load(targetPage, onlyErrors).finally(() => setLoading(false));
     },
     [load]
+  );
+
+  const runMaintenance = useCallback(
+    async (action: string, olderThanDays: number | undefined, confirmText: string) => {
+      if (!confirm(confirmText)) return;
+      setLoading(true);
+      setNotice("");
+      try {
+        const res = await fetch("/api/admin/maintenance", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, olderThanDays }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        setNotice(`已清理 ${data.deleted} 条`);
+        await load(1, errorsOnly);
+      } catch {
+        setNotice("清理失败，请重试");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [load, errorsOnly]
   );
 
   useEffect(() => {
@@ -91,6 +116,29 @@ export function AdminLogsTab() {
           disabled={loading} className="text-slate-400 hover:text-white ml-auto">
           <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
         </Button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="glass" size="sm" disabled={loading}
+          onClick={() => runMaintenance("clear-logs", 30, "清理 30 天前的请求日志（含错误详情）？此操作不可撤销。")}
+          className="h-7 px-2.5 text-[11px] text-slate-400">
+          清理 30 天前日志
+        </Button>
+        <Button variant="glass" size="sm" disabled={loading}
+          onClick={() => runMaintenance("clear-logs", undefined, "清空全部请求日志（含错误详情）？统计与排行历史快照不受影响，此操作不可撤销。")}
+          className="h-7 px-2.5 text-[11px] text-red-400">
+          清空全部日志
+        </Button>
+        <Button variant="glass" size="sm" disabled={loading}
+          onClick={() => runMaintenance("clear-alerts", undefined, "清空全部设备告警？此操作不可撤销。")}
+          className="h-7 px-2.5 text-[11px] text-red-400">
+          清空设备告警
+        </Button>
+        {notice && (
+          <span className={cn("text-xs", notice.startsWith("已清理") ? "text-emerald-400" : "text-red-400")}>
+            {notice}
+          </span>
+        )}
       </div>
 
       {logs === null ? (

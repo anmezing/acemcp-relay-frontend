@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { genericOAuth } from "better-auth/plugins";
 import { Pool } from "pg";
+import { isRegistrationDisabled } from "@/lib/db";
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
@@ -48,6 +49,12 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (user) => {
+          // 注册开关：user.create 只在新用户首次注册时触发，老用户登录不受影响
+          if (await isRegistrationDisabled()) {
+            throw new APIError("BAD_REQUEST", {
+              message: "REGISTRATION_DISABLED",
+            });
+          }
           const created = (user as { githubCreatedAt?: Date | string | null })
             .githubCreatedAt;
           if (!created) return;

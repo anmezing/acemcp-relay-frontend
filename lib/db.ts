@@ -58,6 +58,16 @@ export async function deleteBannedCache(userId: string) {
   }
 }
 
+// 删除配额上限缓存（relay 侧以 quota:limit:{userId} 缓存，改配额后立即生效）
+export async function deleteQuotaLimitCache(userId: string) {
+  try {
+    const redis = await getRedisClient();
+    await redis.del(`quota:limit:${userId}`);
+  } catch (error) {
+    console.error("Failed to delete quota limit cache:", error);
+  }
+}
+
 let dbInitialized = false;
 
 export async function initDB() {
@@ -115,6 +125,21 @@ export async function initDB() {
         user_id VARCHAR(255) PRIMARY KEY,
         reason TEXT,
         created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+    // 与 acemcp-relay 的 migrateQuotaTables 相同 DDL（daily_limit 0 = 不限）
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_quotas (
+        user_id VARCHAR(255) PRIMARY KEY,
+        daily_limit INTEGER NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        key VARCHAR(64) PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
       )
     `);
 
@@ -320,6 +345,44 @@ export async function isUserBanned(userId: string): Promise<boolean> {
   } finally {
     client.release();
   }
+}
+
+// 系统设置读写。读失败（如表尚未创建）时返回 null，调用方按默认值处理，
+// 避免设置能力故障演变成登录/注册不可用。
+export async function getSystemSetting(key: string): Promise<string | null> {
+  try {
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT value FROM system_settings WHERE key = $1`,
+        [key]
+      );
+      return result.rows[0]?.value ?? null;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error(`Failed to read system setting ${key}:`, error);
+    return null;
+  }
+}
+
+export async function setSystemSetting(key: string, value: string) {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `INSERT INTO system_settings (key, value) VALUES ($1, $2)
+       ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+      [key, value]
+    );
+  } finally {
+    client.release();
+  }
+}
+
+// 注册开关（system_settings.registration_enabled，缺省视为开放）
+export async function isRegistrationDisabled(): Promise<boolean> {
+  return (await getSystemSetting("registration_enabled")) === "false";
 }
 
 export function maskApiKey(apiKey: string): string {
