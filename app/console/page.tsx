@@ -30,6 +30,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AdminOverviewTab } from "@/components/admin/AdminOverviewTab";
+import { AdminUsersTab } from "@/components/admin/AdminUsersTab";
+import { AdminLogsTab } from "@/components/admin/AdminLogsTab";
 
 type Tab =
   | "keys" | "docs" | "profile"
@@ -505,7 +508,7 @@ export default function ConsolePage() {
   const allItems = sections.flatMap((s) => s.items);
 
   return (
-    <div className="h-screen bg-[#0a0f1a] flex flex-col overflow-hidden">
+    <div className="min-h-dvh md:h-dvh bg-[#0a0f1a] flex flex-col md:overflow-hidden">
       {/* Ambient glow */}
       <div className="fixed top-0 left-1/4 w-[600px] h-[400px] bg-gradient-radial from-cyan-500/5 via-blue-500/3 to-transparent rounded-full blur-3xl pointer-events-none" />
 
@@ -553,8 +556,8 @@ export default function ConsolePage() {
       </header>
 
       {/* Main content */}
-      <div className="relative flex-1 overflow-hidden">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-8 h-full flex flex-col">
+      <div className="relative flex-1 md:overflow-hidden">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-8 md:h-full flex flex-col">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)} className="flex-1 flex flex-col min-h-0">
             {/* Mobile tabs - horizontal scrollable */}
             <TabsList className="flex md:hidden gap-1 mb-4 overflow-x-auto scrollbar-none pb-2 flex-shrink-0 bg-transparent h-auto p-0">
@@ -599,7 +602,7 @@ export default function ConsolePage() {
 
               {/* Content area */}
               <main className="flex-1 min-w-0 min-h-0">
-                <div className="bg-[#0d1424]/60 backdrop-blur-xl border border-white/[0.06] rounded-xl sm:rounded-2xl p-4 sm:p-6 h-full flex flex-col">
+                <div className="bg-[#0d1424]/60 md:backdrop-blur-xl border border-white/[0.06] rounded-xl sm:rounded-2xl p-4 sm:p-6 md:h-full flex flex-col">
                   {/* 密钥管理 */}
                   <TabsContent value="keys" className="animate-tab-fade-in m-0 flex-1">
                     <h2 className="text-lg font-medium text-white mb-6">密钥管理</h2>
@@ -685,7 +688,7 @@ export default function ConsolePage() {
                   </TabsContent>
 
                   {/* 配置说明 */}
-                  <TabsContent value="docs" className="flex flex-col flex-1 min-h-0 animate-tab-fade-in overflow-y-auto scrollbar-thin pr-2 m-0">
+                  <TabsContent value="docs" className="flex flex-col flex-1 min-h-0 animate-tab-fade-in md:overflow-y-auto scrollbar-thin md:pr-2 m-0">
                     <h2 className="text-lg font-medium text-white mb-6">配置说明</h2>
 
                     <div className="space-y-6">
@@ -854,7 +857,7 @@ export default function ConsolePage() {
                     </div>
 
                     {/* Log Entries */}
-                    <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin pr-2">
+                    <div className="flex-1 min-h-0 md:overflow-y-auto scrollbar-thin md:pr-2">
                       <div className="space-y-2">
                         {logsLoading && !logsData && (
                           <>
@@ -968,7 +971,7 @@ export default function ConsolePage() {
                   </TabsContent>
 
                   {/* 索引管理 */}
-                  <TabsContent value="index" className="animate-tab-fade-in m-0 flex-1 overflow-y-auto scrollbar-thin pr-2">
+                  <TabsContent value="index" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                     <h2 className="text-lg font-medium text-white mb-6">索引管理</h2>
 
                     {tenantStats && tenantStats.exists ? (
@@ -1077,17 +1080,17 @@ export default function ConsolePage() {
 
                   {/* 管理员 - 组织概览 */}
                   {isAdmin && (
-                    <TabsContent value="org" className="animate-tab-fade-in m-0 flex-1">
+                    <TabsContent value="org" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                       <h2 className="text-lg font-medium text-white mb-6">组织概览</h2>
-                      <PlaceholderAdmin description="用户数、索引总量、请求量、成本概览" />
+                      <AdminOverviewTab />
                     </TabsContent>
                   )}
 
                   {/* 管理员 - 用户管理 */}
                   {isAdmin && (
-                    <TabsContent value="users" className="animate-tab-fade-in m-0 flex-1">
+                    <TabsContent value="users" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                       <h2 className="text-lg font-medium text-white mb-6">用户管理</h2>
-                      <PlaceholderAdmin description="用户列表、禁用/启用、用量查看" />
+                      <AdminUsersTab />
                     </TabsContent>
                   )}
 
@@ -1125,9 +1128,9 @@ export default function ConsolePage() {
 
                   {/* 管理员 - 系统日志 */}
                   {isAdmin && (
-                    <TabsContent value="system-logs" className="animate-tab-fade-in m-0 flex-1">
+                    <TabsContent value="system-logs" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                       <h2 className="text-lg font-medium text-white mb-6">系统日志</h2>
-                      <PlaceholderAdmin description="relay/LCE 运行日志、错误日志、按级别筛选、管理员可删除" />
+                      <AdminLogsTab />
                     </TabsContent>
                   )}
                 </div>

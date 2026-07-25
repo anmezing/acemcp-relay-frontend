@@ -36,6 +36,28 @@ async function deleteApiKeyCache(keyId: string) {
   }
 }
 
+// 删除设备注册缓存（relay 侧以 device:reg:{userId}:{deviceId} 缓存校验结果，
+// 注册/淘汰后删掉才能立即生效，键名与 acemcp-relay/devices.go 约定一致）
+export async function deleteDeviceRegCache(userId: string, deviceIds: string[]) {
+  if (deviceIds.length === 0) return;
+  try {
+    const redis = await getRedisClient();
+    await redis.del(deviceIds.map((d) => `device:reg:${userId}:${d}`));
+  } catch (error) {
+    console.error("Failed to delete device reg cache:", error);
+  }
+}
+
+// 删除封禁状态缓存（relay 侧以 banned:{userId} 缓存，封禁/解封后立即生效）
+export async function deleteBannedCache(userId: string) {
+  try {
+    const redis = await getRedisClient();
+    await redis.del(`banned:${userId}`);
+  } catch (error) {
+    console.error("Failed to delete banned cache:", error);
+  }
+}
+
 let dbInitialized = false;
 
 export async function initDB() {
@@ -65,6 +87,36 @@ export async function initDB() {
       `);
       console.log("API keys table created");
     }
+
+    // 与 acemcp-relay 的 migrateDeviceTables 使用相同 DDL（双方都是 IF NOT EXISTS）
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS devices (
+        user_id VARCHAR(255) NOT NULL,
+        device_id VARCHAR(128) NOT NULL,
+        device_name VARCHAR(255),
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        last_seen_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        last_ip VARCHAR(45),
+        PRIMARY KEY (user_id, device_id)
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS device_alerts (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        device_id VARCHAR(128),
+        kind VARCHAR(32) NOT NULL,
+        detail TEXT,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS banned_users (
+        user_id VARCHAR(255) PRIMARY KEY,
+        reason TEXT,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
 
     dbInitialized = true;
   } finally {
@@ -137,6 +189,134 @@ export async function resetApiKey(userId: string) {
     }
 
     return result.rows[0];
+  } finally {
+    client.release();
+  }
+}
+
+// Device binding (防账号共用)：默认单设备互踢 —— 任何时刻只有最后登录的
+// 设备有效，新设备登录即踢掉旧设备（换设备无感，共用则互相踢下线）。
+const MAX_DEVICES_PER_USER = parseInt(process.env.MAX_DEVICES_PER_USER || "1");
+
+export interface DeviceRow {
+  user_id: string;
+  device_id: string;
+  device_name: string | null;
+  created_at: Date;
+  last_seen_at: Date;
+  last_ip: string | null;
+}
+
+// 注册设备；超出上限时淘汰最久未活跃的设备（被淘汰设备在 relay enforce
+// 模式下会收到 401，需要重新登录 —— 这正是共用账号时互踢的效果）。
+export async function registerDevice(
+  userId: string,
+  deviceId: string,
+  deviceName: string | null
+): Promise<{ evicted: string[] }> {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `INSERT INTO devices (user_id, device_id, device_name, last_seen_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (user_id, device_id)
+       DO UPDATE SET device_name = COALESCE($3, devices.device_name), last_seen_at = NOW()`,
+      [userId, deviceId, deviceName]
+    );
+
+    const evictResult = await client.query(
+      `DELETE FROM devices
+       WHERE user_id = $1
+         AND device_id NOT IN (
+           SELECT device_id FROM devices
+           WHERE user_id = $1
+           ORDER BY last_seen_at DESC
+           LIMIT $2
+         )
+       RETURNING device_id`,
+      [userId, MAX_DEVICES_PER_USER]
+    );
+    const evicted = evictResult.rows.map((r) => r.device_id as string);
+
+    // 新设备可能被 relay 负缓存过、被淘汰设备要立即失效
+    await deleteDeviceRegCache(userId, [deviceId, ...evicted]);
+    if (evicted.length > 0) {
+      // 每次踢出都留痕：单设备互踢下，频繁的 device_evicted 就是账号共用的信号
+      try {
+        for (const evictedId of evicted) {
+          await client.query(
+            `INSERT INTO device_alerts (user_id, device_id, kind, detail)
+             VALUES ($1, $2, 'device_evicted', $3)`,
+            [userId, evictedId, `replaced by ${deviceId}`]
+          );
+        }
+      } catch (error) {
+        console.error("Failed to record device eviction alert:", error);
+      }
+      console.log(
+        `Device limit reached for user ${userId}: evicted ${evicted.join(", ")}`
+      );
+    }
+    return { evicted };
+  } finally {
+    client.release();
+  }
+}
+
+export async function getDevices(userId: string): Promise<DeviceRow[]> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT user_id, device_id, device_name, created_at, last_seen_at, last_ip
+       FROM devices
+       WHERE user_id = $1
+       ORDER BY last_seen_at DESC`,
+      [userId]
+    );
+    return result.rows;
+  } finally {
+    client.release();
+  }
+}
+
+// 设备登录入口：注册设备 + 签发 API key。
+// 轮换规则：仅当单设备模式（MAX_DEVICES_PER_USER=1）且这次登录踢掉了另一台
+// 设备时才轮换 token —— 被踢机器上的旧 token（含被复制的副本）立即失效。
+// 同一台机器的重复登录（多个 IDE / 多窗口 profile / 重装，machineId 相同）
+// 不发生淘汰，返回当前 token，因此同机多 IDE 各自登录后共用同一个有效 token，
+// 不会互相打死。多设备模式下永不轮换（会误伤其他在册设备）。
+export async function deviceLogin(
+  userId: string,
+  deviceId: string | null,
+  deviceName: string | null
+) {
+  let evicted: string[] = [];
+  if (deviceId) {
+    try {
+      evicted = (await registerDevice(userId, deviceId, deviceName)).evicted;
+    } catch (error) {
+      // 注册失败不阻断登录：relay 在 log 模式下放行；enforce 模式下该设备
+      // 会 401，用户重新登录即可重试注册。
+      console.error("Failed to register device:", error);
+    }
+  }
+
+  const existing = await getApiKey(userId);
+  if (!existing) return { keyRecord: await createApiKey(userId), evicted, rotated: false };
+  if (MAX_DEVICES_PER_USER === 1 && evicted.length > 0) {
+    return { keyRecord: await resetApiKey(userId), evicted, rotated: true };
+  }
+  return { keyRecord: existing, evicted, rotated: false };
+}
+
+export async function isUserBanned(userId: string): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `SELECT 1 FROM banned_users WHERE user_id = $1`,
+      [userId]
+    );
+    return result.rows.length > 0;
   } finally {
     client.release();
   }

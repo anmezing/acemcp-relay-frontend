@@ -332,6 +332,21 @@ body {
   animation-delay: 0.5s;
 }
 
+/* H5：小屏与减弱动态偏好下停用光斑类无限动画。
+   大面积 blur 元素持续变换会让移动端滚动明显掉帧；静态显示视觉差异很小。
+   注意只停无限循环的装饰动画：入场动画（float-up 等）配合 opacity-0 使用，
+   停掉会让内容永远不可见。此块必须位于上述动画类定义之后（同优先级靠后生效）。 */
+@media (max-width: 767px), (prefers-reduced-motion: reduce) {
+  .animate-aurora-1,
+  .animate-aurora-2,
+  .animate-aurora-3,
+  .animate-aurora-4,
+  .animate-glow-pulse,
+  .animate-gradient-x {
+    animation: none;
+  }
+}
+
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
