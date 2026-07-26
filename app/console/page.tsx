@@ -218,6 +218,7 @@ export default function ConsolePage() {
   const [tenantStats, setTenantStats] = useState<TenantStats | null>(null);
   const [tenantStatsLoading, setTenantStatsLoading] = useState(true);
   const [tenantStatsError, setTenantStatsError] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const relayURL = "https://513689.xyz";
   const configKey = fullKey || "YOUR_API_KEY";
@@ -341,6 +342,8 @@ export default function ConsolePage() {
   }, []);
 
   const sections = isAdmin ? ALL_SECTIONS : ALL_SECTIONS.filter((s) => !s.admin);
+  const mobileItems = sections.flatMap((section) => section.items);
+  const activeMobileItem = mobileItems.find((item) => item.id === activeTab) ?? mobileItems[0];
 
   const fetchLogs = useCallback(async (page = 1, forceRefreshStats = false) => {
     setLogsLoading(true);
@@ -438,6 +441,16 @@ export default function ConsolePage() {
 
     return () => window.clearTimeout(timeoutId);
   }, [isPending, session, router, fetchUserInfo, fetchKeyInfo, fetchTenantStats, fetchAdmin]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [mobileMenuOpen]);
 
   const handleShowKey = async () => {
     if (showKey) {
@@ -615,23 +628,59 @@ export default function ConsolePage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-8 md:h-full flex flex-col">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)} className="flex-1 flex flex-col min-h-0">
             <div className="relative mb-4 flex-shrink-0 md:hidden">
-              <select
-                value={activeTab}
-                onChange={(event) => setActiveTab(event.target.value as Tab)}
-                aria-label="控制台页面"
-                className="h-11 w-full appearance-none rounded-lg border border-white/[0.08] bg-[#0d1424] px-3 pr-10 text-sm text-white outline-none focus:border-cyan-400/60"
+              {mobileMenuOpen && (
+                <button
+                  type="button"
+                  aria-label="关闭控制台菜单"
+                  className="fixed inset-0 z-40 cursor-default bg-black/20"
+                  onClick={() => setMobileMenuOpen(false)}
+                />
+              )}
+              <button
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={mobileMenuOpen}
+                onClick={() => setMobileMenuOpen((open) => !open)}
+                className="relative z-50 flex h-11 w-full items-center gap-2 rounded-lg border border-white/[0.08] bg-[#0d1424] px-3 pr-10 text-left text-sm text-white outline-none transition-colors hover:border-white/[0.14] focus-visible:border-cyan-400/60"
               >
-                {sections.map((section) => (
-                  <optgroup key={section.label} label={section.label}>
-                    {section.items.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                {activeMobileItem?.icon}
+                <span>{activeMobileItem?.label}</span>
+                <ChevronDown
+                  className={cn(
+                    "pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 transition-transform",
+                    mobileMenuOpen && "rotate-180"
+                  )}
+                />
+              </button>
+              {mobileMenuOpen && (
+                <div
+                  role="menu"
+                  aria-label="控制台页面"
+                  className="absolute left-0 right-0 top-full z-50 mt-2 max-h-[min(60dvh,28rem)] overflow-y-auto rounded-lg border border-white/[0.1] bg-[#111827] p-1.5 shadow-2xl shadow-black/50"
+                >
+                  {mobileItems.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={item.id === activeTab}
+                      onClick={() => {
+                        setActiveTab(item.id);
+                        setMobileMenuOpen(false);
+                      }}
+                      className={cn(
+                        "flex h-10 w-full items-center gap-2.5 rounded-md px-3 text-left text-sm transition-colors",
+                        item.id === activeTab
+                          ? "bg-cyan-400/10 text-cyan-200"
+                          : "text-slate-300 hover:bg-white/[0.06] hover:text-white"
+                      )}
+                    >
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="flex gap-4 flex-1 min-h-0">

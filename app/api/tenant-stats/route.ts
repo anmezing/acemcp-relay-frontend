@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getApiKey } from "@/lib/db";
+import { getRelayConsoleHeaders } from "@/lib/relay-console";
 
 const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
 
@@ -23,9 +24,7 @@ export async function GET() {
     }
 
     const res = await fetch(`${RELAY_URL}/mcp/tenant-stats`, {
-      headers: {
-        Authorization: `Bearer ${keyRecord.api_key}`,
-      },
+      headers: getRelayConsoleHeaders(keyRecord.api_key),
     });
 
     if (!res.ok) {

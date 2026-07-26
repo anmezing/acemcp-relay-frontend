@@ -6,7 +6,7 @@ import { AGENT_RULES_SNIPPET } from "@/lib/agent-rules";
 
 export default function Home() {
   return (
-    <div className="relative min-h-screen bg-[#0a0f1a] overflow-x-hidden animate-page-fade-in">
+    <div className="relative min-h-screen overflow-clip bg-[#0a0f1a] animate-page-fade-in">
       {/* Ambient light effects */}
       <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gradient-radial from-cyan-500/8 via-blue-500/4 to-transparent rounded-full blur-3xl" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-gradient-radial from-indigo-500/6 to-transparent rounded-full blur-3xl" />
