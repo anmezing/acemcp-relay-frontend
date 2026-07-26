@@ -7,6 +7,7 @@ import {
   normalizeUserModelConfig,
 } from "@/lib/model-config-crypto";
 import { getUserModelConfigRow } from "@/lib/model-config-db";
+import { safeByoRequest } from "@/lib/safe-outbound";
 
 // 连通性测试：用用户提交的 embeddings 配置真实调一次 embedding API，
 // 返回实际向量维度（与配置维度不一致时前端提示）。apiKey 留空沿用已保存值。
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
     const payload: Record<string, unknown> = { model: e.model, input: ["connectivity test"] };
     if (e.provider === "voyage") payload.input_type = "query";
 
-    const resp = await fetch(e.baseUrl, {
+    const resp = await safeByoRequest(e.baseUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(15000),
+      maxResponseBytes: 4 * 1024 * 1024,
     });
     const text = await resp.text();
     if (!resp.ok) {

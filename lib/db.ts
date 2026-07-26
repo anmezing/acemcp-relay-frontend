@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import { Pool, PoolClient } from "pg";
 import crypto from "crypto";
 import { createClient, RedisClientType } from "redis";
 
@@ -254,58 +254,57 @@ export interface DeviceRow {
 
 // 注册设备；超出上限时淘汰最久未活跃的设备（被淘汰设备在 relay enforce
 // 模式下会收到 401，需要重新登录 —— 这正是共用账号时互踢的效果）。
-export async function registerDevice(
+// 只能在 deviceLogin 的事务里调用：注册、淘汰必须和 token 轮换同一事务提交。
+async function registerDeviceTx(
+  client: PoolClient,
   userId: string,
   deviceId: string,
   deviceName: string | null
 ): Promise<{ evicted: string[] }> {
-  const client = await pool.connect();
-  try {
-    await client.query(
-      `INSERT INTO devices (user_id, device_id, device_name, last_seen_at)
-       VALUES ($1, $2, $3, NOW())
-       ON CONFLICT (user_id, device_id)
-       DO UPDATE SET device_name = COALESCE($3, devices.device_name), last_seen_at = NOW()`,
-      [userId, deviceId, deviceName]
-    );
+  await client.query(
+    `INSERT INTO devices (user_id, device_id, device_name, last_seen_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (user_id, device_id)
+     DO UPDATE SET device_name = COALESCE($3, devices.device_name), last_seen_at = NOW()`,
+    [userId, deviceId, deviceName]
+  );
 
-    const evictResult = await client.query(
-      `DELETE FROM devices
-       WHERE user_id = $1
-         AND device_id NOT IN (
-           SELECT device_id FROM devices
-           WHERE user_id = $1
-           ORDER BY last_seen_at DESC
-           LIMIT $2
-         )
-       RETURNING device_id`,
-      [userId, MAX_DEVICES_PER_USER]
-    );
-    const evicted = evictResult.rows.map((r) => r.device_id as string);
+  const evictResult = await client.query(
+    `DELETE FROM devices
+     WHERE user_id = $1
+       AND device_id NOT IN (
+         SELECT device_id FROM devices
+         WHERE user_id = $1
+         ORDER BY last_seen_at DESC
+         LIMIT $2
+       )
+     RETURNING device_id`,
+    [userId, MAX_DEVICES_PER_USER]
+  );
+  const evicted = evictResult.rows.map((r: { device_id: string }) => r.device_id);
 
-    // 新设备可能被 relay 负缓存过、被淘汰设备要立即失效
-    await deleteDeviceRegCache(userId, [deviceId, ...evicted]);
-    if (evicted.length > 0) {
-      // 每次踢出都留痕：单设备互踢下，频繁的 device_evicted 就是账号共用的信号
-      try {
-        for (const evictedId of evicted) {
-          await client.query(
-            `INSERT INTO device_alerts (user_id, device_id, kind, detail)
-             VALUES ($1, $2, 'device_evicted', $3)`,
-            [userId, evictedId, `replaced by ${deviceId}`]
-          );
-        }
-      } catch (error) {
-        console.error("Failed to record device eviction alert:", error);
+  if (evicted.length > 0) {
+    // 每次踢出都留痕：单设备互踢下，频繁的 device_evicted 就是账号共用的信号。
+    // 留痕是 best-effort：失败只回滚告警本身，不影响注册和淘汰。
+    await client.query("SAVEPOINT device_alerts");
+    try {
+      for (const evictedId of evicted) {
+        await client.query(
+          `INSERT INTO device_alerts (user_id, device_id, kind, detail)
+           VALUES ($1, $2, 'device_evicted', $3)`,
+          [userId, evictedId, `replaced by ${deviceId}`]
+        );
       }
-      console.log(
-        `Device limit reached for user ${userId}: evicted ${evicted.join(", ")}`
-      );
+      await client.query("RELEASE SAVEPOINT device_alerts");
+    } catch (error) {
+      await client.query("ROLLBACK TO SAVEPOINT device_alerts");
+      console.error("Failed to record device eviction alert:", error);
     }
-    return { evicted };
-  } finally {
-    client.release();
+    console.log(
+      `Device limit reached for user ${userId}: evicted ${evicted.join(", ")}`
+    );
   }
+  return { evicted };
 }
 
 export async function getDevices(userId: string): Promise<DeviceRow[]> {
@@ -330,28 +329,83 @@ export async function getDevices(userId: string): Promise<DeviceRow[]> {
 // 同一台机器的重复登录（多个 IDE / 多窗口 profile / 重装，machineId 相同）
 // 不发生淘汰，返回当前 token，因此同机多 IDE 各自登录后共用同一个有效 token，
 // 不会互相打死。多设备模式下永不轮换（会误伤其他在册设备）。
+// 注册、淘汰、轮换在同一事务里，并按用户加 advisory 锁串行化并发登录：
+// 否则两次并发登录可能互相淘汰后各自轮换，其中一方拿到的 token 已经失效。
 export async function deviceLogin(
   userId: string,
   deviceId: string | null,
   deviceName: string | null
 ) {
+  const client = await pool.connect();
   let evicted: string[] = [];
-  if (deviceId) {
-    try {
-      evicted = (await registerDevice(userId, deviceId, deviceName)).evicted;
-    } catch (error) {
+  let oldKeyId: string | null = null;
+  let keyRecord;
+  let rotated = false;
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `SELECT pg_advisory_xact_lock(hashtext('acemcp:device-login'), hashtext($1))`,
+      [userId]
+    );
+
+    if (deviceId) {
       // 注册失败不阻断登录：relay 在 log 模式下放行；enforce 模式下该设备
       // 会 401，用户重新登录即可重试注册。
-      console.error("Failed to register device:", error);
+      await client.query("SAVEPOINT device_reg");
+      try {
+        evicted = (await registerDeviceTx(client, userId, deviceId, deviceName)).evicted;
+      } catch (error) {
+        await client.query("ROLLBACK TO SAVEPOINT device_reg");
+        evicted = [];
+        console.error("Failed to register device:", error);
+      }
     }
+
+    const existing = await client.query(
+      `SELECT * FROM api_keys WHERE user_id = $1 FOR UPDATE`,
+      [userId]
+    );
+    if (!existing.rows[0]) {
+      const { id, apiKey } = generateApiKey();
+      const created = await client.query(
+        `INSERT INTO api_keys (id, user_id, api_key)
+         VALUES ($1, $2, $3)
+         RETURNING *`,
+        [id, userId, apiKey]
+      );
+      keyRecord = created.rows[0];
+    } else if (MAX_DEVICES_PER_USER === 1 && evicted.length > 0) {
+      oldKeyId = existing.rows[0].id;
+      const { id, apiKey } = generateApiKey();
+      const updated = await client.query(
+        `UPDATE api_keys
+         SET id = $2, api_key = $3, updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $1
+         RETURNING *`,
+        [userId, id, apiKey]
+      );
+      keyRecord = updated.rows[0];
+      rotated = true;
+    } else {
+      keyRecord = existing.rows[0];
+    }
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
   }
 
-  const existing = await getApiKey(userId);
-  if (!existing) return { keyRecord: await createApiKey(userId), evicted, rotated: false };
-  if (MAX_DEVICES_PER_USER === 1 && evicted.length > 0) {
-    return { keyRecord: await resetApiKey(userId), evicted, rotated: true };
+  // 缓存失效必须在 COMMIT 之后：提交前删缓存会被并发请求用旧数据回填
+  if (deviceId) {
+    await deleteDeviceRegCache(userId, [deviceId, ...evicted]);
   }
-  return { keyRecord: existing, evicted, rotated: false };
+  if (oldKeyId) {
+    await deleteApiKeyCache(oldKeyId);
+  }
+  return { keyRecord, evicted, rotated };
 }
 
 export async function isUserBanned(userId: string): Promise<boolean> {

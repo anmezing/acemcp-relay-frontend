@@ -28,8 +28,14 @@ export async function GET(request: NextRequest) {
   });
 
   if (!session?.user?.id) {
-    const returnUrl = request.nextUrl.toString();
-    const loginUrl = new URL("/login", request.nextUrl.origin);
+    // 跳转基址必须用公网地址：容器内看到的 request origin 取决于代理是否
+    // 正确传 Host 头，配置漂移时会拼出容器主机名（浏览器无法解析）。
+    const publicOrigin = process.env.BETTER_AUTH_URL || request.nextUrl.origin;
+    const returnUrl = new URL(
+      request.nextUrl.pathname + request.nextUrl.search,
+      publicOrigin
+    ).toString();
+    const loginUrl = new URL("/login", publicOrigin);
     loginUrl.searchParams.set("callbackUrl", returnUrl);
     return NextResponse.redirect(loginUrl);
   }

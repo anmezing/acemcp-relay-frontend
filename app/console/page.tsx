@@ -77,7 +77,7 @@ const ALL_SECTIONS: SidebarSection[] = [
       { id: "users", label: "用户管理", icon: <Users className="w-4 h-4" /> },
       { id: "token-cost", label: "调用统计", icon: <Coins className="w-4 h-4" /> },
       { id: "quota", label: "配额管理", icon: <Gauge className="w-4 h-4" /> },
-      { id: "models", label: "模型设置", icon: <Cpu className="w-4 h-4" /> },
+      { id: "models", label: "模型管理", icon: <Cpu className="w-4 h-4" /> },
     ],
   },
   {
@@ -1274,10 +1274,10 @@ export default function ConsolePage() {
                     </TabsContent>
                   )}
 
-                  {/* 管理员 - 模型设置 */}
+                  {/* 管理员 - 模型管理 */}
                   {isAdmin && (
                     <TabsContent value="models" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
-                      <h2 className="text-lg font-medium text-white mb-6">模型设置</h2>
+                      <h2 className="text-lg font-medium text-white mb-6">模型管理</h2>
                       <AdminModelsTab />
                     </TabsContent>
                   )}

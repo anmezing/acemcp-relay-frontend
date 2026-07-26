@@ -1,5 +1,7 @@
 import crypto from "crypto";
 
+import { validateByoProviderUrl } from "./safe-outbound";
+
 // 按用户模型配置的加密与指纹。
 // 加密：AES-256-GCM，密钥 = SHA-256(MODEL_CONFIG_SECRET)，
 // 密文布局 base64(nonce[12] || ciphertext || tag[16])——必须与
@@ -110,10 +112,8 @@ export function normalizeUserModelConfig(raw: {
     throw new Error("embeddings.dimensions 必须是正整数");
   }
   const baseUrl = requireString(e.baseUrl, "embeddings.baseUrl");
-  // 仅允许 https：该 URL 会被 LCE / 前端在服务端调用，禁 http 阻断内网探测（SSRF）
-  if (!/^https:\/\//i.test(baseUrl)) {
-    throw new Error("embeddings.baseUrl 必须以 https:// 开头");
-  }
+  // 该 URL 会被 LCE / 前端在服务端调用：仅 https、禁凭据/片段、禁内网地址（SSRF）
+  validateByoProviderUrl(baseUrl, "embeddings.baseUrl");
   const config: UserModelConfig = {
     embeddings: {
       provider: e.provider,
@@ -131,9 +131,7 @@ export function normalizeUserModelConfig(raw: {
       throw new Error("rerank.provider 仅支持 siliconflow-compatible / voyage / custom");
     }
     const rerankBaseUrl = requireString(r.baseUrl, "rerank.baseUrl");
-    if (!/^https:\/\//i.test(rerankBaseUrl)) {
-      throw new Error("rerank.baseUrl 必须以 https:// 开头");
-    }
+    validateByoProviderUrl(rerankBaseUrl, "rerank.baseUrl");
     config.rerank = {
       provider: r.provider,
       model: requireString(r.model, "rerank.model"),
