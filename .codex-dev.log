@@ -1,0 +1,18 @@
+▲ Next.js 16.1.0 (webpack)
+- Local:         http://127.0.0.1:3000
+- Network:       http://127.0.0.1:3000
+
+✓ Starting...
+✓ Ready in 3.9s
+○ Compiling / ...
+2026-07-26T03:21:46.069Z WARN [Better Auth]: Social provider github is missing clientId or clientSecret
+ GET / 200 in 235ms (compile: 52ms, render: 183ms)
+ GET / 200 in 101ms (compile: 6ms, render: 95ms)
+○ Compiling /console ...
+⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+2026-07-26T03:22:47.040Z WARN [Better Auth]: Social provider github is missing clientId or clientSecret
+ GET /console 200 in 5.4s (compile: 4.5s, render: 926ms)
+2026-07-26T03:22:49.084Z WARN [Better Auth]: Social provider github is missing clientId or clientSecret
+2026-07-26T03:22:50.511Z WARN [Better Auth]: Social provider github is missing clientId or clientSecret
+ GET /api/auth/get-session 200 in 2.6s (compile: 2.5s, render: 39ms)
+ GET /login 200 in 1182ms (compile: 1117ms, render: 65ms)
