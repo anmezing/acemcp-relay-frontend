@@ -9,10 +9,11 @@ import {
   initDB,
 } from "@/lib/db";
 
-initDB().catch(console.error);
-
 export async function GET() {
   try {
+    // 请求时惰性初始化（幂等）。不能放模块级：next build 收集页面数据时
+    // 会 import 本模块，构建环境没有数据库，模块级调用必然 ECONNREFUSED。
+    await initDB().catch(console.error);
     const session = await auth.api.getSession({
       headers: await headers(),
     });
@@ -45,6 +46,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    await initDB().catch(console.error);
     const session = await auth.api.getSession({
       headers: await headers(),
     });

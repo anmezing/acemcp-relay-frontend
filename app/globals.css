@@ -48,10 +48,14 @@
 
 html {
   color-scheme: dark;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 /* Animated gradient text */

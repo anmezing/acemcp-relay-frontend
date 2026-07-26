@@ -2,7 +2,7 @@
 
 import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { Trophy, Crown, Medal, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -48,9 +48,8 @@ export default function LeaderboardPage() {
   const router = useRouter();
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string>("");
-
-  const dateOptions = getDateOptions();
+  const dateOptions = useMemo(() => getDateOptions(), []);
+  const [selectedDate, setSelectedDate] = useState(() => dateOptions[0].date);
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -77,16 +76,17 @@ export default function LeaderboardPage() {
   }, []);
 
   useEffect(() => {
-    if (session && !selectedDate) {
-      const todayDate = dateOptions[0].date;
-      setSelectedDate(todayDate);
-      fetchLeaderboard(todayDate);
-    }
-  }, [session, selectedDate, dateOptions, fetchLeaderboard]);
+    if (!session) return;
+
+    const timeoutId = window.setTimeout(() => {
+      void fetchLeaderboard(selectedDate);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [session, selectedDate, fetchLeaderboard]);
 
   const handleDateChange = (date: string) => {
     setSelectedDate(date);
-    fetchLeaderboard(date);
   };
 
   if (isPending) {
@@ -117,42 +117,40 @@ export default function LeaderboardPage() {
     <div className="min-h-screen bg-[#0a0f1a]">
       {/* Header */}
       <header className="border-b border-white/[0.06] bg-[#0a0f1a]/80 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
           <Link href="/" className="text-lg sm:text-xl font-semibold whitespace-nowrap text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-400">
             LCE Relay
           </Link>
-          <div className="flex items-center gap-3 sm:gap-6">
-            {/* Tab Navigation */}
-            <nav className="flex items-center gap-0.5 sm:gap-1">
-              <Link
-                href="/console"
-                className="px-2 sm:px-3 py-1.5 text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
-              >
-                控制台
-              </Link>
-              <Link
-                href="/leaderboard"
-                className="px-2 sm:px-3 py-1.5 text-xs sm:text-sm whitespace-nowrap text-white border-b-2 border-cyan-400"
-              >
-                排行榜
-              </Link>
-              <Link
-                href="/status"
-                className="px-2 sm:px-3 py-1.5 text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
-              >
-                状态监控
-              </Link>
-            </nav>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => fetchLeaderboard(selectedDate)}
-              disabled={loading}
-              className="text-slate-400 hover:text-white"
+          <nav className="order-3 grid w-full grid-cols-3 sm:order-none sm:flex sm:w-auto sm:items-center sm:gap-1">
+            <Link
+              href="/console"
+              className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
             >
-              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-            </Button>
-          </div>
+              控制台
+            </Link>
+            <Link
+              href="/leaderboard"
+              className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-white border-b-2 border-cyan-400"
+            >
+              排行榜
+            </Link>
+            <Link
+              href="/status"
+              className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
+            >
+              状态监控
+            </Link>
+          </nav>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => fetchLeaderboard(selectedDate)}
+            disabled={loading}
+            className="text-slate-400 hover:text-white"
+            aria-label="刷新排行榜"
+          >
+            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+          </Button>
         </div>
       </header>
 

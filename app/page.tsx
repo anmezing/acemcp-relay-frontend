@@ -43,7 +43,7 @@ export default function Home() {
           </div>
 
           <p className="text-lg md:text-xl text-slate-400 font-light tracking-wide opacity-0 animate-float-up animate-delay-200 max-w-2xl mx-auto leading-relaxed">
-            AI 编码代理的代码上下文引擎，为 Cursor、Claude Desktop 等 IDE 提供语义级代码理解能力
+            AI 编码 Agent 的代码上下文引擎，为 Cursor、Claude Desktop 等 IDE 提供语义级代码理解能力
           </p>
 
           <div className="flex flex-wrap justify-center gap-4 pt-4">
@@ -82,14 +82,14 @@ export default function Home() {
             <SectionTitle>LCE 是什么</SectionTitle>
             <div className="space-y-4 text-slate-400 text-[15px] leading-relaxed">
               <p>
-                LCE（Local Code Engine）是一个<span className="text-white">代码上下文引擎</span>，它将代码仓库索引为结构化语义数据，让 AI 编码代理能像理解人类语言一样理解你的代码。
+                LCE（Local Code Engine）是一个<span className="text-white">代码上下文引擎</span>，它将代码仓库索引为结构化语义数据，让 AI 编码 Agent 能像理解人类语言一样理解你的代码。
               </p>
               <p>
                 传统的代码搜索依赖关键词匹配——你必须精确知道函数名、变量名才能找到它。LCE 不同：它理解代码的<span className="text-white">语义</span>。
                 你可以用自然语言描述你要找的东西，比如&ldquo;处理用户认证的逻辑&rdquo;或&ldquo;数据库连接池的错误恢复机制&rdquo;，LCE 会返回最相关的代码片段及其上下文。
               </p>
               <p>
-                LCE Relay 是 LCE 的云端中继服务。你无需在本地安装任何组件，只需在 IDE 中添加一个 MCP 服务器地址，AI 代理就能直接使用全部检索能力。
+                LCE Relay 是 LCE 的云端中继服务。你无需在本地安装任何组件，只需在 IDE 中添加一个 MCP 服务器地址，AI Agent 就能直接使用全部检索能力。
               </p>
             </div>
           </section>
@@ -104,7 +104,7 @@ export default function Home() {
               />
               <FeatureCard
                 title="Bug 溯源"
-                description="结合 Git 历史和符号图谱，追溯一个 bug 是什么时候、由谁、在哪次提交中引入的。不再手动翻 git log，AI 代理直接给出引入变更和影响范围。"
+                description="结合 Git 历史和符号图谱，追溯一个 bug 是什么时候、由谁、在哪次提交中引入的。不再手动翻 git log，AI Agent 直接给出引入变更和影响范围。"
               />
               <FeatureCard
                 title="符号关系图谱"
@@ -112,7 +112,7 @@ export default function Home() {
               />
               <FeatureCard
                 title="变更影响分析"
-                description="提交代码前，自动分析变更影响的范围：关联的调用者、受影响的测试、潜在的回归风险。让 AI 代理的 code review 真正有据可依。"
+                description="提交代码前，自动分析变更影响的范围：关联的调用者、受影响的测试、潜在的回归风险。让 AI Agent 的 code review 真正有据可依。"
               />
             </div>
           </section>
@@ -141,12 +141,12 @@ export default function Home() {
                   </div>
                 </div>
               </StepCard>
-              <StepCard step={3} title="要求 AI 代理优先使用 LCE">
+              <StepCard step={3} title="要求 AI Agent 优先使用 LCE">
                 <div className="space-y-3">
                   <span>
-                    只添加 MCP 服务器并不保证代理会用它。在项目根目录的 CLAUDE.md 或
+                    只添加 MCP 服务器并不保证 Agent 会用它。在项目根目录的 CLAUDE.md 或
                     AGENTS.md（Cursor 用户也可放入 .cursor/rules）中加入以下规则，
-                    要求代理查找、理解代码时必须优先使用 LCE 工具，而不是 grep 或逐文件浏览。
+                    要求 Agent 查找、理解代码时必须优先使用 LCE 工具，而不是 grep 或逐文件浏览。
                     登录控制台后可在「配置说明」中一键复制：
                   </span>
                   <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-xs overflow-x-auto">
@@ -156,12 +156,12 @@ export default function Home() {
               </StepCard>
               <StepCard step={4} title="初始化代码索引">
                 <div className="space-y-3">
-                  <span>首次使用时，AI 代理会自动建立代码索引。连接 MCP 后，让代理执行索引即可——整个过程全自动：</span>
+                  <span>首次使用时，AI Agent 会自动建立代码索引。连接 MCP 后，让 Agent 执行索引即可——整个过程全自动：</span>
                   <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 space-y-3">
                     <div className="flex gap-3">
                       <span className="text-cyan-400 font-mono text-xs shrink-0 mt-0.5">1.</span>
                       <p className="text-slate-400 text-sm">
-                        代理扫描项目，检查哪些文件需要索引
+                        Agent 扫描项目，检查哪些文件需要索引
                       </p>
                     </div>
                     <div className="flex gap-3">
@@ -180,7 +180,7 @@ export default function Home() {
                 </div>
               </StepCard>
               <StepCard step={5} title="开始检索">
-                索引就绪后，AI 代理在编码过程中会自动调用语义检索搜索相关代码。你也可以直接要求代理搜索特定功能或符号。
+                索引就绪后，AI Agent 在编码过程中会自动调用语义检索搜索相关代码。你也可以直接要求 Agent 搜索特定功能或符号。
               </StepCard>
             </div>
           </section>
@@ -201,7 +201,7 @@ export default function Home() {
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>
-                    <span>本服务不替代 IDE 的本地功能（跳转定义、自动补全等），它是 AI 代理的上下文补充</span>
+                    <span>本服务不替代 IDE 的本地功能（跳转定义、自动补全等），它是 AI Agent 的上下文补充</span>
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>

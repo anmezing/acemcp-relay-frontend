@@ -3,9 +3,9 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { initDB, deviceLogin, isUserBanned } from "@/lib/db";
 
-initDB().catch(console.error);
-
 export async function GET(request: NextRequest) {
+  // 请求时惰性初始化（幂等）；模块级调用会在 next build 期连不上库
+  await initDB().catch(console.error);
   const callback = request.nextUrl.searchParams.get("callback");
   if (!callback) {
     return NextResponse.json(

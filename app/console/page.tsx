@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import {
   Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github, Trash2,
   Key, FileText, User, Database, ScrollText, Building2, Users, Coins,
-  Gauge, Cpu, Settings, Terminal, Shield
+  Gauge, Cpu, Settings, Terminal, Shield, ChevronDown
 } from "lucide-react";
 
 // shadcn/ui components
@@ -159,6 +159,38 @@ interface KeyInfo {
   updatedAt?: string | null;
 }
 
+interface TenantStats {
+  exists: boolean;
+  fileCount: number;
+  chunkCount: number;
+  vectorIndexedCount: number;
+  totalSizeBytes: number;
+  languages: Record<string, number>;
+  indexingCount?: number;
+}
+
+function isTenantStats(value: unknown): value is TenantStats {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+
+  const stats = value as Partial<TenantStats>;
+  const numericFields = [
+    stats.fileCount,
+    stats.chunkCount,
+    stats.vectorIndexedCount,
+    stats.totalSizeBytes,
+  ];
+
+  return (
+    typeof stats.exists === "boolean" &&
+    numericFields.every((field) => typeof field === "number" && Number.isFinite(field)) &&
+    Boolean(stats.languages) &&
+    typeof stats.languages === "object" &&
+    !Array.isArray(stats.languages) &&
+    (stats.indexingCount == null ||
+      (typeof stats.indexingCount === "number" && Number.isFinite(stats.indexingCount)))
+  );
+}
+
 export default function ConsolePage() {
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
@@ -183,15 +215,9 @@ export default function ConsolePage() {
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearLoading, setClearLoading] = useState(false);
   const [clearResult, setClearResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [tenantStats, setTenantStats] = useState<{
-    exists: boolean;
-    fileCount: number;
-    chunkCount: number;
-    vectorIndexedCount: number;
-    totalSizeBytes: number;
-    languages: Record<string, number>;
-    indexingCount?: number;
-  } | null>(null);
+  const [tenantStats, setTenantStats] = useState<TenantStats | null>(null);
+  const [tenantStatsLoading, setTenantStatsLoading] = useState(true);
+  const [tenantStatsError, setTenantStatsError] = useState<string | null>(null);
 
   const relayURL = "https://513689.xyz";
   const configKey = fullKey || "YOUR_API_KEY";
@@ -278,14 +304,29 @@ export default function ConsolePage() {
   }, []);
 
   const fetchTenantStats = useCallback(async () => {
+    setTenantStatsLoading(true);
+    setTenantStatsError(null);
     try {
       const res = await fetch("/api/tenant-stats");
-      if (res.ok) {
-        const data = await res.json();
-        setTenantStats(data);
+      const data: unknown = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        const message =
+          data && typeof data === "object" && "error" in data && typeof data.error === "string"
+            ? data.error
+            : `获取索引统计失败（HTTP ${res.status}）`;
+        throw new Error(message);
       }
+      if (!isTenantStats(data)) {
+        throw new Error("索引统计响应格式异常");
+      }
+
+      setTenantStats(data);
     } catch (error) {
       console.error("获取索引统计失败:", error);
+      setTenantStatsError(error instanceof Error ? error.message : "获取索引统计失败");
+    } finally {
+      setTenantStatsLoading(false);
     }
   }, []);
 
@@ -305,8 +346,8 @@ export default function ConsolePage() {
     setLogsLoading(true);
     const startTime = Date.now();
     try {
-      // 首次加载、第1页、或强制刷新时获取统计数据
-      const needStats = forceRefreshStats || !logsData?.stats || page === 1;
+      // 第 1 页或强制刷新时获取统计数据
+      const needStats = forceRefreshStats || page === 1;
       const url = needStats
         ? `/api/logs?page=${page}&limit=20&withStats=true`
         : `/api/logs?page=${page}&limit=20`;
@@ -341,7 +382,7 @@ export default function ConsolePage() {
       }
       setLogsLoading(false);
     }
-  }, [logsData?.stats]);
+  }, []);
 
   const fetchLogDetail = useCallback(async (logId: string) => {
     setDetailLoading(true);
@@ -361,9 +402,13 @@ export default function ConsolePage() {
 
   // Fetch logs when switching to logs tab (only on tab switch, not on page change)
   useEffect(() => {
-    if (activeTab === "logs" && session && !logsData) {
-      fetchLogs(1);  // 首次进入 logs tab 时加载第一页
-    }
+    if (activeTab !== "logs" || !session || logsData) return;
+
+    const timeoutId = window.setTimeout(() => {
+      void fetchLogs(1);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [activeTab, session, logsData, fetchLogs]);
 
   // Auto-refresh logs
@@ -380,12 +425,18 @@ export default function ConsolePage() {
   useEffect(() => {
     if (!isPending && !session) {
       router.push("/login");
-    } else if (session) {
-      fetchUserInfo();
-      fetchKeyInfo();
-      fetchTenantStats();
-      fetchAdmin();
+      return;
     }
+    if (!session) return;
+
+    const timeoutId = window.setTimeout(() => {
+      void fetchUserInfo();
+      void fetchKeyInfo();
+      void fetchTenantStats();
+      void fetchAdmin();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [isPending, session, router, fetchUserInfo, fetchKeyInfo, fetchTenantStats, fetchAdmin]);
 
   const handleShowKey = async () => {
@@ -487,6 +538,7 @@ export default function ConsolePage() {
       if (res.ok) {
         setClearResult({ success: true, message: data.message || "索引和日志已清除" });
         setLogsData(null);
+        await fetchTenantStats();
       } else {
         setClearResult({ success: false, message: data.error || "清除失败" });
       }
@@ -512,53 +564,49 @@ export default function ConsolePage() {
 
   if (!session) return null;
 
-  const allItems = sections.flatMap((s) => s.items);
-
   return (
-    <div className="min-h-dvh md:h-dvh bg-[#0a0f1a] flex flex-col md:overflow-hidden">
+    <div className="min-h-dvh md:h-dvh bg-[#0a0f1a] flex flex-col overflow-x-clip md:overflow-hidden">
       {/* Ambient glow */}
-      <div className="fixed top-0 left-1/4 w-[600px] h-[400px] bg-gradient-radial from-cyan-500/5 via-blue-500/3 to-transparent rounded-full blur-3xl pointer-events-none" />
+      <div className="fixed top-0 left-1/2 w-screen max-w-[600px] h-[400px] -translate-x-1/2 bg-gradient-radial from-cyan-500/5 via-blue-500/3 to-transparent rounded-full blur-3xl pointer-events-none" />
 
       {/* Noise texture */}
       <div className="fixed inset-0 opacity-[0.015] pointer-events-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIj48ZmlsdGVyIGlkPSJhIiB4PSIwIiB5PSIwIj48ZmVUdXJidWxlbmNlIGJhc2VGcmVxdWVuY3k9Ii43NSIgc3RpdGNoVGlsZXM9InN0aXRjaCIgdHlwZT0iZnJhY3RhbE5vaXNlIi8+PC9maWx0ZXI+PHJlY3Qgd2lkdGg9IjMwMCIgaGVpZ2h0PSIzMDAiIGZpbHRlcj0idXJsKCNhKSIgb3BhY2l0eT0iMSIvPjwvc3ZnPg==')]" />
 
       {/* Header */}
       <header className="relative border-b border-white/[0.06] flex-shrink-0 bg-[#0a0f1a]/80 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
           <Link href="/" className="text-lg sm:text-xl font-semibold whitespace-nowrap text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-400">
             LCE Relay
           </Link>
-          <div className="flex items-center gap-3 sm:gap-6">
-            {/* Tab Navigation */}
-            <nav className="flex items-center gap-0.5 sm:gap-1">
-              <Link
-                href="/console"
-                className="px-2 sm:px-3 py-1.5 text-xs sm:text-sm whitespace-nowrap text-white border-b-2 border-cyan-400"
-              >
-                控制台
-              </Link>
-              <Link
-                href="/leaderboard"
-                className="px-2 sm:px-3 py-1.5 text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
-              >
-                排行榜
-              </Link>
-              <Link
-                href="/status"
-                className="px-2 sm:px-3 py-1.5 text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
-              >
-                状态监控
-              </Link>
-            </nav>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowLogoutConfirm(true)}
-              className="text-slate-400 hover:text-red-400 hover:bg-red-500/10"
+          <nav className="order-3 grid w-full grid-cols-3 sm:order-none sm:flex sm:w-auto sm:items-center sm:gap-1">
+            <Link
+              href="/console"
+              className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-white border-b-2 border-cyan-400"
             >
-              <LogOut className="w-4 h-4" />
-            </Button>
-          </div>
+              控制台
+            </Link>
+            <Link
+              href="/leaderboard"
+              className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
+            >
+              排行榜
+            </Link>
+            <Link
+              href="/status"
+              className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
+            >
+              状态监控
+            </Link>
+          </nav>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowLogoutConfirm(true)}
+            className="text-slate-400 hover:text-red-400 hover:bg-red-500/10"
+            aria-label="退出登录"
+          >
+            <LogOut className="w-4 h-4" />
+          </Button>
         </div>
       </header>
 
@@ -566,19 +614,25 @@ export default function ConsolePage() {
       <div className="relative flex-1 md:overflow-hidden">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-8 md:h-full flex flex-col">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)} className="flex-1 flex flex-col min-h-0">
-            {/* Mobile tabs - horizontal scrollable */}
-            <TabsList className="flex md:hidden gap-1 mb-4 overflow-x-auto scrollbar-none pb-2 flex-shrink-0 bg-transparent h-auto p-0">
-              {allItems.map((item) => (
-                <TabsTrigger
-                  key={item.id}
-                  value={item.id}
-                  className="flex-shrink-0 px-2.5 py-1.5 text-xs rounded-lg whitespace-nowrap gap-1.5 data-[state=active]:bg-white/[0.06] data-[state=active]:text-white data-[state=inactive]:text-slate-400 border border-transparent data-[state=active]:border-white/[0.08]"
-                >
-                  {item.icon}
-                  {item.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
+            <div className="relative mb-4 flex-shrink-0 md:hidden">
+              <select
+                value={activeTab}
+                onChange={(event) => setActiveTab(event.target.value as Tab)}
+                aria-label="控制台页面"
+                className="h-11 w-full appearance-none rounded-lg border border-white/[0.08] bg-[#0d1424] px-3 pr-10 text-sm text-white outline-none focus:border-cyan-400/60"
+              >
+                {sections.map((section) => (
+                  <optgroup key={section.label} label={section.label}>
+                    {section.items.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </div>
 
             <div className="flex gap-4 flex-1 min-h-0">
               {/* Sidebar - desktop only */}
@@ -984,7 +1038,41 @@ export default function ConsolePage() {
                   <TabsContent value="index" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                     <h2 className="text-lg font-medium text-white mb-6">索引管理</h2>
 
-                    {tenantStats && tenantStats.exists ? (
+                    {tenantStatsError && tenantStats && (
+                      <div className="mb-4 flex flex-col gap-3 rounded-lg border border-red-500/20 bg-red-500/[0.05] p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm text-red-300">{tenantStatsError}</p>
+                        <Button
+                          variant="glass"
+                          size="sm"
+                          onClick={() => fetchTenantStats()}
+                          disabled={tenantStatsLoading}
+                          className="shrink-0"
+                        >
+                          <RefreshCw className={cn("mr-1 h-4 w-4", tenantStatsLoading && "animate-spin")} />
+                          重试
+                        </Button>
+                      </div>
+                    )}
+
+                    {!tenantStats && tenantStatsError ? (
+                      <Card className="border-red-500/20 bg-red-500/[0.04]">
+                        <CardContent className="flex flex-col items-center px-4 py-8 text-center">
+                          <Info className="mb-3 h-6 w-6 text-red-400" />
+                          <p className="text-sm font-medium text-red-300">索引统计加载失败</p>
+                          <p className="mt-1 max-w-md text-xs text-slate-500">{tenantStatsError}</p>
+                          <Button
+                            variant="glass"
+                            size="sm"
+                            onClick={() => fetchTenantStats()}
+                            disabled={tenantStatsLoading}
+                            className="mt-4"
+                          >
+                            <RefreshCw className={cn("mr-1 h-4 w-4", tenantStatsLoading && "animate-spin")} />
+                            {tenantStatsLoading ? "重试中..." : "重新加载"}
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    ) : tenantStats && tenantStats.exists ? (
                       <div className="space-y-4">
                         <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
                           <CardContent className="p-4">
@@ -1036,9 +1124,10 @@ export default function ConsolePage() {
                           variant="glass"
                           size="sm"
                           onClick={() => fetchTenantStats()}
+                          disabled={tenantStatsLoading}
                         >
-                          <RefreshCw className="w-4 h-4 mr-1" />
-                          刷新统计
+                          <RefreshCw className={cn("w-4 h-4 mr-1", tenantStatsLoading && "animate-spin")} />
+                          {tenantStatsLoading ? "刷新中..." : "刷新统计"}
                         </Button>
 
                         {/* Clear index */}
@@ -1077,8 +1166,18 @@ export default function ConsolePage() {
                         </div>
                       </div>
                     ) : tenantStats && !tenantStats.exists ? (
-                      <div className="text-center py-8 text-slate-500">
-                        尚未建立索引。请在 VS Code 插件中登录 LCE 并打开项目，索引将自动创建。
+                      <div className="flex flex-col items-center py-8 text-center text-slate-500">
+                        <p>尚未建立索引。请在 VS Code 插件中登录 LCE 并打开项目，索引将自动创建。</p>
+                        <Button
+                          variant="glass"
+                          size="sm"
+                          onClick={() => fetchTenantStats()}
+                          disabled={tenantStatsLoading}
+                          className="mt-4"
+                        >
+                          <RefreshCw className={cn("mr-1 h-4 w-4", tenantStatsLoading && "animate-spin")} />
+                          {tenantStatsLoading ? "刷新中..." : "刷新统计"}
+                        </Button>
                       </div>
                     ) : (
                       <div className="space-y-4">

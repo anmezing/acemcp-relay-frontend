@@ -118,9 +118,13 @@ export default function StatusPage() {
 
   // Initial load
   useEffect(() => {
-    if (session) {
-      fetchData();
-    }
+    if (!session) return;
+
+    const timeoutId = window.setTimeout(() => {
+      void fetchData();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
   }, [session, fetchData]);
 
   // Countdown based on server's nextCheckAt
@@ -206,45 +210,44 @@ export default function StatusPage() {
   return (
     <div className="min-h-screen bg-[#0a0f1a] overflow-x-hidden">
       {/* Ambient glow */}
-      <div className="fixed top-0 left-1/4 w-[600px] h-[400px] bg-gradient-radial from-cyan-500/5 via-blue-500/3 to-transparent rounded-full blur-3xl pointer-events-none" />
+      <div className="fixed top-0 left-1/2 w-screen max-w-[600px] h-[400px] -translate-x-1/2 bg-gradient-radial from-cyan-500/5 via-blue-500/3 to-transparent rounded-full blur-3xl pointer-events-none" />
 
       {/* Header */}
       <header className="border-b border-white/[0.06] bg-[#0a0f1a]/80 backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
           <Link href="/" className="text-lg sm:text-xl font-semibold whitespace-nowrap text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-400">
             LCE Relay
           </Link>
-          <div className="flex items-center gap-3 sm:gap-6">
-            <nav className="flex items-center gap-0.5 sm:gap-1">
-              <Link
-                href="/console"
-                className="px-2 sm:px-3 py-1.5 text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
-              >
-                控制台
-              </Link>
-              <Link
-                href="/leaderboard"
-                className="px-2 sm:px-3 py-1.5 text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
-              >
-                排行榜
-              </Link>
-              <Link
-                href="/status"
-                className="px-2 sm:px-3 py-1.5 text-xs sm:text-sm whitespace-nowrap text-white border-b-2 border-cyan-400"
-              >
-                状态监控
-              </Link>
-            </nav>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => fetchData()}
-              disabled={loading}
-              className="text-slate-400 hover:text-white"
+          <nav className="order-3 grid w-full grid-cols-3 sm:order-none sm:flex sm:w-auto sm:items-center sm:gap-1">
+            <Link
+              href="/console"
+              className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
             >
-              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-            </Button>
-          </div>
+              控制台
+            </Link>
+            <Link
+              href="/leaderboard"
+              className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
+            >
+              排行榜
+            </Link>
+            <Link
+              href="/status"
+              className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-white border-b-2 border-cyan-400"
+            >
+              状态监控
+            </Link>
+          </nav>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => fetchData()}
+            disabled={loading}
+            className="text-slate-400 hover:text-white"
+            aria-label="刷新状态"
+          >
+            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+          </Button>
         </div>
       </header>
 

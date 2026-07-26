@@ -3,10 +3,10 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { getApiKey, initDB } from "@/lib/db";
 
-initDB().catch(console.error);
-
 export async function GET() {
   try {
+    // 请求时惰性初始化（幂等）；模块级调用会在 next build 期连不上库
+    await initDB().catch(console.error);
     const session = await auth.api.getSession({
       headers: await headers(),
     });
