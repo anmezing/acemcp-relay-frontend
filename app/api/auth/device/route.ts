@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { initDB, deviceLogin, isUserBanned } from "@/lib/db";
+import { DeviceCallbackError, validateDeviceCallback } from "@/lib/device-callback";
 
 export async function GET(request: NextRequest) {
   // 请求时惰性初始化（幂等）；模块级调用会在 next build 期连不上库
@@ -14,13 +15,18 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // 这一步在签发凭据之前：下面会把 API key 拼到 callback 上重定向出去，
+  // 只有指向用户本机的回环地址才是合法接收方（详见 lib/device-callback）。
+  let target: URL;
   try {
-    new URL(callback);
-  } catch {
-    return NextResponse.json(
-      { error: "invalid callback URL" },
-      { status: 400 }
+    target = validateDeviceCallback(callback);
+  } catch (error) {
+    const message =
+      error instanceof DeviceCallbackError ? error.message : "invalid callback URL";
+    console.warn(
+      `Rejected device-login callback from ip=${request.headers.get("x-forwarded-for") ?? "?"}: ${message}`
     );
+    return NextResponse.json({ error: message }, { status: 400 });
   }
 
   const session = await auth.api.getSession({
@@ -62,7 +68,6 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const target = new URL(callback);
   target.searchParams.set("token", keyRecord.api_key);
   return NextResponse.redirect(target.toString());
 }

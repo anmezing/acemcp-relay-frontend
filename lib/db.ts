@@ -241,7 +241,25 @@ export async function resetApiKey(userId: string) {
 
 // Device binding (防账号共用)：默认单设备互踢 —— 任何时刻只有最后登录的
 // 设备有效，新设备登录即踢掉旧设备（换设备无感，共用则互相踢下线）。
-const MAX_DEVICES_PER_USER = parseInt(process.env.MAX_DEVICES_PER_USER || "1");
+//
+// 这个值会直接进 eviction 查询的 LIMIT，配错的代价不对称：`0` 会把刚注册的
+// 设备一起删掉（用户永远登不上），非数字会变成 LIMIT NaN 让登录整个报错。
+// 因此非法值一律退回默认 1 并告警，而不是把坏值传给 SQL。
+const MAX_DEVICES_PER_USER = parseMaxDevicesPerUser(process.env.MAX_DEVICES_PER_USER);
+
+// 导出仅为单测：它决定 eviction 查询的 LIMIT，配错会把用户锁在门外，
+// 值得独立于数据库验证（见 device-limit.test.ts）。
+export function parseMaxDevicesPerUser(raw: string | undefined): number {
+  if (raw === undefined || raw.trim() === "") return 1;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    console.warn(
+      `Invalid MAX_DEVICES_PER_USER=${JSON.stringify(raw)}; must be an integer >= 1. Falling back to 1.`
+    );
+    return 1;
+  }
+  return parsed;
+}
 
 export interface DeviceRow {
   user_id: string;
