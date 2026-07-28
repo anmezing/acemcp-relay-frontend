@@ -50,6 +50,11 @@ html {
   color-scheme: dark;
   max-width: 100%;
   overflow-x: clip;
+  /* 移动端（尤其 Android Chrome）滚到底部继续拉会触发原生回弹、顶部会触发下拉
+     刷新，两者都表现为页面「跳一下」。overscroll-behavior 必须设在滚动容器上，
+     而这里的滚动容器是视口——视口的该属性只从 html 传播，写在 body 上无效。
+     contain 只阻断滚动链的边界效果，页面内部滚动和内部可滚动容器不受影响。 */
+  overscroll-behavior-y: contain;
 }
 
 body {
