@@ -7,6 +7,15 @@ import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, ArrowLeft, Github, AlertCircle } from "lucide-react";
 
+// 只接受站内相对路径，防开放重定向：外部 URL / 协议相对（//host）/ 反斜杠
+// 变体（/\host，部分浏览器按 // 处理）一律回退首页。
+function sanitizeCallbackUrl(raw: string | null): string {
+  if (raw && raw.startsWith("/") && !raw.startsWith("//") && !raw.startsWith("/\\")) {
+    return raw;
+  }
+  return "/";
+}
+
 function parseAuthError(raw: string | null): string | null {
   if (!raw) return null;
   if (raw.startsWith("GITHUB_ACCOUNT_TOO_YOUNG:")) {
@@ -25,7 +34,7 @@ function parseAuthError(raw: string | null): string | null {
 function LoginContent() {
   const params = useSearchParams();
   const errorMessage = parseAuthError(params.get("error"));
-  const callbackUrl = params.get("callbackUrl") || "/";
+  const callbackUrl = sanitizeCallbackUrl(params.get("callbackUrl"));
 
   const handleLinuxDoLogin = () => {
     authClient.signIn.oauth2({

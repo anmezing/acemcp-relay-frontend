@@ -38,28 +38,29 @@ export function AdminModelsTab() {
   const [byoModels, setByoModels] = useState<{ enabled: boolean; customModelUsers: number } | null>(null);
   const [error, setError] = useState("");
 
-  const load = useCallback(async () => {
+  // load 首个语句即 await（满足 react-hooks/set-state-in-effect）；
+  // effect 发起的请求携带 AbortSignal，卸载时 abort，之后不再 setState。
+  const load = useCallback(async (signal?: AbortSignal) => {
     try {
-      const res = await fetch("/api/admin/settings");
+      const res = await fetch("/api/admin/settings", { signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      if (signal?.aborted) return;
       setModels(data.models);
       setByoModels(data.byoModels || null);
       setError("");
     } catch {
+      if (signal?.aborted) return;
       setError("加载失败，请重试");
     }
   }, []);
 
   useEffect(() => {
-    // 经微任务回调调用以满足 react-hooks/set-state-in-effect
-    let ignore = false;
-    Promise.resolve().then(() => {
-      if (!ignore) load();
-    });
-    return () => {
-      ignore = true;
-    };
+    // 经微任务发起以满足 react-hooks/set-state-in-effect；cleanup 时 abort，
+    // load 内的 signal.aborted 检查保证之后不再 setState
+    const controller = new AbortController();
+    Promise.resolve().then(() => load(controller.signal));
+    return () => controller.abort();
   }, [load]);
 
   if (!models && !error) {

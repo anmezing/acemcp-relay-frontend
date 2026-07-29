@@ -1,5 +1,6 @@
 import crypto from "crypto";
 
+import { ValidationError } from "./errors";
 import { validateByoProviderUrl } from "./safe-outbound";
 
 // 按用户模型配置的加密与指纹。
@@ -92,7 +93,7 @@ export function modelConfigFingerprint(config: UserModelConfig): string {
 
 function requireString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
-    throw new Error(`${field} 不能为空`);
+    throw new ValidationError(`${field} 不能为空`);
   }
   return value.trim();
 }
@@ -103,13 +104,13 @@ export function normalizeUserModelConfig(raw: {
   rerank?: Partial<RerankModelConfig> | null;
 }): UserModelConfig {
   const e = raw.embeddings;
-  if (!e) throw new Error("embeddings 配置缺失");
+  if (!e) throw new ValidationError("embeddings 配置缺失");
   if (e.provider !== "openai-compatible" && e.provider !== "voyage") {
-    throw new Error("embeddings.provider 仅支持 openai-compatible / voyage");
+    throw new ValidationError("embeddings.provider 仅支持 openai-compatible / voyage");
   }
   const dimensions = Number(e.dimensions);
   if (!Number.isInteger(dimensions) || dimensions <= 0 || dimensions > 65536) {
-    throw new Error("embeddings.dimensions 必须是正整数");
+    throw new ValidationError("embeddings.dimensions 必须是正整数");
   }
   const baseUrl = requireString(e.baseUrl, "embeddings.baseUrl");
   // 该 URL 会被 LCE / 前端在服务端调用：仅 https、禁凭据/片段、禁内网地址（SSRF）
@@ -128,7 +129,7 @@ export function normalizeUserModelConfig(raw: {
   if (raw.rerank) {
     const r = raw.rerank;
     if (r.provider !== "siliconflow-compatible" && r.provider !== "voyage" && r.provider !== "custom") {
-      throw new Error("rerank.provider 仅支持 siliconflow-compatible / voyage / custom");
+      throw new ValidationError("rerank.provider 仅支持 siliconflow-compatible / voyage / custom");
     }
     const rerankBaseUrl = requireString(r.baseUrl, "rerank.baseUrl");
     validateByoProviderUrl(rerankBaseUrl, "rerank.baseUrl");

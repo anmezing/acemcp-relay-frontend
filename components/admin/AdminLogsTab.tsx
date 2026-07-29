@@ -34,16 +34,22 @@ export function AdminLogsTab() {
   const [notice, setNotice] = useState("");
 
   // load 首个语句即 await（setState 均在 await 之后，满足
-  // react-hooks/set-state-in-effect）；loading 态只在按钮回调里设置。
-  const load = useCallback(async (targetPage: number, onlyErrors: boolean) => {
+  // react-hooks/set-state-in-effect）；effect 发起的请求携带 AbortSignal，
+  // 卸载/筛选切换时 abort，之后不再 setState。
+  const load = useCallback(async (targetPage: number, onlyErrors: boolean, signal?: AbortSignal) => {
     try {
-      const res = await fetch(`/api/admin/logs?page=${targetPage}&errors=${onlyErrors ? 1 : 0}`);
+      const res = await fetch(
+        `/api/admin/logs?page=${targetPage}&errors=${onlyErrors ? 1 : 0}`,
+        { signal }
+      );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      if (signal?.aborted) return;
       setLogs(data.logs);
       setPage(data.page);
       setHasMore(data.logs.length >= data.pageSize);
     } catch {
+      if (signal?.aborted) return;
       setLogs([]);
     }
   }, []);
@@ -81,15 +87,12 @@ export function AdminLogsTab() {
   );
 
   useEffect(() => {
-    // 挂载/筛选变化时拉取数据；经微任务回调调用以满足
-    // react-hooks/set-state-in-effect（effect 同步体内不允许触达 setState）
-    let ignore = false;
-    Promise.resolve().then(() => {
-      if (!ignore) load(1, errorsOnly);
-    });
-    return () => {
-      ignore = true;
-    };
+    // 挂载/筛选变化时拉取数据；经微任务发起以满足
+    // react-hooks/set-state-in-effect；cleanup 时 abort，load 内的
+    // signal.aborted 检查保证过期响应不再写入 state
+    const controller = new AbortController();
+    Promise.resolve().then(() => load(1, errorsOnly, controller.signal));
+    return () => controller.abort();
   }, [load, errorsOnly]);
 
   return (

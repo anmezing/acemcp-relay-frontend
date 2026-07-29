@@ -36,13 +36,14 @@ export async function GET(request: NextRequest) {
   if (!session?.user?.id) {
     // 跳转基址必须用公网地址：容器内看到的 request origin 取决于代理是否
     // 正确传 Host 头，配置漂移时会拼出容器主机名（浏览器无法解析）。
+    // callbackUrl 传站内相对路径：登录页只接受相对路径（防开放重定向），
+    // 且相对路径由浏览器按登录页自身 origin 解析，天然就是公网地址。
     const publicOrigin = process.env.BETTER_AUTH_URL || request.nextUrl.origin;
-    const returnUrl = new URL(
-      request.nextUrl.pathname + request.nextUrl.search,
-      publicOrigin
-    ).toString();
     const loginUrl = new URL("/login", publicOrigin);
-    loginUrl.searchParams.set("callbackUrl", returnUrl);
+    loginUrl.searchParams.set(
+      "callbackUrl",
+      request.nextUrl.pathname + request.nextUrl.search
+    );
     return NextResponse.redirect(loginUrl);
   }
 

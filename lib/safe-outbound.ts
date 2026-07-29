@@ -2,6 +2,8 @@ import dns from "node:dns/promises";
 import https from "node:https";
 import { BlockList, isIP } from "node:net";
 
+import { ValidationError } from "./errors";
+
 // 用户自带模型端点的安全出站请求（防 SSRF）。
 // 与 lce/src/security/safeOutboundRequest.ts 保持同等防护：仅 HTTPS、
 // 禁内网/保留地址段、DNS 解析后按解析结果直连（防 rebinding）、禁重定向、
@@ -89,21 +91,21 @@ export function validateByoProviderUrl(rawUrl: string, label = "baseUrl"): URL {
   try {
     url = new URL(rawUrl);
   } catch {
-    throw new Error(`${label} 必须是合法的 HTTPS URL`);
+    throw new ValidationError(`${label} 必须是合法的 HTTPS URL`);
   }
   if (url.protocol !== "https:") {
-    throw new Error(`${label} 必须以 https:// 开头`);
+    throw new ValidationError(`${label} 必须以 https:// 开头`);
   }
   if (url.username || url.password) {
-    throw new Error(`${label} 不能包含用户名或密码`);
+    throw new ValidationError(`${label} 不能包含用户名或密码`);
   }
   if (url.hash) {
-    throw new Error(`${label} 不能包含 # 片段`);
+    throw new ValidationError(`${label} 不能包含 # 片段`);
   }
   const address = hostnameToAddress(url.hostname);
   const family = isIP(address);
   if (family !== 0 && !isPublicIpAddress(address, family)) {
-    throw new Error(`${label} 不能指向内网或保留地址`);
+    throw new ValidationError(`${label} 不能指向内网或保留地址`);
   }
   return url;
 }

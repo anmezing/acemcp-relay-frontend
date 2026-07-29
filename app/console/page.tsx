@@ -2,9 +2,10 @@
 
 import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { RELAY_URL } from "@/lib/relay";
 import {
   Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github, Trash2,
   Key, FileText, User, Database, ScrollText, Building2, Users, Coins,
@@ -43,7 +44,7 @@ import { UserModelConfigTab } from "@/components/UserModelConfigTab";
 type Tab =
   | "keys" | "docs" | "profile" | "model-config"
   | "index" | "logs"
-  | "org" | "users" | "token-cost" | "quota" | "models"
+  | "org" | "users" | "call-stats" | "quota" | "models"
   | "system-settings" | "system-logs";
 
 interface SidebarSection {
@@ -75,7 +76,7 @@ const ALL_SECTIONS: SidebarSection[] = [
     items: [
       { id: "org", label: "组织概览", icon: <Building2 className="w-4 h-4" /> },
       { id: "users", label: "用户管理", icon: <Users className="w-4 h-4" /> },
-      { id: "token-cost", label: "调用统计", icon: <Coins className="w-4 h-4" /> },
+      { id: "call-stats", label: "调用统计", icon: <Coins className="w-4 h-4" /> },
       { id: "quota", label: "配额管理", icon: <Gauge className="w-4 h-4" /> },
       { id: "models", label: "模型管理", icon: <Cpu className="w-4 h-4" /> },
     ],
@@ -191,6 +192,57 @@ function isTenantStats(value: unknown): value is TenantStats {
   );
 }
 
+// MCP 配置 JSON 的唯一构造点：展示（key 未知时用占位符）与一键复制共用
+function buildMcpConfig(apiKey: string | null): string {
+  return JSON.stringify(
+    {
+      mcpServers: {
+        "lce-relay": {
+          url: `${RELAY_URL}/mcp`,
+          headers: {
+            Authorization: `Bearer ${apiKey || "YOUR_API_KEY"}`,
+          },
+        },
+      },
+    },
+    null,
+    2
+  );
+}
+
+// 复制成功反馈：ref 存 timer id，重复点击先清旧 timer，卸载时清理（防
+// 卸载后 setState 与连点叠 timer）
+function useCopyFeedback(duration = 2000): {
+  copied: boolean;
+  trigger: () => void;
+  reset: () => void;
+} {
+  const [copied, setCopied] = useState(false);
+  const timerRef = useRef<number | null>(null);
+
+  const clear = useCallback(() => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const trigger = useCallback(() => {
+    clear();
+    setCopied(true);
+    timerRef.current = window.setTimeout(() => setCopied(false), duration);
+  }, [clear, duration]);
+
+  const reset = useCallback(() => {
+    clear();
+    setCopied(false);
+  }, [clear]);
+
+  useEffect(() => clear, [clear]);
+
+  return { copied, trigger, reset };
+}
+
 export default function ConsolePage() {
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
@@ -202,12 +254,13 @@ export default function ConsolePage() {
   const [loading, setLoading] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const { copied, trigger: markCopied } = useCopyFeedback();
   const [logsData, setLogsData] = useState<LogsResponse | null>(null);
   const [logsLoading, setLogsLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [logsPage, setLogsPage] = useState(1);
-  const [copiedConfig, setCopiedConfig] = useState(false);
+  const { copied: copiedConfig, trigger: markConfigCopied, reset: resetConfigCopied } = useCopyFeedback();
+  const [configError, setConfigError] = useState("");
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [logDetail, setLogDetail] = useState<LogDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -220,63 +273,47 @@ export default function ConsolePage() {
   const [tenantStatsError, setTenantStatsError] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const relayURL = "https://513689.xyz";
-  const configKey = fullKey || "YOUR_API_KEY";
-  const mcpConfig = JSON.stringify({
-    mcpServers: {
-      "lce-relay": {
-        url: `${relayURL}/mcp`,
-        headers: {
-          Authorization: `Bearer ${configKey}`,
-        },
-      },
-    },
-  }, null, 2);
+  const mcpConfig = useMemo(() => buildMcpConfig(fullKey), [fullKey]);
 
   const generateAndCopyConfig = async () => {
-    setCopiedConfig(false);
-    let key = fullKey;
+    if (loading) return; // 防双击重复请求
+    resetConfigCopied();
+    setConfigError("");
+    setLoading(true);
+    try {
+      let key = fullKey;
 
-    if (!key && keyInfo?.hasKey) {
-      const res = await fetch("/api/key/reveal");
-      if (res.ok) {
+      if (!key && keyInfo?.hasKey) {
+        const res = await fetch("/api/key/reveal");
+        if (!res.ok) throw new Error(`获取密钥失败（HTTP ${res.status}）`);
         const data = await res.json();
         key = data.apiKey;
         setFullKey(key);
       }
-    }
 
-    if (!key) {
-      setLoading(true);
-      try {
+      if (!key) {
         const res = await fetch("/api/key", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "create" }),
         });
-        if (res.ok) {
-          const data = await res.json();
-          key = data.apiKey;
-          setFullKey(key);
-          await fetchKeyInfo();
-        }
-      } finally {
-        setLoading(false);
+        if (!res.ok) throw new Error(`生成密钥失败（HTTP ${res.status}）`);
+        const data = await res.json();
+        key = data.apiKey;
+        setFullKey(key);
+        await fetchKeyInfo();
       }
-    }
 
-    if (key) {
-      const filled = JSON.stringify({
-        mcpServers: {
-          "lce-relay": {
-            url: `${relayURL}/mcp`,
-            headers: { Authorization: `Bearer ${key}` },
-          },
-        },
-      }, null, 2);
-      await navigator.clipboard.writeText(filled);
-      setCopiedConfig(true);
-      setTimeout(() => setCopiedConfig(false), 2000);
+      if (!key) throw new Error("未能获取密钥");
+      await navigator.clipboard.writeText(buildMcpConfig(key));
+      markConfigCopied();
+    } catch (error) {
+      console.error("一键复制配置失败:", error);
+      setConfigError(
+        error instanceof Error ? error.message : "复制失败，请重试"
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -331,7 +368,7 @@ export default function ConsolePage() {
     }
   }, []);
 
-  const fetchAdmin = useCallback(async () => {
+  const fetchIsAdmin = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/check");
       if (res.ok) {
@@ -341,9 +378,24 @@ export default function ConsolePage() {
     } catch {}
   }, []);
 
-  const sections = isAdmin ? ALL_SECTIONS : ALL_SECTIONS.filter((s) => !s.admin);
-  const mobileItems = sections.flatMap((section) => section.items);
-  const activeMobileItem = mobileItems.find((item) => item.id === activeTab) ?? mobileItems[0];
+  const sections = useMemo(
+    () => (isAdmin ? ALL_SECTIONS : ALL_SECTIONS.filter((s) => !s.admin)),
+    [isAdmin]
+  );
+  const mobileItems = useMemo(
+    () => sections.flatMap((section) => section.items),
+    [sections]
+  );
+
+  // isAdmin 为 false 时 admin tab 的 TabsContent 不渲染：若 activeTab 落在
+  // admin tab（如权限校验失败/回收），内容区会空白。渲染期直接归一到 "keys"，
+  // 不用 effect setState（避免级联渲染，也满足 set-state-in-effect 规则）。
+  const effectiveTab: Tab = useMemo(() => {
+    if (isAdmin) return activeTab;
+    return mobileItems.some((item) => item.id === activeTab) ? activeTab : "keys";
+  }, [isAdmin, activeTab, mobileItems]);
+
+  const activeMobileItem = mobileItems.find((item) => item.id === effectiveTab) ?? mobileItems[0];
 
   const fetchLogs = useCallback(async (page = 1, forceRefreshStats = false) => {
     setLogsLoading(true);
@@ -436,11 +488,11 @@ export default function ConsolePage() {
       void fetchUserInfo();
       void fetchKeyInfo();
       void fetchTenantStats();
-      void fetchAdmin();
+      void fetchIsAdmin();
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [isPending, session, router, fetchUserInfo, fetchKeyInfo, fetchTenantStats, fetchAdmin]);
+  }, [isPending, session, router, fetchUserInfo, fetchKeyInfo, fetchTenantStats, fetchIsAdmin]);
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -484,8 +536,7 @@ export default function ConsolePage() {
 
     if (keyToCopy) {
       await navigator.clipboard.writeText(keyToCopy);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      markCopied();
     }
   };
 
@@ -626,7 +677,7 @@ export default function ConsolePage() {
       {/* Main content */}
       <div className="relative flex-1 md:overflow-hidden">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-8 md:h-full flex flex-col">
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)} className="flex-1 flex flex-col min-h-0">
+          <Tabs value={effectiveTab} onValueChange={(v) => setActiveTab(v as Tab)} className="flex-1 flex flex-col min-h-0">
             <div className="relative mb-4 flex-shrink-0 md:hidden">
               {mobileMenuOpen && (
                 <button
@@ -663,14 +714,14 @@ export default function ConsolePage() {
                       key={item.id}
                       type="button"
                       role="menuitemradio"
-                      aria-checked={item.id === activeTab}
+                      aria-checked={item.id === effectiveTab}
                       onClick={() => {
                         setActiveTab(item.id);
                         setMobileMenuOpen(false);
                       }}
                       className={cn(
                         "flex h-10 w-full items-center gap-2.5 rounded-md px-3 text-left text-sm transition-colors",
-                        item.id === activeTab
+                        item.id === effectiveTab
                           ? "bg-cyan-400/10 text-cyan-200"
                           : "text-slate-300 hover:bg-white/[0.06] hover:text-white"
                       )}
@@ -830,6 +881,9 @@ export default function ConsolePage() {
                               {copiedConfig ? "已复制" : loading ? "生成中..." : "一键复制"}
                             </Button>
                           </div>
+                          {configError && (
+                            <p className="text-red-400 text-xs mt-2">{configError}</p>
+                          )}
                         </CardContent>
                       </Card>
 
@@ -1150,7 +1204,7 @@ export default function ConsolePage() {
                               {tenantStats.indexingCount != null && (
                                 <div>
                                   <p className="text-2xl font-semibold text-white">{tenantStats.indexingCount.toLocaleString()}</p>
-                                  <p className="text-slate-500 text-xs">索引请求次数</p>
+                                  <p className="text-slate-500 text-xs">已完成索引次数</p>
                                 </div>
                               )}
                             </div>
@@ -1260,7 +1314,7 @@ export default function ConsolePage() {
 
                   {/* 管理员 - Token 成本（调用统计） */}
                   {isAdmin && (
-                    <TabsContent value="token-cost" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
+                    <TabsContent value="call-stats" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                       <h2 className="text-lg font-medium text-white mb-6">调用统计</h2>
                       <AdminStatsTab />
                     </TabsContent>
@@ -1497,13 +1551,12 @@ function InfoItem({
   value: string;
   copyable?: boolean;
 }) {
-  const [copied, setCopied] = useState(false);
+  const { copied, trigger: markCopied } = useCopyFeedback();
 
   const handleCopy = async () => {
     if (!value || value === "-") return;
     await navigator.clipboard.writeText(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    markCopied();
   };
 
   return (
@@ -1541,13 +1594,12 @@ function LogDetailItem({
   mono?: boolean;
   statusCode?: number | null;
 }) {
-  const [copied, setCopied] = useState(false);
+  const { copied, trigger: markCopied } = useCopyFeedback();
 
   const handleCopy = async () => {
     if (!value || value === "-") return;
     await navigator.clipboard.writeText(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    markCopied();
   };
 
   const getStatusColor = () => {
@@ -1669,12 +1721,11 @@ function LogEntry({ log, onClick }: { log: RequestLog; onClick?: () => void }) {
 // 配置说明第 3 步：引导用户在 CLAUDE.md / AGENTS.md 中声明 LCE 使用规则
 // （只加 MCP 配置不保证代理会用，需要项目规则显式要求）
 function AgentRulesCard() {
-  const [copied, setCopied] = useState(false);
+  const { copied, trigger: markCopied } = useCopyFeedback();
   const copyRules = async () => {
     try {
       await navigator.clipboard.writeText(AGENT_RULES_SNIPPET);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      markCopied();
     } catch {}
   };
   return (

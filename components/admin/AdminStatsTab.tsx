@@ -14,13 +14,29 @@ interface CallStats {
   topUsers: { user_id: string; email: string | null; count: number }[];
 }
 
-function Bar({ value, max, label, count }: { value: number; max: number; label: string; count: number }) {
+function Bar({
+  value,
+  max,
+  label,
+  count,
+  labelClassName = "text-slate-500 w-20",
+  trackClassName = "flex-1 h-4",
+  fillClassName = "bg-cyan-500/30",
+}: {
+  value: number;
+  max: number;
+  label: string;
+  count: number;
+  labelClassName?: string;
+  trackClassName?: string;
+  fillClassName?: string;
+}) {
   const pct = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 0;
   return (
     <div className="flex items-center gap-2">
-      <span className="text-slate-500 text-[10px] font-mono w-20 shrink-0">{label}</span>
-      <div className="flex-1 h-4 bg-white/[0.03] rounded overflow-hidden">
-        <div className="h-full bg-cyan-500/30 rounded" style={{ width: `${pct}%` }} />
+      <span className={cn("text-[10px] font-mono shrink-0", labelClassName)}>{label}</span>
+      <div className={cn("bg-white/[0.03] rounded overflow-hidden", trackClassName)}>
+        <div className={cn("h-full rounded", fillClassName)} style={{ width: `${pct}%` }} />
       </div>
       <span className="text-slate-400 text-[10px] font-mono w-14 text-right shrink-0">
         {count.toLocaleString()}
@@ -34,13 +50,18 @@ export function AdminStatsTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const load = useCallback(async () => {
+  // load 首个语句即 await（满足 react-hooks/set-state-in-effect）；
+  // effect 发起的请求携带 AbortSignal，卸载时 abort，之后不再 setState。
+  const load = useCallback(async (signal?: AbortSignal) => {
     try {
-      const res = await fetch("/api/admin/stats");
+      const res = await fetch("/api/admin/stats", { signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setStats(await res.json());
+      const data = await res.json();
+      if (signal?.aborted) return;
+      setStats(data);
       setError("");
     } catch {
+      if (signal?.aborted) return;
       setError("加载失败，请重试");
     }
   }, []);
@@ -51,14 +72,11 @@ export function AdminStatsTab() {
   }, [load]);
 
   useEffect(() => {
-    // 经微任务回调调用以满足 react-hooks/set-state-in-effect
-    let ignore = false;
-    Promise.resolve().then(() => {
-      if (!ignore) load();
-    });
-    return () => {
-      ignore = true;
-    };
+    // 经微任务发起以满足 react-hooks/set-state-in-effect；cleanup 时 abort，
+    // load 内的 signal.aborted 检查保证之后不再 setState
+    const controller = new AbortController();
+    Promise.resolve().then(() => load(controller.signal));
+    return () => controller.abort();
   }, [load]);
 
   if (!stats && !error) {
@@ -124,16 +142,10 @@ export function AdminStatsTab() {
             <h3 className="text-white text-sm font-medium mb-3">近 30 天端点分布</h3>
             <div className="space-y-1.5">
               {stats.byPath.map((p) => (
-                <div key={p.path} className="flex items-center gap-2">
-                  <span className="text-slate-400 text-[10px] font-mono flex-1 truncate">{p.path}</span>
-                  <div className="w-32 sm:w-48 h-3 bg-white/[0.03] rounded overflow-hidden shrink-0">
-                    <div className="h-full bg-blue-500/30 rounded"
-                      style={{ width: `${Math.max(2, Math.round((p.count / pathMax) * 100))}%` }} />
-                  </div>
-                  <span className="text-slate-400 text-[10px] font-mono w-14 text-right shrink-0">
-                    {p.count.toLocaleString()}
-                  </span>
-                </div>
+                <Bar key={p.path} value={p.count} max={pathMax} label={p.path} count={p.count}
+                  labelClassName="text-slate-400 flex-1 truncate"
+                  trackClassName="w-32 sm:w-48 h-3 shrink-0"
+                  fillClassName="bg-blue-500/30" />
               ))}
             </div>
           </div>

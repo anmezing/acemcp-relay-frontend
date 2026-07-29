@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronRight, RefreshCw, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { alertKindBadge } from "./AdminOverviewTab";
+import { AlertKindBadge } from "./AlertKindBadge";
 
 interface UserRow {
   id: string;
@@ -42,22 +42,30 @@ function fmtTime(value: string | null) {
 export function AdminUsersTab() {
   const [users, setUsers] = useState<UserRow[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [detail, setDetail] = useState<UserDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  // 详情请求的目标用户：响应返回时若已切换到别的用户，丢弃过期响应（防串号）
+  const detailTargetRef = useRef<string | null>(null);
 
   // load 首个语句即 await，setState 全部发生在 await 之后（满足
-  // react-hooks/set-state-in-effect）；loading 态只在按钮/动作回调里设置。
-  const load = useCallback(async () => {
+  // react-hooks/set-state-in-effect）；effect 发起的请求携带 AbortSignal，
+  // 卸载时 abort，之后不再 setState。
+  const load = useCallback(async (signal?: AbortSignal) => {
     try {
-      const res = await fetch("/api/admin/users");
+      const res = await fetch("/api/admin/users", { signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setUsers((await res.json()).users);
+      const data = await res.json();
+      if (signal?.aborted) return;
+      setUsers(data.users);
+      setError("");
     } catch {
-      setNotice("用户列表加载失败");
+      if (signal?.aborted) return;
+      setError("用户列表加载失败");
     }
   }, []);
 
@@ -67,25 +75,26 @@ export function AdminUsersTab() {
   }, [load]);
 
   useEffect(() => {
-    // 经微任务回调调用以满足 react-hooks/set-state-in-effect
-    let ignore = false;
-    Promise.resolve().then(() => {
-      if (!ignore) load();
-    });
-    return () => {
-      ignore = true;
-    };
+    // 经微任务发起以满足 react-hooks/set-state-in-effect；cleanup 时 abort，
+    // load 内的 signal.aborted 检查保证之后不再 setState
+    const controller = new AbortController();
+    Promise.resolve().then(() => load(controller.signal));
+    return () => controller.abort();
   }, [load]);
 
   const openDetail = useCallback(async (userId: string) => {
+    detailTargetRef.current = userId;
     setExpanded(userId);
     setDetail(null);
     setDetailLoading(true);
     try {
       const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`);
-      if (res.ok) setDetail(await res.json());
+      const data = res.ok ? await res.json() : null;
+      // 快速切换用户时旧响应可能后到：只有目标仍是本次请求的用户才写入
+      if (detailTargetRef.current !== userId) return;
+      if (data) setDetail(data);
     } finally {
-      setDetailLoading(false);
+      if (detailTargetRef.current === userId) setDetailLoading(false);
     }
   }, []);
 
@@ -125,12 +134,24 @@ export function AdminUsersTab() {
     );
   });
 
-  if (users === null) {
+  if (users === null && !error) {
     return (
       <div className="space-y-2">
         {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-16 bg-white/[0.06] rounded-xl" />
         ))}
+      </div>
+    );
+  }
+
+  if (users === null) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-8">
+        <p className="text-red-400 text-sm">{error}</p>
+        <Button variant="glass" size="sm" onClick={fetchUsers} disabled={loading} className="text-xs">
+          <RefreshCw className={cn("w-4 h-4 mr-1", loading && "animate-spin")} />
+          重试
+        </Button>
       </div>
     );
   }
@@ -171,7 +192,14 @@ export function AdminUsersTab() {
                 u.banned ? "border-red-500/30" : "border-white/[0.06]"
               )}>
               <button
-                onClick={() => (isOpen ? setExpanded(null) : openDetail(u.id))}
+                onClick={() => {
+                  if (isOpen) {
+                    detailTargetRef.current = null;
+                    setExpanded(null);
+                  } else {
+                    openDetail(u.id);
+                  }
+                }}
                 className="w-full text-left px-3 sm:px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1">
                 {isOpen
                   ? <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
@@ -245,7 +273,7 @@ export function AdminUsersTab() {
                             {detail.alerts.map((a) => (
                               <div key={a.id}
                                 className="flex flex-wrap items-center gap-x-2 gap-y-1 bg-white/[0.02] rounded-lg px-2.5 py-1.5">
-                                {alertKindBadge(a.kind)}
+                                <AlertKindBadge kind={a.kind} />
                                 <span className="text-slate-500 text-[10px] break-all flex-1 min-w-[120px]">
                                   {a.detail}
                                 </span>

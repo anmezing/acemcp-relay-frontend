@@ -9,28 +9,32 @@ import { cn } from "@/lib/utils";
 export function AdminSettingsTab() {
   const [registrationEnabled, setRegistrationEnabled] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  const load = useCallback(async () => {
+  // load 首个语句即 await，setState 均在 await 之后（满足
+  // react-hooks/set-state-in-effect）；effect 发起的请求携带 AbortSignal，
+  // 卸载时 abort，之后不再 setState。
+  const load = useCallback(async (signal?: AbortSignal) => {
     try {
-      const res = await fetch("/api/admin/settings");
+      const res = await fetch("/api/admin/settings", { signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setRegistrationEnabled((await res.json()).registrationEnabled);
-      setNotice("");
+      const data = await res.json();
+      if (signal?.aborted) return;
+      setRegistrationEnabled(data.registrationEnabled);
+      setError("");
     } catch {
-      setNotice("加载失败，请重试");
+      if (signal?.aborted) return;
+      setError("加载失败，请重试");
     }
   }, []);
 
   useEffect(() => {
-    // 经微任务回调调用以满足 react-hooks/set-state-in-effect
-    let ignore = false;
-    Promise.resolve().then(() => {
-      if (!ignore) load();
-    });
-    return () => {
-      ignore = true;
-    };
+    // 经微任务发起以满足 react-hooks/set-state-in-effect；cleanup 时 abort，
+    // load 内的 signal.aborted 检查保证之后不再 setState
+    const controller = new AbortController();
+    Promise.resolve().then(() => load(controller.signal));
+    return () => controller.abort();
   }, [load]);
 
   const toggle = useCallback(
@@ -58,12 +62,24 @@ export function AdminSettingsTab() {
     []
   );
 
-  if (registrationEnabled === null && !notice) {
+  if (registrationEnabled === null && !error) {
     return <Skeleton className="h-32 bg-white/[0.06] rounded-xl" />;
+  }
+
+  if (registrationEnabled === null) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-8">
+        <p className="text-red-400 text-sm">{error}</p>
+        <Button variant="glass" size="sm" onClick={() => load()} className="text-xs">
+          重试
+        </Button>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4">
+      {error && <p className="text-xs text-red-400">{error}</p>}
       {notice && (
         <p className={cn("text-xs", notice.startsWith("已保存") ? "text-emerald-400" : "text-red-400")}>
           {notice}
@@ -88,7 +104,7 @@ export function AdminSettingsTab() {
               )}>
                 {registrationEnabled ? "开放中" : "已关闭"}
               </span>
-              <Button variant="glass" size="sm" disabled={busy || registrationEnabled === null}
+              <Button variant="glass" size="sm" disabled={busy}
                 onClick={() => toggle(!registrationEnabled)} className="text-xs">
                 {registrationEnabled ? "关闭注册" : "开放注册"}
               </Button>

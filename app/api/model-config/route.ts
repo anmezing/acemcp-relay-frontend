@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { ValidationError } from "@/lib/errors";
 import {
   decryptModelConfig,
   maskSecret,
@@ -120,9 +121,11 @@ export async function POST(request: NextRequest) {
     await saveUserModelConfig(user.id, config);
     return NextResponse.json({ ok: true });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "internal error";
-    const isValidation = /必须|不能为空|仅支持|缺失|API Key/.test(message);
-    if (!isValidation) console.error("model config save failed:", error);
-    return NextResponse.json({ error: message }, { status: isValidation ? 400 : 500 });
+    // 用类型区分用户输入错误与内部错误：内部错误不把 message 泄给客户端
+    if (error instanceof ValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    console.error("model config save failed:", error);
+    return NextResponse.json({ error: "internal error" }, { status: 500 });
   }
 }

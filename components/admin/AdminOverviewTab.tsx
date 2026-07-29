@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AlertKindBadge } from "./AlertKindBadge";
 
 interface Overview {
   users: number;
@@ -28,25 +29,6 @@ interface AlertRow {
   created_at: string;
 }
 
-const ALERT_KIND_LABELS: Record<string, { label: string; className: string }> = {
-  device_evicted: { label: "设备互踢", className: "bg-amber-500/10 text-amber-400 border-amber-500/20" },
-  multi_ip: { label: "多 IP", className: "bg-red-500/10 text-red-400 border-red-500/20" },
-  unregistered_device: { label: "未注册设备", className: "bg-orange-500/10 text-orange-400 border-orange-500/20" },
-  missing_client_id: { label: "无设备标识", className: "bg-slate-500/10 text-slate-400 border-slate-500/20" },
-};
-
-export function alertKindBadge(kind: string) {
-  const meta = ALERT_KIND_LABELS[kind] || {
-    label: kind,
-    className: "bg-slate-500/10 text-slate-400 border-slate-500/20",
-  };
-  return (
-    <span className={cn("text-[10px] px-1.5 py-0.5 rounded border whitespace-nowrap", meta.className)}>
-      {meta.label}
-    </span>
-  );
-}
-
 function StatCard({ label, value, accent }: { label: string; value: number; accent?: string }) {
   return (
     <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
@@ -66,17 +48,20 @@ export function AdminOverviewTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // load 的首个语句就是 await，之后的 setState 均为异步，满足
-  // react-hooks/set-state-in-effect；loading 态只在按钮回调里同步设置。
-  const load = useCallback(async () => {
+  // load 的首个语句就是 await，setState 均在 await 之后（满足
+  // react-hooks/set-state-in-effect）。effect 发起的请求携带 AbortSignal：
+  // 卸载时 abort，请求被取消后不再 setState（signal.aborted 检查）。
+  const load = useCallback(async (signal?: AbortSignal) => {
     try {
-      const res = await fetch("/api/admin/overview");
+      const res = await fetch("/api/admin/overview", { signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      if (signal?.aborted) return;
       setOverview(data.overview);
       setAlerts(data.alerts || []);
       setError("");
     } catch {
+      if (signal?.aborted) return;
       setError("加载失败，请重试");
     }
   }, []);
@@ -88,14 +73,11 @@ export function AdminOverviewTab() {
   }, [load]);
 
   useEffect(() => {
-    // 经微任务回调调用以满足 react-hooks/set-state-in-effect
-    let ignore = false;
-    Promise.resolve().then(() => {
-      if (!ignore) load();
-    });
-    return () => {
-      ignore = true;
-    };
+    // 经微任务发起以满足 react-hooks/set-state-in-effect；cleanup 时 abort，
+    // load 内的 signal.aborted 检查保证之后不再 setState
+    const controller = new AbortController();
+    Promise.resolve().then(() => load(controller.signal));
+    return () => controller.abort();
   }, [load]);
 
   if (!overview && !error) {
@@ -148,7 +130,7 @@ export function AdminOverviewTab() {
             {alerts.map((a) => (
               <div key={a.id}
                 className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-[#0a0f1a]/60 border border-white/[0.06] rounded-lg px-3 py-2">
-                {alertKindBadge(a.kind)}
+                <AlertKindBadge kind={a.kind} />
                 <span className="text-slate-300 text-xs truncate max-w-[180px]">{a.email || a.user_id}</span>
                 {a.device_id && (
                   <span className="text-slate-600 text-[10px] font-mono truncate max-w-[120px]">{a.device_id}</span>

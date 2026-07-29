@@ -57,33 +57,43 @@ export default function LeaderboardPage() {
     }
   }, [isPending, session, router]);
 
-  const fetchLeaderboard = useCallback(async (dateStr?: string) => {
-    setLoading(true);
+  // load 首个语句即 await（满足 react-hooks/set-state-in-effect）；effect
+  // 发起的请求携带 AbortSignal：日期切换/卸载时 abort，防止慢响应后到覆盖
+  // 新日期的数据（竞态）。loading 态只在按钮回调里设置。
+  const load = useCallback(async (dateStr?: string, signal?: AbortSignal) => {
     try {
       const url = dateStr
         ? `/api/leaderboard?date=${dateStr}`
         : "/api/leaderboard";
-      const res = await fetch(url);
+      const res = await fetch(url, { signal });
       if (res.ok) {
         const json = await res.json();
+        if (signal?.aborted) return;
         setData(json);
       }
     } catch (error) {
+      if (signal?.aborted) return;
       console.error("获取排行榜失败:", error);
-    } finally {
-      setLoading(false);
     }
   }, []);
+
+  const fetchLeaderboard = useCallback(
+    (dateStr?: string) => {
+      setLoading(true);
+      load(dateStr).finally(() => setLoading(false));
+    },
+    [load]
+  );
 
   useEffect(() => {
     if (!session) return;
 
-    const timeoutId = window.setTimeout(() => {
-      void fetchLeaderboard(selectedDate);
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [session, selectedDate, fetchLeaderboard]);
+    // 经微任务发起以满足 react-hooks/set-state-in-effect；日期切换/卸载时
+    // abort，load 内的 signal.aborted 检查保证慢响应不覆盖新日期数据
+    const controller = new AbortController();
+    Promise.resolve().then(() => load(selectedDate, controller.signal));
+    return () => controller.abort();
+  }, [session, selectedDate, load]);
 
   const handleDateChange = (date: string) => {
     setSelectedDate(date);
@@ -184,7 +194,7 @@ export default function LeaderboardPage() {
 
         {/* Leaderboard entries */}
         <div className="space-y-3">
-          {loading && !data ? (
+          {!data ? (
             Array.from({ length: 5 }).map((_, i) => (
               <div
                 key={i}

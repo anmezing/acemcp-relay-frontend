@@ -17,20 +17,27 @@ export function AdminQuotaTab() {
   const [quotas, setQuotas] = useState<QuotaRow[] | null>(null);
   const [defaultLimit, setDefaultLimit] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
 
-  const load = useCallback(async () => {
+  // load 首个语句即 await，setState 均在 await 之后（满足
+  // react-hooks/set-state-in-effect）；effect 发起的请求携带 AbortSignal，
+  // 卸载时 abort，之后不再 setState。
+  const load = useCallback(async (signal?: AbortSignal) => {
     try {
-      const res = await fetch("/api/admin/quotas");
+      const res = await fetch("/api/admin/quotas", { signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      if (signal?.aborted) return;
       setQuotas(data.quotas);
       setDefaultLimit(data.defaultLimit);
       setDrafts({});
+      setError("");
     } catch {
-      setNotice("配额列表加载失败");
+      if (signal?.aborted) return;
+      setError("配额列表加载失败");
     }
   }, []);
 
@@ -40,14 +47,11 @@ export function AdminQuotaTab() {
   }, [load]);
 
   useEffect(() => {
-    // 经微任务回调调用以满足 react-hooks/set-state-in-effect
-    let ignore = false;
-    Promise.resolve().then(() => {
-      if (!ignore) load();
-    });
-    return () => {
-      ignore = true;
-    };
+    // 经微任务发起以满足 react-hooks/set-state-in-effect；cleanup 时 abort，
+    // load 内的 signal.aborted 检查保证之后不再 setState
+    const controller = new AbortController();
+    Promise.resolve().then(() => load(controller.signal));
+    return () => controller.abort();
   }, [load]);
 
   const save = useCallback(
@@ -57,8 +61,13 @@ export function AdminQuotaTab() {
       if (raw === "") {
         limit = null; // 恢复默认
       } else {
-        limit = parseInt(raw);
-        if (!Number.isInteger(limit) || limit < 0) {
+        // 全量数字校验：parseInt("12abc") 会静默截断成 12，必须整串是数字
+        if (!/^\d+$/.test(raw)) {
+          setNotice("配额必须是 ≥0 的整数（0 = 不限，留空 = 默认）");
+          return;
+        }
+        limit = Number(raw);
+        if (!Number.isSafeInteger(limit) || limit < 0) {
           setNotice("配额必须是 ≥0 的整数（0 = 不限，留空 = 默认）");
           return;
         }
@@ -83,12 +92,24 @@ export function AdminQuotaTab() {
     [drafts, load]
   );
 
-  if (quotas === null) {
+  if (quotas === null && !error) {
     return (
       <div className="space-y-2">
         {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-12 bg-white/[0.06] rounded-xl" />
         ))}
+      </div>
+    );
+  }
+
+  if (quotas === null) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-8">
+        <p className="text-red-400 text-sm">{error}</p>
+        <Button variant="glass" size="sm" onClick={refresh} disabled={loading} className="text-xs">
+          <RefreshCw className={cn("w-4 h-4 mr-1", loading && "animate-spin")} />
+          重试
+        </Button>
       </div>
     );
   }
@@ -108,6 +129,8 @@ export function AdminQuotaTab() {
           <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
         </Button>
       </div>
+
+      {error && <p className="text-xs text-red-400">{error}</p>}
 
       {notice && (
         <p className={cn("text-xs", notice.startsWith("已保存") ? "text-emerald-400" : "text-red-400")}>

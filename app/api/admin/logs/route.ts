@@ -9,7 +9,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
   try {
-    const page = Math.max(1, parseInt(request.nextUrl.searchParams.get("page") || "1"));
+    // parseInt 对非数字返回 NaN，Math.max(1, NaN) 仍是 NaN，会进 SQL OFFSET 炸 500
+    const page = Math.max(1, parseInt(request.nextUrl.searchParams.get("page") || "1") || 1);
     const errorsOnly = request.nextUrl.searchParams.get("errors") === "1";
     const logs = await listGlobalLogs(PAGE_SIZE, (page - 1) * PAGE_SIZE, errorsOnly);
     return NextResponse.json({ logs, page, pageSize: PAGE_SIZE });

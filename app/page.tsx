@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { AGENT_RULES_SNIPPET } from "@/lib/agent-rules";
+import { RELAY_URL } from "@/lib/relay";
 
 export default function Home() {
   return (
@@ -131,7 +132,7 @@ export default function Home() {
                     <pre className="text-slate-300 whitespace-pre">{`{
   "mcpServers": {
     "lce-relay": {
-      "url": "https://513689.xyz/mcp",
+      "url": "${RELAY_URL}/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_API_KEY"
       }

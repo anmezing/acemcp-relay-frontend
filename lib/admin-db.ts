@@ -232,7 +232,7 @@ export async function listGlobalLogs(
   }
 }
 
-// ── 调用统计（token-cost tab 的真实数据源：请求量，无 token 计量）────────
+// ── 调用统计（call-stats tab 的真实数据源：请求量，无 token 计量）────────
 
 export interface CallStats {
   totals: { today: number; last30d: number; total: number };
@@ -345,20 +345,30 @@ export async function setUserQuota(userId: string, limit: number | null) {
 // ── 日志/告警清理 ─────────────────────────────────────────────────────────
 
 // olderThanDays: undefined = 全部清空。error_details 有外键，先删。
+// 两条 DELETE 必须同一事务：中途失败会留下悬空的 error_details / request_logs。
 export async function clearRequestLogs(olderThanDays?: number): Promise<number> {
   const client = await pool.connect();
   try {
-    const cond =
-      olderThanDays && olderThanDays > 0
-        ? `WHERE request_timestamp < NOW() - INTERVAL '1 day' * ${Math.floor(olderThanDays)}`
-        : "";
-    await client.query(`
-      DELETE FROM error_details WHERE request_id IN (
-        SELECT id FROM request_logs ${cond}
-      )
-    `);
-    const result = await client.query(`DELETE FROM request_logs ${cond}`);
-    return result.rowCount || 0;
+    const hasCutoff = typeof olderThanDays === "number" && olderThanDays > 0;
+    const cond = hasCutoff
+      ? `WHERE request_timestamp < NOW() - INTERVAL '1 day' * $1`
+      : "";
+    const params = hasCutoff ? [Math.floor(olderThanDays)] : [];
+    await client.query("BEGIN");
+    try {
+      await client.query(
+        `DELETE FROM error_details WHERE request_id IN (
+           SELECT id FROM request_logs ${cond}
+         )`,
+        params
+      );
+      const result = await client.query(`DELETE FROM request_logs ${cond}`, params);
+      await client.query("COMMIT");
+      return result.rowCount || 0;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    }
   } finally {
     client.release();
   }
