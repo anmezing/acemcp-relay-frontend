@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { RELAY_URL } from "@/lib/relay";
+import { buildMcpConfigJson } from "@/lib/mcp-config";
 import {
   Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github, Trash2,
   Key, FileText, User, Database, ScrollText, Building2, Users, Coins,
@@ -192,23 +193,6 @@ function isTenantStats(value: unknown): value is TenantStats {
   );
 }
 
-// MCP 配置 JSON 的唯一构造点：展示（key 未知时用占位符）与一键复制共用
-function buildMcpConfig(apiKey: string | null): string {
-  return JSON.stringify(
-    {
-      mcpServers: {
-        "lce-relay": {
-          url: `${RELAY_URL}/mcp`,
-          headers: {
-            Authorization: `Bearer ${apiKey || "YOUR_API_KEY"}`,
-          },
-        },
-      },
-    },
-    null,
-    2
-  );
-}
 
 // 复制成功反馈：ref 存 timer id，重复点击先清旧 timer，卸载时清理（防
 // 卸载后 setState 与连点叠 timer）
@@ -272,40 +256,26 @@ export default function ConsolePage() {
   const [tenantStatsLoading, setTenantStatsLoading] = useState(true);
   const [tenantStatsError, setTenantStatsError] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [deviceId, setDeviceId] = useState<string | null>(null);
 
-  const mcpConfig = useMemo(() => buildMcpConfig(fullKey), [fullKey]);
+  const mcpConfig = useMemo(() => buildMcpConfigJson(fullKey, deviceId), [fullKey, deviceId]);
 
   const generateAndCopyConfig = async () => {
-    if (loading) return; // 防双击重复请求
+    if (loading) return;
     resetConfigCopied();
     setConfigError("");
     setLoading(true);
     try {
-      let key = fullKey;
+      const res = await fetch("/api/mcp-device", { method: "POST" });
+      if (!res.ok) throw new Error(`获取 MCP 配置失败（HTTP ${res.status}）`);
+      const data = await res.json();
+      const key = data.apiKey as string;
+      const device = data.deviceId as string;
+      setFullKey(key);
+      setDeviceId(device);
+      await fetchKeyInfo();
 
-      if (!key && keyInfo?.hasKey) {
-        const res = await fetch("/api/key/reveal");
-        if (!res.ok) throw new Error(`获取密钥失败（HTTP ${res.status}）`);
-        const data = await res.json();
-        key = data.apiKey;
-        setFullKey(key);
-      }
-
-      if (!key) {
-        const res = await fetch("/api/key", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "create" }),
-        });
-        if (!res.ok) throw new Error(`生成密钥失败（HTTP ${res.status}）`);
-        const data = await res.json();
-        key = data.apiKey;
-        setFullKey(key);
-        await fetchKeyInfo();
-      }
-
-      if (!key) throw new Error("未能获取密钥");
-      await navigator.clipboard.writeText(buildMcpConfig(key));
+      await navigator.clipboard.writeText(buildMcpConfigJson(key, device));
       markConfigCopied();
     } catch (error) {
       console.error("一键复制配置失败:", error);
@@ -863,7 +833,7 @@ export default function ConsolePage() {
                             <h3 className="text-white font-medium">添加远程 MCP 服务器</h3>
                           </div>
                           <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-                            在 Cursor / Claude Desktop 的 MCP 设置中添加以下配置，点击「一键复制」自动生成密钥并填充：
+                            在 Cursor / Codex / Claude Desktop 等 MCP 客户端中添加以下配置，点击「一键复制」自动生成密钥和设备 ID：
                           </p>
                           <div className="relative group">
                             <div className="bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-3 font-mono text-sm overflow-x-auto">
