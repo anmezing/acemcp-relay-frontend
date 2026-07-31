@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { RELAY_URL } from "@/lib/relay";
 import { buildMcpConfigJson } from "@/lib/mcp-config";
 import {
   Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github, Trash2,

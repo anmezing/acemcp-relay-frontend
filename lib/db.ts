@@ -179,6 +179,13 @@ export function getIdFromKey(apiKey: string): string {
   return crypto.createHash("md5").update(apiKey).digest("hex");
 }
 
+async function lockUserCredentialsTx(client: PoolClient, userId: string): Promise<void> {
+  await client.query(
+    `SELECT pg_advisory_xact_lock(hashtext('acemcp:user-credentials'), hashtext($1))`,
+    [userId]
+  );
+}
+
 export async function getApiKey(userId: string) {
   const client = await pool.connect();
   try {
@@ -195,6 +202,16 @@ export async function getApiKey(userId: string) {
 export async function createApiKey(userId: string) {
   const client = await pool.connect();
   try {
+    await client.query("BEGIN");
+    await lockUserCredentialsTx(client, userId);
+    const existing = await client.query(
+      `SELECT * FROM api_keys WHERE user_id = $1 FOR UPDATE`,
+      [userId]
+    );
+    if (existing.rows[0]) {
+      await client.query("COMMIT");
+      return existing.rows[0];
+    }
     const { id, apiKey } = generateApiKey();
     const result = await client.query(
       `INSERT INTO api_keys (id, user_id, api_key)
@@ -202,7 +219,11 @@ export async function createApiKey(userId: string) {
        RETURNING *`,
       [id, userId, apiKey]
     );
+    await client.query("COMMIT");
     return result.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
   } finally {
     client.release();
   }
@@ -210,33 +231,44 @@ export async function createApiKey(userId: string) {
 
 export async function resetApiKey(userId: string) {
   const client = await pool.connect();
+  let oldKeyId: string | null = null;
+  let keyRecord;
   try {
-    // 1. 获取旧 key 的 id (用于删除缓存)
+    await client.query("BEGIN");
+    await lockUserCredentialsTx(client, userId);
     const oldResult = await client.query(
-      `SELECT id FROM api_keys WHERE user_id = $1`,
+      `SELECT id FROM api_keys WHERE user_id = $1 FOR UPDATE`,
       [userId]
     );
-    const oldKeyId = oldResult.rows[0]?.id;
+    oldKeyId = oldResult.rows[0]?.id ?? null;
 
-    // 2. 更新数据库生成新 key
     const { id, apiKey } = generateApiKey();
-    const result = await client.query(
-      `UPDATE api_keys
-       SET id = $2, api_key = $3, updated_at = CURRENT_TIMESTAMP
-       WHERE user_id = $1
-       RETURNING *`,
-      [userId, id, apiKey]
-    );
-
-    // 3. 删除旧 key 的 Redis 缓存
-    if (oldKeyId) {
-      await deleteApiKeyCache(oldKeyId);
-    }
-
-    return result.rows[0];
+    const result = oldKeyId
+      ? await client.query(
+          `UPDATE api_keys
+           SET id = $2, api_key = $3, updated_at = CURRENT_TIMESTAMP
+           WHERE user_id = $1
+           RETURNING *`,
+          [userId, id, apiKey]
+        )
+      : await client.query(
+          `INSERT INTO api_keys (id, user_id, api_key)
+           VALUES ($1, $2, $3)
+           RETURNING *`,
+          [id, userId, apiKey]
+        );
+    keyRecord = result.rows[0];
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
   } finally {
     client.release();
   }
+  if (oldKeyId) {
+    await deleteApiKeyCache(oldKeyId);
+  }
+  return keyRecord;
 }
 
 // Device binding (防账号共用)：默认单设备互踢 —— 任何时刻只有最后登录的
@@ -361,10 +393,7 @@ export async function deviceLogin(
   let rotated = false;
   try {
     await client.query("BEGIN");
-    await client.query(
-      `SELECT pg_advisory_xact_lock(hashtext('acemcp:device-login'), hashtext($1))`,
-      [userId]
-    );
+    await lockUserCredentialsTx(client, userId);
 
     if (deviceId) {
       // 注册失败不阻断登录：relay 在 log 模式下放行；enforce 模式下该设备
