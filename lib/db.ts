@@ -582,7 +582,7 @@ export async function getContextEngineCount(userId: string): Promise<number> {
       `SELECT COUNT(*) as count
        FROM request_logs
        WHERE user_id = $1
-         AND request_path = '/agents/codebase-retrieval'
+         AND request_path = '/mcp/tools/call/codebase-retrieval'
          AND status_code = 200`,
       [userId]
     );

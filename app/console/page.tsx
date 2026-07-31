@@ -871,9 +871,8 @@ export default function ConsolePage() {
                           <div className="space-y-2">
                             {[
                               { name: "codebase-retrieval", desc: "语义检索项目代码上下文" },
-                              { name: "codebase_git_context", desc: "Git 状态、diff、提交历史、blame" },
                               { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析" },
-                              { name: "codebase_review_changes", desc: "代码变更审查与测试计划" },
+                              { name: "codebase_tenant_stats", desc: "当前账号的远程索引统计" },
                             ].map((tool) => (
                               <div key={tool.name} className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
                                 <code className="text-cyan-400 text-xs font-mono shrink-0">{tool.name}</code>
