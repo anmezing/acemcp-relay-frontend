@@ -156,9 +156,7 @@ export async function initDB() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_model_configs (
         user_id VARCHAR(255) PRIMARY KEY,
-        config_enc TEXT,
-        fingerprint VARCHAR(80) NOT NULL,
-        applied_fingerprint VARCHAR(80),
+        config_enc TEXT NOT NULL,
         updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
       )
     `);

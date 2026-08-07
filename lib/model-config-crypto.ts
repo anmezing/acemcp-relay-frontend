@@ -3,21 +3,8 @@ import crypto from "crypto";
 import { ValidationError } from "./errors";
 import { validateByoProviderUrl } from "./safe-outbound";
 
-// 按用户模型配置的加密与指纹。
-// 加密：AES-256-GCM，密钥 = SHA-256(MODEL_CONFIG_SECRET)，
-// 密文布局 base64(nonce[12] || ciphertext || tag[16])——必须与
-// acemcp-relay/modelconfig.go 的 decryptModelConfig 保持一致。
-
-export interface EmbeddingsModelConfig {
-  provider: "openai-compatible" | "voyage";
-  model: string;
-  baseUrl: string;
-  apiKey: string;
-  dimensions: number;
-  queryPrefix?: string;
-  documentPrefix?: string;
-}
-
+// AES-256-GCM layout: base64(nonce[12] || ciphertext || tag[16]).
+// Keep this format aligned with acemcp-relay/modelconfig.go.
 export interface RerankModelConfig {
   provider: "siliconflow-compatible" | "voyage" | "custom";
   model: string;
@@ -26,8 +13,7 @@ export interface RerankModelConfig {
 }
 
 export interface UserModelConfig {
-  embeddings: EmbeddingsModelConfig;
-  rerank?: RerankModelConfig;
+  rerank: RerankModelConfig;
 }
 
 export function modelConfigEnabled(): boolean {
@@ -63,34 +49,6 @@ export function decryptModelConfig(enc: string): UserModelConfig {
   return JSON.parse(plain.toString("utf8"));
 }
 
-// 恢复平台默认时写入的指纹哨兵值（relay 只比较 fingerprint 与
-// applied_fingerprint 是否相等，具体格式由前端定义）
-export const DEFAULT_FINGERPRINT = "default";
-
-// 指纹只含模型身份字段，不含 apiKey——仅轮换 key 不应触发索引重建
-export function modelConfigFingerprint(config: UserModelConfig): string {
-  const identity = {
-    e: {
-      provider: config.embeddings.provider,
-      model: config.embeddings.model,
-      baseUrl: config.embeddings.baseUrl,
-      dimensions: config.embeddings.dimensions,
-      documentPrefix: config.embeddings.documentPrefix ?? null,
-    },
-    r: config.rerank
-      ? {
-          provider: config.rerank.provider,
-          model: config.rerank.model,
-          baseUrl: config.rerank.baseUrl,
-        }
-      : null,
-  };
-  return (
-    "mc1:" +
-    crypto.createHash("sha256").update(JSON.stringify(identity)).digest("hex").slice(0, 40)
-  );
-}
-
 function requireString(value: unknown, field: string): string {
   if (typeof value !== "string" || value.trim() === "") {
     throw new ValidationError(`${field} 不能为空`);
@@ -98,49 +56,28 @@ function requireString(value: unknown, field: string): string {
   return value.trim();
 }
 
-// 校验并归一化用户提交的配置（apiKey 允许为空串，由调用方决定沿用旧值）
 export function normalizeUserModelConfig(raw: {
-  embeddings?: Partial<EmbeddingsModelConfig>;
   rerank?: Partial<RerankModelConfig> | null;
 }): UserModelConfig {
-  const e = raw.embeddings;
-  if (!e) throw new ValidationError("embeddings 配置缺失");
-  if (e.provider !== "openai-compatible" && e.provider !== "voyage") {
-    throw new ValidationError("embeddings.provider 仅支持 openai-compatible / voyage");
+  const rerank = raw.rerank;
+  if (!rerank) throw new ValidationError("rerank 配置缺失");
+  if (
+    rerank.provider !== "siliconflow-compatible" &&
+    rerank.provider !== "voyage" &&
+    rerank.provider !== "custom"
+  ) {
+    throw new ValidationError("rerank.provider 仅支持 siliconflow-compatible / voyage / custom");
   }
-  const dimensions = Number(e.dimensions);
-  if (!Number.isInteger(dimensions) || dimensions <= 0 || dimensions > 65536) {
-    throw new ValidationError("embeddings.dimensions 必须是正整数");
-  }
-  const baseUrl = requireString(e.baseUrl, "embeddings.baseUrl");
-  // 该 URL 会被 LCE / 前端在服务端调用：仅 https、禁凭据/片段、禁内网地址（SSRF）
-  validateByoProviderUrl(baseUrl, "embeddings.baseUrl");
-  const config: UserModelConfig = {
-    embeddings: {
-      provider: e.provider,
-      model: requireString(e.model, "embeddings.model"),
+  const baseUrl = requireString(rerank.baseUrl, "rerank.baseUrl");
+  validateByoProviderUrl(baseUrl, "rerank.baseUrl");
+  return {
+    rerank: {
+      provider: rerank.provider,
+      model: requireString(rerank.model, "rerank.model"),
       baseUrl,
-      apiKey: typeof e.apiKey === "string" ? e.apiKey.trim() : "",
-      dimensions,
-      queryPrefix: e.queryPrefix || undefined,
-      documentPrefix: e.documentPrefix || undefined,
+      apiKey: typeof rerank.apiKey === "string" ? rerank.apiKey.trim() : "",
     },
   };
-  if (raw.rerank) {
-    const r = raw.rerank;
-    if (r.provider !== "siliconflow-compatible" && r.provider !== "voyage" && r.provider !== "custom") {
-      throw new ValidationError("rerank.provider 仅支持 siliconflow-compatible / voyage / custom");
-    }
-    const rerankBaseUrl = requireString(r.baseUrl, "rerank.baseUrl");
-    validateByoProviderUrl(rerankBaseUrl, "rerank.baseUrl");
-    config.rerank = {
-      provider: r.provider,
-      model: requireString(r.model, "rerank.model"),
-      baseUrl: rerankBaseUrl,
-      apiKey: typeof r.apiKey === "string" ? r.apiKey.trim() : "",
-    };
-  }
-  return config;
 }
 
 export function maskSecret(value: string): string {

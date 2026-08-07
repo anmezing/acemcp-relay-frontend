@@ -1,15 +1,8 @@
 import pool, { deleteModelConfigCache } from "@/lib/db";
-import {
-  DEFAULT_FINGERPRINT,
-  encryptModelConfig,
-  modelConfigFingerprint,
-  type UserModelConfig,
-} from "@/lib/model-config-crypto";
+import { encryptModelConfig, type UserModelConfig } from "@/lib/model-config-crypto";
 
 export interface UserModelConfigRow {
-  config_enc: string | null;
-  fingerprint: string;
-  applied_fingerprint: string | null;
+  config_enc: string;
 }
 
 export async function getUserModelConfigRow(
@@ -18,8 +11,7 @@ export async function getUserModelConfigRow(
   const client = await pool.connect();
   try {
     const result = await client.query(
-      `SELECT config_enc, fingerprint, applied_fingerprint
-       FROM user_model_configs WHERE user_id = $1`,
+      `SELECT config_enc FROM user_model_configs WHERE user_id = $1`,
       [userId]
     );
     return result.rows[0] || null;
@@ -28,38 +20,27 @@ export async function getUserModelConfigRow(
   }
 }
 
-// 保存自定义配置。applied_fingerprint 保持不变（新行记 'default' 表示
-// "此前生效的是平台默认"）——relay 发现 fingerprint != applied_fingerprint
-// 时会清空租户索引并推进 applied，下一次 codebase_index 同步会全量重建。
 export async function saveUserModelConfig(userId: string, config: UserModelConfig) {
   const enc = encryptModelConfig(config);
-  const fingerprint = modelConfigFingerprint(config);
   const client = await pool.connect();
   try {
     await client.query(
-      `INSERT INTO user_model_configs (user_id, config_enc, fingerprint, applied_fingerprint)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO user_model_configs (user_id, config_enc)
+       VALUES ($1, $2)
        ON CONFLICT (user_id) DO UPDATE
-         SET config_enc = $2, fingerprint = $3, updated_at = NOW()`,
-      [userId, enc, fingerprint, DEFAULT_FINGERPRINT]
+         SET config_enc = EXCLUDED.config_enc, updated_at = NOW()`,
+      [userId, enc]
     );
   } finally {
     client.release();
   }
   await deleteModelConfigCache(userId);
-  return fingerprint;
 }
 
-// 恢复平台默认：清掉密文、指纹置哨兵值；relay 同样按指纹变化清索引重建
 export async function resetUserModelConfig(userId: string) {
   const client = await pool.connect();
   try {
-    await client.query(
-      `UPDATE user_model_configs
-       SET config_enc = NULL, fingerprint = $2, updated_at = NOW()
-       WHERE user_id = $1`,
-      [userId, DEFAULT_FINGERPRINT]
-    );
+    await client.query(`DELETE FROM user_model_configs WHERE user_id = $1`, [userId]);
   } finally {
     client.release();
   }
@@ -69,9 +50,7 @@ export async function resetUserModelConfig(userId: string) {
 export async function countUserModelConfigs(): Promise<number> {
   const client = await pool.connect();
   try {
-    const result = await client.query(
-      `SELECT COUNT(*) AS count FROM user_model_configs WHERE config_enc IS NOT NULL`
-    );
+    const result = await client.query(`SELECT COUNT(*) AS count FROM user_model_configs`);
     return parseInt(result.rows[0].count || "0");
   } finally {
     client.release();

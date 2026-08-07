@@ -42,21 +42,12 @@ export async function GET() {
 
   try {
     const row = await getUserModelConfigRow(user.id);
-    if (!row || !row.config_enc) {
-      return NextResponse.json({ ...base, configured: false });
-    }
+    if (!row) return NextResponse.json({ ...base, configured: false });
     const config = decryptModelConfig(row.config_enc);
     return NextResponse.json({
       ...base,
       configured: true,
-      pendingReindex: row.fingerprint !== (row.applied_fingerprint || ""),
-      embeddings: {
-        ...config.embeddings,
-        apiKey: maskSecret(config.embeddings.apiKey),
-      },
-      rerank: config.rerank
-        ? { ...config.rerank, apiKey: maskSecret(config.rerank.apiKey) }
-        : null,
+      rerank: { ...config.rerank, apiKey: maskSecret(config.rerank.apiKey) },
     });
   } catch (error) {
     console.error("model config read failed:", error);
@@ -64,24 +55,17 @@ export async function GET() {
   }
 }
 
-// POST body:
-//   { reset: true }                          恢复平台默认
-//   { embeddings: {...}, rerank?: {...} }    保存自定义配置；apiKey 留空表示沿用已保存的值
 export async function POST(request: NextRequest) {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!modelConfigEnabled()) {
     return NextResponse.json(
-      { error: "服务端未启用自定义模型（未配置 MODEL_CONFIG_SECRET）" },
+      { error: "服务端未启用自定义 rerank（未配置 MODEL_CONFIG_SECRET）" },
       { status: 400 }
     );
   }
 
-  let body: {
-    reset?: boolean;
-    embeddings?: Record<string, unknown>;
-    rerank?: Record<string, unknown> | null;
-  } = {};
+  let body: { reset?: boolean; rerank?: Record<string, unknown> | null } = {};
   try {
     body = await request.json();
   } catch {}
@@ -95,33 +79,21 @@ export async function POST(request: NextRequest) {
     const config = normalizeUserModelConfig(
       body as Parameters<typeof normalizeUserModelConfig>[0]
     );
-
-    // apiKey 留空 → 沿用已保存配置里的 key（避免每次编辑都要重填密钥）
-    if (!config.embeddings.apiKey || (config.rerank && !config.rerank.apiKey)) {
+    if (!config.rerank.apiKey) {
       const row = await getUserModelConfigRow(user.id);
-      const existing: UserModelConfig | null = row?.config_enc
+      const existing: UserModelConfig | null = row
         ? decryptModelConfig(row.config_enc)
         : null;
-      if (!config.embeddings.apiKey) {
-        const previous = existing?.embeddings.apiKey || "";
-        if (!previous) {
-          return NextResponse.json({ error: "请填写 embeddings API Key" }, { status: 400 });
-        }
-        config.embeddings.apiKey = previous;
+      const previous = existing?.rerank.apiKey || "";
+      if (!previous) {
+        return NextResponse.json({ error: "请填写 rerank API Key" }, { status: 400 });
       }
-      if (config.rerank && !config.rerank.apiKey) {
-        const previous = existing?.rerank?.apiKey || "";
-        if (!previous) {
-          return NextResponse.json({ error: "请填写 rerank API Key" }, { status: 400 });
-        }
-        config.rerank.apiKey = previous;
-      }
+      config.rerank.apiKey = previous;
     }
 
     await saveUserModelConfig(user.id, config);
     return NextResponse.json({ ok: true });
   } catch (error) {
-    // 用类型区分用户输入错误与内部错误：内部错误不把 message 泄给客户端
     if (error instanceof ValidationError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
