@@ -56,7 +56,7 @@ export default function Home() {
               { label: "增量索引", color: "blue", delay: "animate-delay-400" },
               { label: "多语言支持", color: "emerald", delay: "animate-delay-500" },
               { label: "变更分析", color: "cyan", delay: "animate-delay-500" },
-              { label: "零配置接入", color: "blue", delay: "animate-delay-500" },
+              { label: "远程 MCP 接入", color: "blue", delay: "animate-delay-500" },
             ].map((item) => (
               <Badge
                 key={item.label}
@@ -224,6 +224,10 @@ export default function Home() {
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>
                     <span>Git 状态、历史、blame 与工作区 diff 由编码 Agent 的本地 Git 工具处理，不会被包装成云端能力</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="text-slate-600 shrink-0">-</span>
+                    <span>TypeScript/JavaScript 符号图优先使用有界编译项目；超出编译预算或无法解析的文件会降级为 AST/启发式事实，并在结果中标注 coverage 与 confidence</span>
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>

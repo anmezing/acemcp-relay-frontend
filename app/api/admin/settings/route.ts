@@ -34,7 +34,7 @@ export async function GET() {
     return NextResponse.json({
       registrationEnabled,
       models: modelConfig(),
-      byoModels: { enabled: modelConfigEnabled(), customModelUsers },
+      customRerank: { enabled: modelConfigEnabled(), userCount: customModelUsers },
     });
   } catch (error) {
     console.error("admin settings read failed:", error);

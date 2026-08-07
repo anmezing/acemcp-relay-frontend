@@ -1,7 +1,7 @@
 import crypto from "crypto";
 
 import { ValidationError } from "./errors";
-import { validateByoProviderUrl } from "./safe-outbound";
+import { validateUserRerankProviderUrl } from "./safe-outbound";
 
 // AES-256-GCM layout: base64(nonce[12] || ciphertext || tag[16]).
 // Keep this format aligned with acemcp-relay/modelconfig.go.
@@ -69,7 +69,7 @@ export function normalizeUserModelConfig(raw: {
     throw new ValidationError("rerank.provider 仅支持 siliconflow-compatible / voyage / custom");
   }
   const baseUrl = requireString(rerank.baseUrl, "rerank.baseUrl");
-  validateByoProviderUrl(baseUrl, "rerank.baseUrl");
+  validateUserRerankProviderUrl(baseUrl, "rerank.baseUrl");
   return {
     rerank: {
       provider: rerank.provider,

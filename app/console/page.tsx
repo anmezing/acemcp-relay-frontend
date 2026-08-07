@@ -1301,7 +1301,7 @@ export default function ConsolePage() {
                     )}
                   </TabsContent>
 
-                  {/* 我的 - 模型设置（BYO 模型） */}
+                  {/* 我的 - 用户自定义 Rerank */}
                   <TabsContent value="model-config" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                     <h2 className="text-lg font-medium text-white mb-6">模型设置</h2>
                     <UserModelConfigTab />

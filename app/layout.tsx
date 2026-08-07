@@ -24,7 +24,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark overflow-x-clip" suppressHydrationWarning>
+    <html lang="zh-CN" className="dark overflow-x-clip" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} overflow-x-clip antialiased`}
       >

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPublicIpAddress, validateByoProviderUrl } from "./safe-outbound";
+import { isPublicIpAddress, validateUserRerankProviderUrl } from "./safe-outbound";
 
 /**
  * 这份用例集与 lce/src/security/safeOutboundRequest.test.ts 覆盖同一套地址判定：
@@ -8,7 +8,7 @@ import { isPublicIpAddress, validateByoProviderUrl } from "./safe-outbound";
  *
  * 历史教训（务必保留 "公网 IPv4 必须放行" 这组）：曾经有人把 ::ffff:0:0/96 加进
  * IPv6 黑名单，Node 的 BlockList 会把所有 IPv4 的 check 归一到该映射段，结果每个
- * 公网 IPv4 都被判为内网，BYO 模型的连通性测试对所有真实厂商全部失败。
+ * 公网 IPv4 都被判为内网，用户自定义 Rerank 的公网端点会全部被拒绝。
  */
 
 describe("isPublicIpAddress 放行公网地址", () => {
@@ -80,10 +80,10 @@ describe("isPublicIpAddress 拒绝非 IP 输入", () => {
   });
 });
 
-describe("validateByoProviderUrl", () => {
+describe("validateUserRerankProviderUrl", () => {
   it("放行公网 HTTPS 端点", () => {
-    expect(() => validateByoProviderUrl("https://api.openai.com/v1/embeddings")).not.toThrow();
-    expect(() => validateByoProviderUrl("https://api.siliconflow.cn/v1/embeddings")).not.toThrow();
+    expect(() => validateUserRerankProviderUrl("https://api.siliconflow.cn/v1/rerank")).not.toThrow();
+    expect(() => validateUserRerankProviderUrl("https://api.voyageai.com/v1/rerank")).not.toThrow();
   });
 
   it.each([
@@ -102,16 +102,14 @@ describe("validateByoProviderUrl", () => {
     ["IPv6 唯一本地地址", "https://[fd00::1]/v1"],
     ["IPv6 链路本地", "https://[fe80::1]/v1"],
   ])("拒绝 %s", (_label, raw) => {
-    expect(() => validateByoProviderUrl(raw)).toThrow();
+    expect(() => validateUserRerankProviderUrl(raw)).toThrow();
   });
 
   it("放行公网 IPv6 字面量", () => {
-    expect(() => validateByoProviderUrl("https://[2606:4700::1111]/v1")).not.toThrow();
+    expect(() => validateUserRerankProviderUrl("https://[2606:4700::1111]/v1")).not.toThrow();
   });
 
-  it("主机名不在此处解析，交给 resolvePublicAddress 做 DNS 后校验", () => {
-    // 域名形式的内网目标（如 internal.corp）只能在 DNS 解析后判定，
-    // 这一层只负责 IP 字面量，不应误报
-    expect(() => validateByoProviderUrl("https://internal.corp/v1")).not.toThrow();
+  it("主机名不在保存配置时解析，由 LCE 在实际请求前做 DNS 校验", () => {
+    expect(() => validateUserRerankProviderUrl("https://internal.corp/v1")).not.toThrow();
   });
 });

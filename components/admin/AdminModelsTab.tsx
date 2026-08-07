@@ -35,7 +35,7 @@ function ModelCard({ title, side }: { title: string; side: ModelSide }) {
 
 export function AdminModelsTab() {
   const [models, setModels] = useState<{ embeddings: ModelSide; rerank: ModelSide } | null>(null);
-  const [byoModels, setByoModels] = useState<{ enabled: boolean; customModelUsers: number } | null>(null);
+  const [customRerank, setCustomRerank] = useState<{ enabled: boolean; userCount: number } | null>(null);
   const [error, setError] = useState("");
 
   // load 首个语句即 await（满足 react-hooks/set-state-in-effect）；
@@ -47,7 +47,7 @@ export function AdminModelsTab() {
       const data = await res.json();
       if (signal?.aborted) return;
       setModels(data.models);
-      setByoModels(data.byoModels || null);
+      setCustomRerank(data.customRerank || null);
       setError("");
     } catch {
       if (signal?.aborted) return;
@@ -70,13 +70,13 @@ export function AdminModelsTab() {
   return (
     <div className="space-y-4">
       {error && <p className="text-red-400 text-sm">{error}</p>}
-      {byoModels && (
+      {customRerank && (
         <p className="text-slate-400 text-xs">
-          按用户自定义模型（BYO）：
-          {byoModels.enabled
-            ? <span className="text-cyan-400">已启用，{byoModels.customModelUsers} 位用户使用自定义配置</span>
+          按用户自定义 Rerank：
+          {customRerank.enabled
+            ? <span className="text-cyan-400">已启用，{customRerank.userCount} 位用户使用自定义配置</span>
             : <span className="text-slate-500">未启用（需设置 MODEL_CONFIG_SECRET）</span>}
-          。以下为平台默认模型（未自定义的用户使用）：
+          。以下为平台默认模型（Embedding 始终由平台统一提供）：
         </p>
       )}
       {models && (
