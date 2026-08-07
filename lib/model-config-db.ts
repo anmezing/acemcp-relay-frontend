@@ -30,7 +30,7 @@ export async function getUserModelConfigRow(
 
 // 保存自定义配置。applied_fingerprint 保持不变（新行记 'default' 表示
 // "此前生效的是平台默认"）——relay 发现 fingerprint != applied_fingerprint
-// 时会清空租户索引并推进 applied，插件随后自动全量重建。
+// 时会清空租户索引并推进 applied，下一次 codebase_index 同步会全量重建。
 export async function saveUserModelConfig(userId: string, config: UserModelConfig) {
   const enc = encryptModelConfig(config);
   const fingerprint = modelConfigFingerprint(config);

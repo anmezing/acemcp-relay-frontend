@@ -216,7 +216,7 @@ export default function StatusPage() {
       <header className="border-b border-white/[0.06] bg-[#0a0f1a]/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
           <Link href="/" className="text-lg sm:text-xl font-semibold whitespace-nowrap text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-400">
-            LCE Relay
+            LCE
           </Link>
           <nav className="order-3 grid w-full grid-cols-3 sm:order-none sm:flex sm:w-auto sm:items-center sm:gap-1">
             <Link
@@ -273,7 +273,7 @@ export default function StatusPage() {
                     <Activity className="w-5 h-5 sm:w-7 sm:h-7 text-cyan-400" />
                   </div>
                   <div className="min-w-0">
-                    <h1 className="text-lg sm:text-xl font-semibold text-white">LCE Relay</h1>
+                    <h1 className="text-lg sm:text-xl font-semibold text-white">LCE</h1>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="text-xs px-2 py-0.5 rounded-md bg-white/[0.06] text-slate-400 shrink-0">
                         LCE

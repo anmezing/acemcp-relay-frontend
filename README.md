@@ -1,6 +1,6 @@
-# ACE Relay Frontend
+# LCE Frontend
 
-ACE Relay 服务的前端控制台，用于管理 API Key、查看请求日志和用户排行榜。
+LCE 的前端控制台，用于管理 API Key、查看请求日志和用户排行榜。
 
 ## 技术栈
 

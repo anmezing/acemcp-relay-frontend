@@ -609,7 +609,7 @@ export default function ConsolePage() {
       <header className="relative border-b border-white/[0.06] flex-shrink-0 bg-[#0a0f1a]/80 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
           <Link href="/" className="text-lg sm:text-xl font-semibold whitespace-nowrap text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-400">
-            LCE Relay
+            LCE
           </Link>
           <nav className="order-3 grid w-full grid-cols-3 sm:order-none sm:flex sm:w-auto sm:items-center sm:gap-1">
             <Link
@@ -866,13 +866,14 @@ export default function ConsolePage() {
                             <h3 className="text-white font-medium">可用工具</h3>
                           </div>
                           <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-                            连接后，IDE 会自动发现以下 MCP 工具：
+                            连接云端 MCP 后，IDE 会自动发现以下 4 个工具：
                           </p>
                           <div className="space-y-2">
                             {[
                               { name: "codebase-retrieval", desc: "语义检索项目代码上下文" },
                               { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析" },
                               { name: "codebase_tenant_stats", desc: "当前账号的远程索引统计" },
+                              { name: "codebase_index", desc: "首次与增量同步项目代码索引" },
                             ].map((tool) => (
                               <div key={tool.name} className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
                                 <code className="text-cyan-400 text-xs font-mono shrink-0">{tool.name}</code>
@@ -880,6 +881,9 @@ export default function ConsolePage() {
                               </div>
                             ))}
                           </div>
+                          <p className="text-slate-500 text-xs mt-4 leading-relaxed">
+                            本地文件与 Git 信息由 IDE Agent 自身工具读取；LCE 只接收 Agent 明确提交的可索引文本内容。
+                          </p>
                         </CardContent>
                       </Card>
 
@@ -904,7 +908,7 @@ export default function ConsolePage() {
                             </li>
                             <li className="flex items-start gap-2">
                               <span className="text-cyan-400 mt-0.5">•</span>
-                              <span>tenant_id 由 Relay 从 API Key 自动注入，客户端无需传递</span>
+                              <span>tenant_id 由服务端根据 API Key 自动注入，客户端无需传递</span>
                             </li>
                             <li className="flex items-start gap-2">
                               <span className="text-cyan-400 mt-0.5">•</span>
@@ -1238,7 +1242,7 @@ export default function ConsolePage() {
                       </div>
                     ) : tenantStats && !tenantStats.exists ? (
                       <div className="flex flex-col items-center py-8 text-center text-slate-500">
-                        <p>尚未建立索引。请在 VS Code 插件中登录 LCE 并打开项目，索引将自动创建。</p>
+                        <p>尚未建立索引。请让 IDE Agent 调用 codebase_index 同步当前项目。</p>
                         <Button
                           variant="glass"
                           size="sm"

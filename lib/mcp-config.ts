@@ -11,7 +11,7 @@ export function buildMcpConfigJson(apiKey: string | null, deviceId: string | nul
   return JSON.stringify(
     {
       mcpServers: {
-        "lce-relay": {
+        lce: {
           url: `${RELAY_URL}/mcp`,
           headers: {
             Authorization: `Bearer ${apiKey || KEY_PLACEHOLDER}`,
@@ -32,11 +32,11 @@ function tomlString(value: string): string {
 
 export function buildMcpConfigToml(apiKey: string | null, deviceId: string | null): string {
   return [
-    `[mcp_servers."lce-relay"]`,
+    `[mcp_servers.lce]`,
     `url = ${tomlString(`${RELAY_URL}/mcp`)}`,
     `enabled = true`,
     ``,
-    `[mcp_servers."lce-relay".http_headers]`,
+    `[mcp_servers.lce.http_headers]`,
     `Authorization = ${tomlString(`Bearer ${apiKey || KEY_PLACEHOLDER}`)}`,
     `"X-Client-Id" = ${tomlString(deviceId || DEVICE_PLACEHOLDER)}`,
   ].join("\n");

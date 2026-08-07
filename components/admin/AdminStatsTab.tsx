@@ -99,7 +99,7 @@ export function AdminStatsTab() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-slate-500 text-xs">
-          按请求量统计（relay 无 token 计量，embedding/rerank 用量在 LCE 侧）
+          按请求量统计（服务端不统计 token，embedding/rerank 用量在 LCE 侧）
         </p>
         <Button variant="ghost" size="sm" onClick={refresh} disabled={loading}
           className="text-slate-400 hover:text-white">

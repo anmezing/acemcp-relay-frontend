@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { AGENT_RULES_SNIPPET } from "@/lib/agent-rules";
-import { RELAY_URL } from "@/lib/relay";
+import { buildMcpConfigJson } from "@/lib/mcp-config";
 
 export default function Home() {
   return (
@@ -32,7 +32,7 @@ export default function Home() {
             </div>
             <h1 className="relative text-5xl md:text-7xl font-semibold tracking-tight">
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-cyan-400 to-blue-400">
-                LCE Relay
+                LCE
               </span>
             </h1>
           </div>
@@ -50,7 +50,12 @@ export default function Home() {
           <div className="flex flex-wrap justify-center gap-4 pt-4">
             {[
               { label: "语义检索", color: "emerald", delay: "animate-delay-300" },
-              { label: "符号图谱", color: "cyan", delay: "animate-delay-400" },
+              { label: "跨项目理解", color: "cyan", delay: "animate-delay-300" },
+              { label: "行级定位", color: "blue", delay: "animate-delay-400" },
+              { label: "符号图谱", color: "emerald", delay: "animate-delay-400" },
+              { label: "增量索引", color: "blue", delay: "animate-delay-400" },
+              { label: "多语言支持", color: "emerald", delay: "animate-delay-500" },
+              { label: "变更分析", color: "cyan", delay: "animate-delay-500" },
               { label: "零配置接入", color: "blue", delay: "animate-delay-500" },
             ].map((item) => (
               <Badge
@@ -83,14 +88,14 @@ export default function Home() {
             <SectionTitle>LCE 是什么</SectionTitle>
             <div className="space-y-4 text-slate-400 text-[15px] leading-relaxed">
               <p>
-                LCE（Local Code Engine）是一个<span className="text-white">代码上下文引擎</span>，它将代码仓库索引为结构化语义数据，让 AI 编码 Agent 能像理解人类语言一样理解你的代码。
+                LCE 是一个<span className="text-white">代码上下文引擎</span>，它将代码仓库索引为结构化语义数据，让 AI 编码 Agent 能像理解人类语言一样理解你的代码。
               </p>
               <p>
                 传统的代码搜索依赖关键词匹配——你必须精确知道函数名、变量名才能找到它。LCE 不同：它理解代码的<span className="text-white">语义</span>。
-                你可以用自然语言描述你要找的东西，比如&ldquo;处理用户认证的逻辑&rdquo;或&ldquo;数据库连接池的错误恢复机制&rdquo;，LCE 会返回最相关的代码片段及其上下文。
+                例如，你可以直接用自然语言提问：&ldquo;处理用户认证的逻辑在哪里？&rdquo;或&ldquo;数据库连接池断开后如何恢复？&rdquo;，LCE 会返回最相关的代码片段及其上下文。
               </p>
               <p>
-                LCE Relay 是 LCE 的云端中继服务。你无需在本地安装任何组件，只需在 IDE 中添加一个 MCP 服务器地址，AI Agent 就能直接使用全部检索能力。
+                LCE 提供开箱即用的云端服务。你无需在本地安装任何组件，只需在 IDE 中添加一个 MCP 服务器地址，AI Agent 就能直接使用全部检索能力。
               </p>
             </div>
           </section>
@@ -101,19 +106,35 @@ export default function Home() {
             <div className="grid md:grid-cols-2 gap-4">
               <FeatureCard
                 title="语义代码理解"
-                description={`不只是关键词匹配。用自然语言描述意图——"处理支付失败后的重试逻辑"——引擎理解语义，从整个仓库中找到最相关的代码片段并附带上下文。`}
+                description="融合语义、关键词与精确术语检索。直接描述任务或问题，LCE 会理解意图并召回相关实现，无需提前知道函数名或变量名。"
               />
               <FeatureCard
-                title="Bug 溯源"
-                description="结合 Git 历史和符号图谱，追溯一个 bug 是什么时候、由谁、在哪次提交中引入的。不再手动翻 git log，AI Agent 直接给出引入变更和影响范围。"
+                title="跨文件与跨项目理解"
+                description="跨越文件、模块与多个项目串联同一业务流程，结合调用、导入、类型和符号关系补全上下文，让 AI Agent 看见完整实现而非孤立片段。"
+              />
+              <FeatureCard
+                title="精准代码定位"
+                description="检索结果携带文件路径、符号名称与精确行号范围，AI Agent 可直接定位关键实现，减少逐文件扫描和无效上下文占用。"
+              />
+              <FeatureCard
+                title="增量索引更新"
+                description="Agent 再次提交项目清单时，服务端仅要求上传新增和修改的文件，并自动处理删除，同步更新语义索引、全文索引和符号关系。"
+              />
+              <FeatureCard
+                title="多语言代码支持"
+                description="覆盖 TypeScript/JavaScript、Python、Go、Rust、Java、C/C++、C#、PHP、Swift、Kotlin 等主流语言，并可统一索引常见配置与文档文件。"
               />
               <FeatureCard
                 title="符号关系图谱"
-                description="基于 AST 和编译器分析构建的代码图谱。追踪函数调用链、类型引用、导入依赖——修改一个函数前，先看清谁在调用它、影响哪些模块。"
+                description="基于 AST 与编译器分析构建代码图谱，追踪函数调用、类型引用、符号定义与导入依赖，清晰呈现代码的上下游关系。"
               />
               <FeatureCard
                 title="变更影响分析"
-                description="提交代码前，自动分析变更影响的范围：关联的调用者、受影响的测试、潜在的回归风险。让 AI Agent 的 code review 真正有据可依。"
+                description="提交代码前分析关联调用者、依赖模块、受影响测试与潜在回归风险，让 AI Agent 的实现计划和 code review 都有代码证据。"
+              />
+              <FeatureCard
+                title="Bug 定位"
+                description="结合自然语言检索、精确术语匹配和符号调用关系，快速收敛异常路径、相关实现与潜在影响范围，减少无目的逐文件排查。"
               />
             </div>
           </section>
@@ -129,16 +150,7 @@ export default function Home() {
                 <div className="space-y-3">
                   <span>在 Cursor 或 Claude Desktop 的 MCP 设置中添加以下配置。登录控制台后，可在「配置说明」中一键复制已填充密钥的完整配置：</span>
                   <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-sm overflow-x-auto">
-                    <pre className="text-slate-300 whitespace-pre">{`{
-  "mcpServers": {
-    "lce-relay": {
-      "url": "${RELAY_URL}/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_API_KEY"
-      }
-    }
-  }
-}`}</pre>
+                    <pre className="text-slate-300 whitespace-pre">{buildMcpConfigJson(null, null)}</pre>
                   </div>
                 </div>
               </StepCard>
@@ -157,24 +169,24 @@ export default function Home() {
               </StepCard>
               <StepCard step={4} title="初始化代码索引">
                 <div className="space-y-3">
-                  <span>首次使用时，AI Agent 会自动建立代码索引。连接 MCP 后，让 Agent 执行索引即可——整个过程全自动：</span>
+                  <span>连接 MCP 后，让 AI Agent 同步当前项目。Agent 使用 IDE 自带的文件读取能力，云端服务负责差量计算与索引处理：</span>
                   <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 space-y-3">
                     <div className="flex gap-3">
                       <span className="text-cyan-400 font-mono text-xs shrink-0 mt-0.5">1.</span>
                       <p className="text-slate-400 text-sm">
-                        Agent 扫描项目，检查哪些文件需要索引
+                        Agent 扫描可索引的文本文件，计算清单并调用 codebase_index
                       </p>
                     </div>
                     <div className="flex gap-3">
                       <span className="text-cyan-400 font-mono text-xs shrink-0 mt-0.5">2.</span>
                       <p className="text-slate-400 text-sm">
-                        自动完成语义分析、全文索引和向量嵌入
+                        服务端返回待更新文件，Agent 仅分批上传这些内容
                       </p>
                     </div>
                     <div className="flex gap-3">
                       <span className="text-cyan-400 font-mono text-xs shrink-0 mt-0.5">3.</span>
                       <p className="text-slate-400 text-sm">
-                        后续修改会增量更新，无需重新索引全部代码
+                        服务端完成语义、全文、向量和符号索引；再次同步时只处理差异
                       </p>
                     </div>
                   </div>
@@ -202,11 +214,15 @@ export default function Home() {
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>
-                    <span>本服务不替代 IDE 的本地功能（跳转定义、自动补全等），它是 AI Agent 的上下文补充</span>
+                    <span>远程 MCP 无法主动读取本地磁盘或监听文件变化；索引同步由 IDE Agent 使用自身文件工具发起</span>
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>
-                    <span>请勿将包含敏感凭证的文件（如 .env、密钥文件）纳入索引</span>
+                    <span>Git 状态、历史、blame 与工作区 diff 由 IDE Agent 的本地 Git 工具处理，不会被包装成云端能力</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="text-slate-600 shrink-0">-</span>
+                    <span>服务端拒绝 .env、密钥、二进制、依赖目录和构建产物；仍应在提交清单前检查仓库中的其他敏感内容</span>
                   </li>
                 </ul>
               </CardContent>
@@ -214,9 +230,14 @@ export default function Home() {
           </section>
         </div>
 
-        {/* Bottom accent line */}
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-slate-700/50 to-transparent" />
       </main>
+
+      <footer className="relative px-6 py-6 text-center">
+        <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-slate-700/50 to-transparent" />
+        <p className="text-sm text-slate-500">
+          本项目的前端与管理后台基于 <span className="text-slate-300">heroman</span> 的开源实现构建，谨致谢意。
+        </p>
+      </footer>
     </div>
   );
 }

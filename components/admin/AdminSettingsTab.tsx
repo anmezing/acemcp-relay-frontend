@@ -115,7 +115,7 @@ export function AdminSettingsTab() {
 
       <p className="text-slate-600 text-[10px]">
         其余系统级开关（设备绑定模式 DEVICE_BINDING_MODE、默认配额
-        DEFAULT_DAILY_REQUEST_LIMIT 等）为 relay 环境变量，修改 deploy/.env 后重启 relay 生效。
+        DEFAULT_DAILY_REQUEST_LIMIT 等）为服务端环境变量，修改 deploy/.env 后重启服务生效。
       </p>
     </div>
   );

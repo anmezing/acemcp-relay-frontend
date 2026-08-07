@@ -6,8 +6,8 @@ import { initDB, getDevices, deviceLogin } from "@/lib/db";
 
 // 为控制台「一键复制 MCP 配置」提供 (deviceId, apiKey)。
 // 生产 relay 为 enforce 模式，配置里必须带已登记的 X-Client-Id：
-// - 已有在册设备时复用最近活跃的那台——绝不能新造设备，单设备模式下
-//   新登记会把插件设备踢掉并轮换 token，把用户现有环境打死；
+// - 已有在册设备时复用最近活跃的那台——绝不能无故新造设备，单设备模式下
+//   新登记会把现有 MCP 客户端踢掉并轮换 token；
 // - 没有任何在册设备时生成 web- 前缀的随机 ID 走 deviceLogin 登记
 //   （空列表下注册不发生淘汰，token 不轮换）。
 export async function POST() {
