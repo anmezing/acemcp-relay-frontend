@@ -9,6 +9,7 @@ describe("MCP config", () => {
     expect(config).toEqual({
       mcpServers: {
         lce: {
+          type: "http",
           url: `${RELAY_URL}/mcp`,
           headers: {
             Authorization: "Bearer YOUR_API_KEY",
@@ -25,6 +26,7 @@ describe("MCP config", () => {
 
     expect(json).toContain('"Authorization": "Bearer key-value"');
     expect(json).toContain('"X-Client-Id": "client-value"');
+    expect(json).toContain('"type": "http"');
     expect(toml).toContain('Authorization = "Bearer key-value"');
     expect(toml).toContain('"X-Client-Id" = "client-value"');
   });

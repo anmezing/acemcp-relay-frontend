@@ -12,6 +12,7 @@ export function buildMcpConfigJson(apiKey: string | null, deviceId: string | nul
     {
       mcpServers: {
         lce: {
+          type: "http",
           url: `${RELAY_URL}/mcp`,
           headers: {
             Authorization: `Bearer ${apiKey || KEY_PLACEHOLDER}`,

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { buildMcpConfigJson } from "@/lib/mcp-config";
+import { buildMcpConfigJson, buildMcpConfigToml } from "@/lib/mcp-config";
 import {
   Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github, Trash2,
   Key, FileText, User, Database, ScrollText, Building2, Users, Coins,
@@ -256,8 +256,14 @@ export default function ConsolePage() {
   const [tenantStatsError, setTenantStatsError] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [mcpConfigFormat, setMcpConfigFormat] = useState<"json" | "toml">("json");
 
-  const mcpConfig = useMemo(() => buildMcpConfigJson(fullKey, deviceId), [fullKey, deviceId]);
+  const mcpConfig = useMemo(
+    () => mcpConfigFormat === "toml"
+      ? buildMcpConfigToml(fullKey, deviceId)
+      : buildMcpConfigJson(fullKey, deviceId),
+    [fullKey, deviceId, mcpConfigFormat]
+  );
 
   const generateAndCopyConfig = async () => {
     if (loading) return;
@@ -274,7 +280,10 @@ export default function ConsolePage() {
       setDeviceId(device);
       await fetchKeyInfo();
 
-      await navigator.clipboard.writeText(buildMcpConfigJson(key, device));
+      const config = mcpConfigFormat === "toml"
+        ? buildMcpConfigToml(key, device)
+        : buildMcpConfigJson(key, device);
+      await navigator.clipboard.writeText(config);
       markConfigCopied();
     } catch (error) {
       console.error("一键复制配置失败:", error);
@@ -832,8 +841,38 @@ export default function ConsolePage() {
                             <h3 className="text-white font-medium">添加远程 MCP 服务器</h3>
                           </div>
                           <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-                            在 Cursor / Codex / Claude Desktop 等 MCP 客户端中添加以下配置，点击「一键复制」自动生成密钥和设备 ID：
+                            Cursor、Claude Code 和 Codex 均可直接连接远程 MCP。选择对应格式后，点击「一键复制」自动生成密钥和客户端 ID：
                           </p>
+                          <div
+                            role="tablist"
+                            aria-label="MCP 客户端配置格式"
+                            className="mb-3 grid grid-cols-2 rounded-lg border border-white/[0.08] bg-[#0a0f1a] p-1"
+                          >
+                            {[
+                              { value: "json" as const, label: "Cursor / Claude Code" },
+                              { value: "toml" as const, label: "Codex" },
+                            ].map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                role="tab"
+                                aria-selected={mcpConfigFormat === option.value}
+                                onClick={() => {
+                                  setMcpConfigFormat(option.value);
+                                  resetConfigCopied();
+                                  setConfigError("");
+                                }}
+                                className={cn(
+                                  "min-h-9 rounded-md px-3 py-2 text-xs font-medium transition-colors",
+                                  mcpConfigFormat === option.value
+                                    ? "bg-white/[0.08] text-white"
+                                    : "text-slate-500 hover:text-slate-300"
+                                )}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
                           <div className="relative group">
                             <div className="bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-3 font-mono text-sm overflow-x-auto">
                               <pre className="text-slate-300 whitespace-pre-wrap break-all">
@@ -866,7 +905,7 @@ export default function ConsolePage() {
                             <h3 className="text-white font-medium">可用工具</h3>
                           </div>
                           <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-                            连接云端 MCP 后，IDE 会自动发现以下 4 个工具：
+                            连接云端 MCP 后，编码 Agent 会自动发现以下 4 个工具：
                           </p>
                           <div className="space-y-2">
                             {[
@@ -882,7 +921,7 @@ export default function ConsolePage() {
                             ))}
                           </div>
                           <p className="text-slate-500 text-xs mt-4 leading-relaxed">
-                            本地文件与 Git 信息由 IDE Agent 自身工具读取；LCE 只接收 Agent 明确提交的可索引文本内容。
+                            本地文件与 Git 信息由编码 Agent 自身工具读取；LCE 只接收 Agent 明确提交的可索引文本内容。
                           </p>
                         </CardContent>
                       </Card>
@@ -1242,7 +1281,7 @@ export default function ConsolePage() {
                       </div>
                     ) : tenantStats && !tenantStats.exists ? (
                       <div className="flex flex-col items-center py-8 text-center text-slate-500">
-                        <p>尚未建立索引。请让 IDE Agent 调用 codebase_index 同步当前项目。</p>
+                        <p>尚未建立索引。请让编码 Agent 调用 codebase_index 同步当前项目。</p>
                         <Button
                           variant="glass"
                           size="sm"

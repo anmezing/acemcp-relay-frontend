@@ -159,7 +159,7 @@ export function UserModelConfigTab() {
   }, [form]);
 
   const save = useCallback(async () => {
-    if (!confirm("保存自定义模型后，你的检索索引将被清空；下次让 IDE Agent 调用 codebase_index 同步时会全量重建（embedding 费用走你自己的 key）。确认保存？")) {
+    if (!confirm("保存自定义模型后，你的检索索引将被清空；下次让编码 Agent 调用 codebase_index 同步时会全量重建（embedding 费用走你自己的 key）。确认保存？")) {
       return;
     }
     setBusy(true);
@@ -172,7 +172,7 @@ export function UserModelConfigTab() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      showNotice("已保存。请让 IDE Agent 调用 codebase_index 重新同步项目", true);
+      showNotice("已保存。请让编码 Agent 调用 codebase_index 重新同步项目", true);
       await load();
     } catch (error) {
       showNotice(`保存失败：${error instanceof Error ? error.message : String(error)}`, false);
@@ -194,7 +194,7 @@ export function UserModelConfigTab() {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setForm(EMPTY_FORM);
-      showNotice("已恢复平台默认。请让 IDE Agent 调用 codebase_index 重新同步项目", true);
+      showNotice("已恢复平台默认。请让编码 Agent 调用 codebase_index 重新同步项目", true);
       await load();
     } catch {
       showNotice("操作失败，请重试", false);

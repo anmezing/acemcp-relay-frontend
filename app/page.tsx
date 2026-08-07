@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { AGENT_RULES_SNIPPET } from "@/lib/agent-rules";
-import { buildMcpConfigJson } from "@/lib/mcp-config";
+import { buildMcpConfigJson, buildMcpConfigToml } from "@/lib/mcp-config";
 
 export default function Home() {
   return (
@@ -44,7 +44,7 @@ export default function Home() {
           </div>
 
           <p className="text-lg md:text-xl text-slate-400 font-light tracking-wide opacity-0 animate-float-up animate-delay-200 max-w-2xl mx-auto leading-relaxed">
-            AI 编码 Agent 的代码上下文引擎，为 Cursor、Claude Desktop 等 IDE 提供语义级代码理解能力
+            AI 编码 Agent 的代码上下文引擎，为 Cursor、Claude Code、Codex 提供语义级代码理解能力
           </p>
 
           <div className="flex flex-wrap justify-center gap-4 pt-4">
@@ -95,7 +95,7 @@ export default function Home() {
                 例如，你可以直接用自然语言提问：&ldquo;处理用户认证的逻辑在哪里？&rdquo;或&ldquo;数据库连接池断开后如何恢复？&rdquo;，LCE 会返回最相关的代码片段及其上下文。
               </p>
               <p>
-                LCE 提供开箱即用的云端服务。你无需在本地安装任何组件，只需在 IDE 中添加一个 MCP 服务器地址，AI Agent 就能直接使用全部检索能力。
+                LCE 提供开箱即用的云端服务。你无需在本地安装任何组件，只需在编码 Agent 中添加一个 MCP 服务器地址，就能直接使用全部检索能力。
               </p>
             </div>
           </section>
@@ -146,19 +146,24 @@ export default function Home() {
               <StepCard step={1} title="注册并获取 API Key">
                 登录控制台，在「密钥管理」中生成你的 API Key。
               </StepCard>
-              <StepCard step={2} title="在 IDE 中添加 MCP 服务器">
+              <StepCard step={2} title="添加远程 MCP 服务器">
                 <div className="space-y-3">
-                  <span>在 Cursor 或 Claude Desktop 的 MCP 设置中添加以下配置。登录控制台后，可在「配置说明」中一键复制已填充密钥的完整配置：</span>
+                  <span>Cursor 与 Claude Code 使用远程 HTTP JSON，Codex 使用 TOML。登录控制台后，可在「配置说明」中选择客户端并一键复制完整配置：</span>
+                  <p className="text-xs text-slate-500">Cursor / Claude Code</p>
                   <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-sm overflow-x-auto">
                     <pre className="text-slate-300 whitespace-pre">{buildMcpConfigJson(null, null)}</pre>
+                  </div>
+                  <p className="pt-2 text-xs text-slate-500">Codex</p>
+                  <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-sm overflow-x-auto">
+                    <pre className="text-slate-300 whitespace-pre">{buildMcpConfigToml(null, null)}</pre>
                   </div>
                 </div>
               </StepCard>
               <StepCard step={3} title="要求 AI Agent 优先使用 LCE">
                 <div className="space-y-3">
                   <span>
-                    只添加 MCP 服务器并不保证 Agent 会用它。在项目根目录的 CLAUDE.md 或
-                    AGENTS.md（Cursor 用户也可放入 .cursor/rules）中加入以下规则，
+                    只添加 MCP 服务器并不保证 Agent 会用它。在项目根目录的 CLAUDE.md、
+                    AGENTS.md 或 .cursor/rules 中加入以下规则，
                     要求 Agent 查找、理解代码时必须优先使用 LCE 工具，而不是 grep 或逐文件浏览。
                     登录控制台后可在「配置说明」中一键复制：
                   </span>
@@ -169,7 +174,7 @@ export default function Home() {
               </StepCard>
               <StepCard step={4} title="初始化代码索引">
                 <div className="space-y-3">
-                  <span>连接 MCP 后，让 AI Agent 同步当前项目。Agent 使用 IDE 自带的文件读取能力，云端服务负责差量计算与索引处理：</span>
+                  <span>连接 MCP 后，让 AI Agent 同步当前项目。Agent 使用自身文件读取能力，云端服务负责差量计算与索引处理：</span>
                   <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 space-y-3">
                     <div className="flex gap-3">
                       <span className="text-cyan-400 font-mono text-xs shrink-0 mt-0.5">1.</span>
@@ -214,11 +219,11 @@ export default function Home() {
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>
-                    <span>远程 MCP 无法主动读取本地磁盘或监听文件变化；索引同步由 IDE Agent 使用自身文件工具发起</span>
+                    <span>远程 MCP 无法主动读取本地磁盘或监听文件变化；索引同步由编码 Agent 使用自身文件工具发起</span>
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>
-                    <span>Git 状态、历史、blame 与工作区 diff 由 IDE Agent 的本地 Git 工具处理，不会被包装成云端能力</span>
+                    <span>Git 状态、历史、blame 与工作区 diff 由编码 Agent 的本地 Git 工具处理，不会被包装成云端能力</span>
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>
