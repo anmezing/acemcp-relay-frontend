@@ -990,7 +990,7 @@ export default function ConsolePage() {
                               : [
                                   { name: "codebase-retrieval", desc: "语义检索项目代码上下文" },
                                   { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析" },
-                                  { name: "codebase_index", desc: "首次与增量同步项目代码索引" },
+                                  { name: "codebase_index", desc: "首次与增量建立项目代码索引" },
                                 ]
                             ).map((tool) => (
                               <div key={tool.name} className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
@@ -1357,7 +1357,7 @@ export default function ConsolePage() {
                       </div>
                     ) : tenantStats && !tenantStats.exists ? (
                       <div className="flex flex-col items-center py-8 text-center text-slate-500">
-                        <p>尚未建立索引。{mcpConfigMode === "cloud" ? "配置完成后启动 IDE，首次连接会自动完成索引。" : "请让编码 Agent 调用 codebase_index 同步当前项目。"}</p>
+                        <p>尚未建立索引。{mcpConfigMode === "cloud" ? "配置完成后启动 IDE，首次连接会自动完成索引。" : "请让编码 Agent 调用 codebase_index 建立项目索引。"}</p>
                         <Button
                           variant="glass"
                           size="sm"

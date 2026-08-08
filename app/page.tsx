@@ -118,7 +118,7 @@ export default function Home() {
               />
               <FeatureCard
                 title="增量索引更新"
-                description="Agent 再次提交项目清单时，服务端仅要求上传新增和修改的文件，并自动处理删除，同步更新语义索引、全文索引和符号关系。"
+                description="代码变化后仅处理新增和修改的文件，自动处理删除，同时更新语义索引、全文索引和符号关系。"
               />
               <FeatureCard
                 title="多语言代码支持"
