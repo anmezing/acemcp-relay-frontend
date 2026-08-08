@@ -91,7 +91,7 @@ export default function Home() {
                 LCE 是一个<span className="text-white">代码上下文引擎</span>，它将代码仓库索引为结构化语义数据，让 AI 编码 Agent 能像理解人类语言一样理解你的代码。
               </p>
               <p>
-                AI 编程 Agent 通常靠 grep 逐次搜索来理解代码库——一次搜一个关键词，猜对了才能找到，猜错了就要反复试，每轮都在消耗<span className="text-white">上下文窗口</span>。
+                AI 编程 Agent 通常靠 grep 逐次搜索来理解代码库——一次搜一个关键词，猜对了才能找到，猜错了就漏掉相关调用和修改，每轮都在消耗<span className="text-white">上下文窗口</span>。
                 LCE 把这件事变成一次调用：Agent 描述它要解决的问题，LCE 返回一整包相关代码——语义向量、全文索引、符号图谱<span className="text-white">三路召回</span>合并排序，附带调用链、定义、引用等结构化证据。Agent 不需要提前知道该搜什么关键词，也不需要多轮试探。
               </p>
               <p>
