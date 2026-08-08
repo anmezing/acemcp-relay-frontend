@@ -848,7 +848,7 @@ export default function ConsolePage() {
                               <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
                                 1
                               </span>
-                              <h3 className="text-white font-medium">安装客户端（一次性）</h3>
+                              <h3 className="text-white font-medium">安装客户端</h3>
                             </div>
                             <p className="text-slate-400 text-sm mb-3">在终端运行以下命令，需要 Node.js 20+：</p>
                             <div className="space-y-2">

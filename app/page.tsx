@@ -149,7 +149,7 @@ export default function Home() {
               <StepCard step={2} title="安装并配置">
                 <div className="space-y-3">
                   <span>
-                    在终端运行安装命令（一次性），然后将 MCP 配置添加到 IDE。需要 Node.js 20+。
+                    在终端运行安装命令，然后将 MCP 配置添加到 IDE。需要 Node.js 20+。
                     登录控制台后，可在「配置说明」中一键复制带密钥的完整配置：
                   </span>
                   <p className="text-xs text-slate-500">安装（macOS / Linux）</p>
