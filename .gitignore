@@ -43,5 +43,6 @@ next-env.d.ts
 
 .claude
 
-# cloud client build artifact
-/public/lce-cloud.js
+# cloud client build artifacts
+/public/lce-cloud.cjs
+/public/boot.js

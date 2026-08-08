@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { AGENT_RULES_SNIPPET } from "@/lib/agent-rules";
-import { buildCloudMcpConfigJson, buildCloudMcpConfigToml } from "@/lib/mcp-config";
+import { buildCloudMcpConfigJson, buildCloudMcpConfigToml, INSTALL_COMMAND } from "@/lib/mcp-config";
 
 export default function Home() {
   return (
@@ -146,12 +146,16 @@ export default function Home() {
               <StepCard step={1} title="注册并获取 API Key">
                 登录控制台，在「密钥管理」中生成你的 API Key。
               </StepCard>
-              <StepCard step={2} title="添加 MCP 配置">
+              <StepCard step={2} title="安装并配置">
                 <div className="space-y-3">
                   <span>
-                    将以下配置添加到 IDE 的 MCP 设置中（需要 Node.js 20+）。
+                    在终端运行安装命令（一次性），然后将 MCP 配置添加到 IDE。需要 Node.js 20+。
                     登录控制台后，可在「配置说明」中一键复制带密钥的完整配置：
                   </span>
+                  <p className="text-xs text-slate-500">安装（macOS / Linux）</p>
+                  <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-xs overflow-x-auto">
+                    <pre className="text-slate-300 whitespace-pre select-all">{INSTALL_COMMAND}</pre>
+                  </div>
                   <p className="text-xs text-slate-500">Cursor / Claude Code</p>
                   <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-sm overflow-x-auto">
                     <pre className="text-slate-300 whitespace-pre">{buildCloudMcpConfigJson(null)}</pre>

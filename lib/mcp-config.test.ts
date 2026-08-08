@@ -31,14 +31,14 @@ describe("MCP config", () => {
   });
 
   describe("cloud stdio mode", () => {
-    it("generates npx config with api key", () => {
+    it("generates boot.js config with api key", () => {
       const config = JSON.parse(buildCloudMcpConfigJson("sk-test"));
 
       expect(config).toEqual({
         mcpServers: {
           lce: {
-            command: "npx",
-            args: ["-y", "@anmezing/lce-cloud", "--key", "sk-test"],
+            command: "node",
+            args: ["~/.lce/boot.js", "--key", "sk-test"],
           },
         },
       });
@@ -47,14 +47,14 @@ describe("MCP config", () => {
     it("generates placeholder config without key", () => {
       const config = JSON.parse(buildCloudMcpConfigJson(null));
 
-      expect(config.mcpServers.lce.args).toEqual(["-y", "@anmezing/lce-cloud", "--key", "YOUR_API_KEY"]);
+      expect(config.mcpServers.lce.args).toEqual(["~/.lce/boot.js", "--key", "YOUR_API_KEY"]);
     });
 
     it("generates TOML config", () => {
       const toml = buildCloudMcpConfigToml("sk-test");
 
-      expect(toml).toContain('command = "npx"');
-      expect(toml).toContain('"@anmezing/lce-cloud"');
+      expect(toml).toContain('command = "node"');
+      expect(toml).toContain('"~/.lce/boot.js"');
       expect(toml).toContain('"sk-test"');
     });
   });
