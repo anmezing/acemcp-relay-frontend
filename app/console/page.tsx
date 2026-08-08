@@ -856,7 +856,7 @@ export default function ConsolePage() {
                               下载 <code className="text-cyan-400 text-xs">lce-cloud.js</code> 并放到 home 目录（或任意位置，记得修改下方配置中的路径）。需要 Node.js 20+。
                             </p>
                             <a
-                              href="/api/download/lce-cloud"
+                              href="/lce-cloud.js"
                               download="lce-cloud.js"
                               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-300 text-sm font-medium hover:from-cyan-500/30 hover:to-blue-500/30 transition-colors"
                             >
