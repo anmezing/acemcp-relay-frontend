@@ -2,7 +2,7 @@ import { Header } from "@/components/Header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { AGENT_RULES_SNIPPET } from "@/lib/agent-rules";
+import { AGENT_RULES_CLOUD } from "@/lib/agent-rules";
 import { buildCloudMcpConfigJson, buildCloudMcpConfigToml, INSTALL_COMMAND } from "@/lib/mcp-config";
 
 export default function Home() {
@@ -175,7 +175,7 @@ export default function Home() {
                     登录控制台后可在「配置说明」中一键复制：
                   </span>
                   <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-xs overflow-x-auto">
-                    <pre className="text-slate-300 whitespace-pre-wrap break-words">{AGENT_RULES_SNIPPET}</pre>
+                    <pre className="text-slate-300 whitespace-pre-wrap break-words">{AGENT_RULES_CLOUD}</pre>
                   </div>
                 </div>
               </StepCard>

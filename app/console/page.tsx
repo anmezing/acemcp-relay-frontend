@@ -38,7 +38,7 @@ import { AdminStatsTab } from "@/components/admin/AdminStatsTab";
 import { AdminQuotaTab } from "@/components/admin/AdminQuotaTab";
 import { AdminModelsTab } from "@/components/admin/AdminModelsTab";
 import { AdminSettingsTab } from "@/components/admin/AdminSettingsTab";
-import { AGENT_RULES_SNIPPET } from "@/lib/agent-rules";
+import { AGENT_RULES_CLOUD, AGENT_RULES_REMOTE } from "@/lib/agent-rules";
 import { UserModelConfigTab } from "@/components/UserModelConfigTab";
 
 type Tab =
@@ -1003,7 +1003,7 @@ export default function ConsolePage() {
                       </Card>
 
                       {/* Step 3: Agent rules */}
-                      <AgentRulesCard />
+                      <AgentRulesCard mode={mcpConfigMode} />
 
                       {/* Tips */}
                       <Card className="bg-gradient-to-br from-cyan-500/[0.06] to-blue-500/[0.06] border-cyan-500/20">
@@ -1807,11 +1807,12 @@ function LogEntry({ log, onClick }: { log: RequestLog; onClick?: () => void }) {
 
 // 配置说明第 3 步：引导用户在 CLAUDE.md / AGENTS.md 中声明 LCE 使用规则
 // （只加 MCP 配置不保证代理会用，需要项目规则显式要求）
-function AgentRulesCard() {
+function AgentRulesCard({ mode }: { mode: "cloud" | "remote" }) {
+  const snippet = mode === "cloud" ? AGENT_RULES_CLOUD : AGENT_RULES_REMOTE;
   const { copied, trigger: markCopied } = useCopyFeedback();
   const copyRules = async () => {
     try {
-      await navigator.clipboard.writeText(AGENT_RULES_SNIPPET);
+      await navigator.clipboard.writeText(snippet);
       markCopied();
     } catch {}
   };
@@ -1834,7 +1835,7 @@ function AgentRulesCard() {
         <div className="relative group">
           <div className="bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-3 font-mono text-xs overflow-x-auto">
             <pre className="text-slate-300 whitespace-pre-wrap break-words">
-              <code>{AGENT_RULES_SNIPPET}</code>
+              <code>{snippet}</code>
             </pre>
           </div>
           <Button variant="glass" size="sm" onClick={copyRules} className="absolute top-2 right-2">
