@@ -42,7 +42,7 @@ export async function GET() {
 
   try {
     const row = await getUserModelConfigRow(user.id);
-    if (!row) return NextResponse.json({ ...base, configured: false });
+    if (!row || !row.config_enc) return NextResponse.json({ ...base, configured: false });
     const config = decryptModelConfig(row.config_enc);
     return NextResponse.json({
       ...base,
