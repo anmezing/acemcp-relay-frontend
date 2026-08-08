@@ -91,8 +91,8 @@ export default function Home() {
                 LCE 是一个<span className="text-white">代码上下文引擎</span>，它将代码仓库索引为结构化语义数据，让 AI 编码 Agent 能像理解人类语言一样理解你的代码。
               </p>
               <p>
-                传统的代码搜索依赖关键词匹配——你必须精确知道函数名、变量名才能找到它。LCE 不同：它理解代码的<span className="text-white">语义</span>。
-                例如，你可以直接用自然语言提问：&ldquo;处理用户认证的逻辑在哪里？&rdquo;或&ldquo;数据库连接池断开后如何恢复？&rdquo;，LCE 会返回最相关的代码片段及其上下文。
+                AI 编程 Agent 通常靠 grep 逐次搜索来理解代码库——一次搜一个关键词，猜对了才能找到，猜错了就要反复试，每轮都在消耗<span className="text-white">上下文窗口</span>。
+                LCE 把这件事变成一次调用：Agent 描述它要解决的问题，LCE 返回一整包相关代码——语义向量、全文索引、符号图谱<span className="text-white">三路召回</span>合并排序，附带调用链、定义、引用等结构化证据。Agent 不需要提前知道该搜什么关键词，也不需要多轮试探。
               </p>
               <p>
                 LCE 提供开箱即用的云端服务。你无需在本地安装任何组件，只需在编码 Agent 中添加一个 MCP 服务器地址，就能直接使用全部检索能力。
