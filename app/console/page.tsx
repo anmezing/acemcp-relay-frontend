@@ -983,9 +983,8 @@ export default function ConsolePage() {
                               ? [
                                   { name: "codebase-retrieval", desc: "语义检索项目代码上下文" },
                                   { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析" },
-                                  { name: "codebase_tenant_stats", desc: "索引统计信息" },
-                                  { name: "codebase_git_context", desc: "Git 状态、diff、历史、blame（本地执行）" },
-                                  { name: "codebase_review_changes", desc: "变更评审与检索计划（本地执行）" },
+                                  { name: "codebase_git_context", desc: "Git 状态、diff、提交历史、blame" },
+                                  { name: "codebase_review_changes", desc: "变更评审与检索计划" },
                                 ]
                               : [
                                   { name: "codebase-retrieval", desc: "语义检索项目代码上下文" },

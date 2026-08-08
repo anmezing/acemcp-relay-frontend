@@ -2,7 +2,6 @@ export const AGENT_RULES_CLOUD = `## 代码检索（LCE）
 
 - 查找、理解、定位代码一律优先使用 \`codebase-retrieval\`（语义检索），用自然语言描述要找的功能、符号或逻辑，不要先用 grep / 逐文件浏览。
 - 分析符号的定义、引用、调用链、依赖关系与修改影响用 \`codebase_symbol_graph\`。
-- 查看索引覆盖率、文件数、分块数和语言分布用 \`codebase_tenant_stats\`。
 - Git 状态、diff、提交历史、blame、分支上下文用 \`codebase_git_context\`。
 - 变更评审（review range、风险点、检索计划、测试计划）用 \`codebase_review_changes\`。
 - 仅当 LCE 工具不可用，或需要精确的正则 / 字面量匹配时，才退回本地全文搜索。`;
