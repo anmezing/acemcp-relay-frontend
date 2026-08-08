@@ -905,13 +905,12 @@ export default function ConsolePage() {
                             <h3 className="text-white font-medium">可用工具</h3>
                           </div>
                           <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-                            连接云端 MCP 后，编码 Agent 会自动发现以下 4 个工具：
+                            连接云端 MCP 后，编码 Agent 会自动发现以下 3 个工具：
                           </p>
                           <div className="space-y-2">
                             {[
                               { name: "codebase-retrieval", desc: "语义检索项目代码上下文" },
                               { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析" },
-                              { name: "codebase_tenant_stats", desc: "当前账号的远程索引统计" },
                               { name: "codebase_index", desc: "首次与增量同步项目代码索引" },
                             ].map((tool) => (
                               <div key={tool.name} className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
