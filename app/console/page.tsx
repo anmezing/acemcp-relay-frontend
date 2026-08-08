@@ -909,7 +909,7 @@ export default function ConsolePage() {
 
                           <p className="text-slate-400 text-sm mb-4 leading-relaxed">
                             {mcpConfigMode === "cloud"
-                              ? "复制配置到 IDE 即可使用，自动监听文件变化并同步到云端处理。选择格式后点击「一键复制」生成密钥："
+                              ? "复制配置到 IDE 即可使用。选择格式后点击「一键复制」生成密钥："
                               : "Cursor、Claude Code 和 Codex 均可直接连接远程 MCP。选择格式后点击「一键复制」生成密钥："}
                           </p>
 
@@ -994,7 +994,7 @@ export default function ConsolePage() {
                           </div>
                           <p className="text-slate-500 text-xs mt-4 leading-relaxed">
                             {mcpConfigMode === "cloud"
-                              ? "Cloud 模式下，本地客户端自动监听文件变化并推送到云端，无需 Agent 手动调用 codebase_index。"
+                              ? "Cloud 模式下无需 Agent 手动调用 codebase_index，索引自动完成。"
                               : "本地文件与 Git 信息由编码 Agent 自身工具读取；LCE 只接收 Agent 明确提交的可索引文本内容。"}
                           </p>
                         </CardContent>
@@ -1013,7 +1013,7 @@ export default function ConsolePage() {
                           <ul className="text-slate-400 text-xs space-y-2">
                             <li className="flex items-start gap-2">
                               <span className="text-cyan-400 mt-0.5">•</span>
-                              <span>Cloud 模式（推荐）：复制配置到 IDE，自动监听文件变化并推送到云端，索引和检索都在云端完成</span>
+                              <span>Cloud 模式（推荐）：复制配置到 IDE，索引和检索都在云端完成</span>
                             </li>
                             <li className="flex items-start gap-2">
                               <span className="text-cyan-400 mt-0.5">•</span>

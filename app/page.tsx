@@ -95,7 +95,7 @@ export default function Home() {
                 LCE 把这件事变成一次调用：Agent 描述它要解决的问题，LCE 返回一整包相关代码——语义向量、全文索引、符号图谱<span className="text-white">三路召回</span>合并排序，附带调用链、定义、引用等结构化证据。Agent 不需要提前知道该搜什么关键词，也不需要多轮试探。
               </p>
               <p>
-                LCE 提供开箱即用的云端服务。下载一个轻量客户端脚本，添加 MCP 配置，即可自动监听文件变化并推送到云端完成索引与检索。
+                LCE 提供开箱即用的云端服务。复制 MCP 配置到 IDE，即可使用云端索引与检索。
               </p>
             </div>
           </section>
@@ -180,7 +180,7 @@ export default function Home() {
                 </div>
               </StepCard>
               <StepCard step={4} title="开始检索">
-                客户端启动后会自动监听文件变化并推送到云端索引。索引就绪后，AI Agent 在编码过程中会自动调用语义检索搜索相关代码。你也可以直接要求 Agent 搜索特定功能或符号。
+                配置完成后，AI Agent 在编码过程中会自动调用语义检索搜索相关代码。你也可以直接要求 Agent 搜索特定功能或符号。
               </StepCard>
             </div>
           </section>
@@ -201,7 +201,7 @@ export default function Home() {
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>
-                    <span>Cloud 模式下，本地客户端监听文件变化并自动推送到云端；索引处理和检索均在云端完成</span>
+                    <span>Cloud 模式下，索引处理和检索均在云端完成</span>
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>
