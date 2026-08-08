@@ -205,7 +205,7 @@ export default function Home() {
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>
-                    <span>Git 状态、历史、blame 与工作区 diff 由编码 Agent 的本地 Git 工具处理，不会被包装成云端能力</span>
+                    <span>Git 状态、历史、blame 与变更评审由 LCE 在本地执行，不经过云端</span>
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>

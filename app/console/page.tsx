@@ -1357,7 +1357,7 @@ export default function ConsolePage() {
                       </div>
                     ) : tenantStats && !tenantStats.exists ? (
                       <div className="flex flex-col items-center py-8 text-center text-slate-500">
-                        <p>尚未建立索引。请让编码 Agent 调用 codebase_index 同步当前项目。</p>
+                        <p>尚未建立索引。{mcpConfigMode === "cloud" ? "配置完成后启动 IDE，首次连接会自动完成索引。" : "请让编码 Agent 调用 codebase_index 同步当前项目。"}</p>
                         <Button
                           variant="glass"
                           size="sm"
