@@ -45,4 +45,8 @@ next-env.d.ts
 
 # cloud client build artifacts
 /public/lce-cloud.cjs
+/public/lce-cloud.js
 /public/boot.js
+
+# dev logs
+*.log
