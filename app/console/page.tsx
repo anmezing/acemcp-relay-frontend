@@ -258,13 +258,11 @@ export default function ConsolePage() {
   const [mcpConfigFormat, setMcpConfigFormat] = useState<"json" | "toml">("json");
   const [mcpConfigMode, setMcpConfigMode] = useState<"cloud" | "remote">("cloud");
 
-  const CLIENT_PATH = "~/lce-cloud.js";
-
   const mcpConfig = useMemo(() => {
     if (mcpConfigMode === "cloud") {
       return mcpConfigFormat === "toml"
-        ? buildCloudMcpConfigToml(fullKey, CLIENT_PATH)
-        : buildCloudMcpConfigJson(fullKey, CLIENT_PATH);
+        ? buildCloudMcpConfigToml(fullKey)
+        : buildCloudMcpConfigJson(fullKey);
     }
     return mcpConfigFormat === "toml"
       ? buildMcpConfigToml(fullKey)
@@ -287,8 +285,8 @@ export default function ConsolePage() {
       let config: string;
       if (mcpConfigMode === "cloud") {
         config = mcpConfigFormat === "toml"
-          ? buildCloudMcpConfigToml(key, CLIENT_PATH)
-          : buildCloudMcpConfigJson(key, CLIENT_PATH);
+          ? buildCloudMcpConfigToml(key)
+          : buildCloudMcpConfigJson(key);
       } else {
         config = mcpConfigFormat === "toml"
           ? buildMcpConfigToml(key)
@@ -842,39 +840,12 @@ export default function ConsolePage() {
                     <h2 className="text-lg font-medium text-white mb-6">配置说明</h2>
 
                     <div className="space-y-6">
-                      {/* Step 1: Download client (cloud mode only) */}
-                      {mcpConfigMode === "cloud" && (
-                        <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
-                          <CardContent className="p-5">
-                            <div className="flex items-center gap-3 mb-3">
-                              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
-                                1
-                              </span>
-                              <h3 className="text-white font-medium">下载客户端</h3>
-                            </div>
-                            <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-                              下载 <code className="text-cyan-400 text-xs">lce-cloud.js</code> 并放到 home 目录（或任意位置，记得修改下方配置中的路径）。需要 Node.js 20+。
-                            </p>
-                            <a
-                              href="/lce-cloud.js"
-                              download="lce-cloud.js"
-                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-300 text-sm font-medium hover:from-cyan-500/30 hover:to-blue-500/30 transition-colors"
-                            >
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                              </svg>
-                              下载 lce-cloud.js
-                            </a>
-                          </CardContent>
-                        </Card>
-                      )}
-
-                      {/* Step 2: MCP Config */}
+                      {/* Step 1: MCP Config */}
                       <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
                         <CardContent className="p-5">
                           <div className="flex items-center gap-3 mb-3">
                             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
-                              {mcpConfigMode === "cloud" ? 2 : 1}
+                              1
                             </span>
                             <h3 className="text-white font-medium">添加 MCP 服务器</h3>
                           </div>
@@ -913,7 +884,7 @@ export default function ConsolePage() {
 
                           <p className="text-slate-400 text-sm mb-4 leading-relaxed">
                             {mcpConfigMode === "cloud"
-                              ? "本地运行 lce-cloud.js，自动监听文件变化并同步到云端处理。选择格式后点击「一键复制」生成密钥："
+                              ? "复制配置到 IDE 即可使用，自动监听文件变化并同步到云端处理。选择格式后点击「一键复制」生成密钥："
                               : "Cursor、Claude Code 和 Codex 均可直接连接远程 MCP。选择格式后点击「一键复制」生成密钥："}
                           </p>
 
@@ -1017,7 +988,7 @@ export default function ConsolePage() {
                           <ul className="text-slate-400 text-xs space-y-2">
                             <li className="flex items-start gap-2">
                               <span className="text-cyan-400 mt-0.5">•</span>
-                              <span>Cloud 模式（推荐）：本地运行 lce-cloud.js，自动监听文件变化并推送到云端，索引和检索都在云端完成</span>
+                              <span>Cloud 模式（推荐）：复制配置到 IDE，自动监听文件变化并推送到云端，索引和检索都在云端完成</span>
                             </li>
                             <li className="flex items-start gap-2">
                               <span className="text-cyan-400 mt-0.5">•</span>

@@ -4,13 +4,15 @@ const KEY_PLACEHOLDER = "YOUR_API_KEY";
 
 // ── Cloud Mode (stdio, 推荐) ──────────────────────────────────
 
-export function buildCloudMcpConfigJson(apiKey: string | null, clientPath: string): string {
+const CLOUD_PACKAGE = "@anmezing/lce-cloud";
+
+export function buildCloudMcpConfigJson(apiKey: string | null): string {
   return JSON.stringify(
     {
       mcpServers: {
         lce: {
-          command: "node",
-          args: [clientPath, "--key", apiKey || KEY_PLACEHOLDER],
+          command: "npx",
+          args: ["-y", CLOUD_PACKAGE, "--key", apiKey || KEY_PLACEHOLDER],
         },
       },
     },
@@ -23,11 +25,11 @@ function tomlString(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
-export function buildCloudMcpConfigToml(apiKey: string | null, clientPath: string): string {
+export function buildCloudMcpConfigToml(apiKey: string | null): string {
   return [
     `[mcp_servers.lce]`,
-    `command = "node"`,
-    `args = [${tomlString(clientPath)}, "--key", ${tomlString(apiKey || KEY_PLACEHOLDER)}]`,
+    `command = "npx"`,
+    `args = ["-y", ${tomlString(CLOUD_PACKAGE)}, "--key", ${tomlString(apiKey || KEY_PLACEHOLDER)}]`,
   ].join("\n");
 }
 

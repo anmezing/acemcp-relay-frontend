@@ -146,19 +146,19 @@ export default function Home() {
               <StepCard step={1} title="注册并获取 API Key">
                 登录控制台，在「密钥管理」中生成你的 API Key。
               </StepCard>
-              <StepCard step={2} title="下载客户端并添加 MCP 配置">
+              <StepCard step={2} title="添加 MCP 配置">
                 <div className="space-y-3">
                   <span>
-                    下载 <code className="text-cyan-400 text-xs">lce-cloud.js</code> 到 home 目录（需要 Node.js 20+），然后将以下配置添加到 IDE 的 MCP 设置中。
+                    将以下配置添加到 IDE 的 MCP 设置中（需要 Node.js 20+）。
                     登录控制台后，可在「配置说明」中一键复制带密钥的完整配置：
                   </span>
                   <p className="text-xs text-slate-500">Cursor / Claude Code</p>
                   <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-sm overflow-x-auto">
-                    <pre className="text-slate-300 whitespace-pre">{buildCloudMcpConfigJson(null, "~/lce-cloud.js")}</pre>
+                    <pre className="text-slate-300 whitespace-pre">{buildCloudMcpConfigJson(null)}</pre>
                   </div>
                   <p className="pt-2 text-xs text-slate-500">Codex</p>
                   <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-sm overflow-x-auto">
-                    <pre className="text-slate-300 whitespace-pre">{buildCloudMcpConfigToml(null, "~/lce-cloud.js")}</pre>
+                    <pre className="text-slate-300 whitespace-pre">{buildCloudMcpConfigToml(null)}</pre>
                   </div>
                 </div>
               </StepCard>
