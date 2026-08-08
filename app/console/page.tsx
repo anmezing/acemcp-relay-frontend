@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { buildMcpConfigJson, buildMcpConfigToml } from "@/lib/mcp-config";
+import { buildCloudMcpConfigJson, buildCloudMcpConfigToml, buildMcpConfigJson, buildMcpConfigToml } from "@/lib/mcp-config";
 import {
   Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github, Trash2,
   Key, FileText, User, Database, ScrollText, Building2, Users, Coins,
@@ -255,15 +255,21 @@ export default function ConsolePage() {
   const [tenantStatsLoading, setTenantStatsLoading] = useState(true);
   const [tenantStatsError, setTenantStatsError] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [deviceId, setDeviceId] = useState<string | null>(null);
   const [mcpConfigFormat, setMcpConfigFormat] = useState<"json" | "toml">("json");
+  const [mcpConfigMode, setMcpConfigMode] = useState<"cloud" | "remote">("cloud");
 
-  const mcpConfig = useMemo(
-    () => mcpConfigFormat === "toml"
-      ? buildMcpConfigToml(fullKey, deviceId)
-      : buildMcpConfigJson(fullKey, deviceId),
-    [fullKey, deviceId, mcpConfigFormat]
-  );
+  const CLIENT_PATH = "~/lce-cloud.js";
+
+  const mcpConfig = useMemo(() => {
+    if (mcpConfigMode === "cloud") {
+      return mcpConfigFormat === "toml"
+        ? buildCloudMcpConfigToml(fullKey, CLIENT_PATH)
+        : buildCloudMcpConfigJson(fullKey, CLIENT_PATH);
+    }
+    return mcpConfigFormat === "toml"
+      ? buildMcpConfigToml(fullKey)
+      : buildMcpConfigJson(fullKey);
+  }, [fullKey, mcpConfigFormat, mcpConfigMode]);
 
   const generateAndCopyConfig = async () => {
     if (loading) return;
@@ -275,14 +281,19 @@ export default function ConsolePage() {
       if (!res.ok) throw new Error(`获取 MCP 配置失败（HTTP ${res.status}）`);
       const data = await res.json();
       const key = data.apiKey as string;
-      const device = data.deviceId as string;
       setFullKey(key);
-      setDeviceId(device);
       await fetchKeyInfo();
 
-      const config = mcpConfigFormat === "toml"
-        ? buildMcpConfigToml(key, device)
-        : buildMcpConfigJson(key, device);
+      let config: string;
+      if (mcpConfigMode === "cloud") {
+        config = mcpConfigFormat === "toml"
+          ? buildCloudMcpConfigToml(key, CLIENT_PATH)
+          : buildCloudMcpConfigJson(key, CLIENT_PATH);
+      } else {
+        config = mcpConfigFormat === "toml"
+          ? buildMcpConfigToml(key)
+          : buildMcpConfigJson(key);
+      }
       await navigator.clipboard.writeText(config);
       markConfigCopied();
     } catch (error) {
@@ -831,18 +842,82 @@ export default function ConsolePage() {
                     <h2 className="text-lg font-medium text-white mb-6">配置说明</h2>
 
                     <div className="space-y-6">
-                      {/* Step 1: MCP Config */}
+                      {/* Step 1: Download client (cloud mode only) */}
+                      {mcpConfigMode === "cloud" && (
+                        <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
+                          <CardContent className="p-5">
+                            <div className="flex items-center gap-3 mb-3">
+                              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
+                                1
+                              </span>
+                              <h3 className="text-white font-medium">下载客户端</h3>
+                            </div>
+                            <p className="text-slate-400 text-sm mb-4 leading-relaxed">
+                              下载 <code className="text-cyan-400 text-xs">lce-cloud.js</code> 并放到 home 目录（或任意位置，记得修改下方配置中的路径）。需要 Node.js 20+。
+                            </p>
+                            <a
+                              href="/api/download/lce-cloud"
+                              download="lce-cloud.js"
+                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-300 text-sm font-medium hover:from-cyan-500/30 hover:to-blue-500/30 transition-colors"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                              </svg>
+                              下载 lce-cloud.js
+                            </a>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {/* Step 2: MCP Config */}
                       <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
                         <CardContent className="p-5">
                           <div className="flex items-center gap-3 mb-3">
                             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
-                              1
+                              {mcpConfigMode === "cloud" ? 2 : 1}
                             </span>
-                            <h3 className="text-white font-medium">添加远程 MCP 服务器</h3>
+                            <h3 className="text-white font-medium">添加 MCP 服务器</h3>
                           </div>
+
+                          {/* Mode toggle: cloud / remote */}
+                          <div
+                            role="tablist"
+                            aria-label="MCP 接入模式"
+                            className="mb-3 grid grid-cols-2 rounded-lg border border-white/[0.08] bg-[#0a0f1a] p-1"
+                          >
+                            {[
+                              { value: "cloud" as const, label: "Cloud 模式（推荐）" },
+                              { value: "remote" as const, label: "远程 HTTP 模式" },
+                            ].map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                role="tab"
+                                aria-selected={mcpConfigMode === option.value}
+                                onClick={() => {
+                                  setMcpConfigMode(option.value);
+                                  resetConfigCopied();
+                                  setConfigError("");
+                                }}
+                                className={cn(
+                                  "min-h-9 rounded-md px-3 py-2 text-xs font-medium transition-colors",
+                                  mcpConfigMode === option.value
+                                    ? "bg-white/[0.08] text-white"
+                                    : "text-slate-500 hover:text-slate-300"
+                                )}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+
                           <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-                            Cursor、Claude Code 和 Codex 均可直接连接远程 MCP。选择对应格式后，点击「一键复制」自动生成密钥和客户端 ID：
+                            {mcpConfigMode === "cloud"
+                              ? "本地运行 lce-cloud.js，自动监听文件变化并同步到云端处理。选择格式后点击「一键复制」生成密钥："
+                              : "Cursor、Claude Code 和 Codex 均可直接连接远程 MCP。选择格式后点击「一键复制」生成密钥："}
                           </p>
+
+                          {/* Format toggle: JSON / TOML */}
                           <div
                             role="tablist"
                             aria-label="MCP 客户端配置格式"
@@ -895,23 +970,25 @@ export default function ConsolePage() {
                         </CardContent>
                       </Card>
 
-                      {/* Step 2: Available tools */}
+                      {/* Step 3: Available tools */}
                       <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
                         <CardContent className="p-5">
                           <div className="flex items-center gap-3 mb-3">
                             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
-                              2
+                              {mcpConfigMode === "cloud" ? 3 : 2}
                             </span>
                             <h3 className="text-white font-medium">可用工具</h3>
                           </div>
                           <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-                            连接云端 MCP 后，编码 Agent 会自动发现以下 3 个工具：
+                            连接后，编码 Agent 会自动发现以下工具：
                           </p>
                           <div className="space-y-2">
                             {[
                               { name: "codebase-retrieval", desc: "语义检索项目代码上下文" },
                               { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析" },
-                              { name: "codebase_index", desc: "首次与增量同步项目代码索引" },
+                              ...(mcpConfigMode === "remote"
+                                ? [{ name: "codebase_index", desc: "首次与增量同步项目代码索引" }]
+                                : []),
                             ].map((tool) => (
                               <div key={tool.name} className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
                                 <code className="text-cyan-400 text-xs font-mono shrink-0">{tool.name}</code>
@@ -920,7 +997,9 @@ export default function ConsolePage() {
                             ))}
                           </div>
                           <p className="text-slate-500 text-xs mt-4 leading-relaxed">
-                            本地文件与 Git 信息由编码 Agent 自身工具读取；LCE 只接收 Agent 明确提交的可索引文本内容。
+                            {mcpConfigMode === "cloud"
+                              ? "Cloud 模式下，本地客户端自动监听文件变化并推送到云端，无需 Agent 手动调用 codebase_index。"
+                              : "本地文件与 Git 信息由编码 Agent 自身工具读取；LCE 只接收 Agent 明确提交的可索引文本内容。"}
                           </p>
                         </CardContent>
                       </Card>
@@ -938,15 +1017,15 @@ export default function ConsolePage() {
                           <ul className="text-slate-400 text-xs space-y-2">
                             <li className="flex items-start gap-2">
                               <span className="text-cyan-400 mt-0.5">•</span>
+                              <span>Cloud 模式（推荐）：本地运行 lce-cloud.js，自动监听文件变化并推送到云端，索引和检索都在云端完成</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                              <span className="text-cyan-400 mt-0.5">•</span>
+                              <span>远程 HTTP 模式：无需安装任何组件，适合 CI/CD 等无法运行 Node.js 的场景</span>
+                            </li>
+                            <li className="flex items-start gap-2">
+                              <span className="text-cyan-400 mt-0.5">•</span>
                               <span>每个 API Key 拥有独立的检索索引，互不影响</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                              <span className="text-cyan-400 mt-0.5">•</span>
-                              <span>客户端只需配置 MCP 服务器地址和 API Key，无需安装任何 LCE 组件</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                              <span className="text-cyan-400 mt-0.5">•</span>
-                              <span>tenant_id 由服务端根据 API Key 自动注入，客户端无需传递</span>
                             </li>
                             <li className="flex items-start gap-2">
                               <span className="text-cyan-400 mt-0.5">•</span>

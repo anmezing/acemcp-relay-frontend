@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { AGENT_RULES_SNIPPET } from "@/lib/agent-rules";
-import { buildMcpConfigJson, buildMcpConfigToml } from "@/lib/mcp-config";
+import { buildCloudMcpConfigJson, buildCloudMcpConfigToml } from "@/lib/mcp-config";
 
 export default function Home() {
   return (
@@ -56,7 +56,7 @@ export default function Home() {
               { label: "增量索引", color: "blue", delay: "animate-delay-400" },
               { label: "多语言支持", color: "emerald", delay: "animate-delay-500" },
               { label: "变更分析", color: "cyan", delay: "animate-delay-500" },
-              { label: "远程 MCP 接入", color: "blue", delay: "animate-delay-500" },
+              { label: "Cloud 模式", color: "blue", delay: "animate-delay-500" },
             ].map((item) => (
               <Badge
                 key={item.label}
@@ -95,7 +95,7 @@ export default function Home() {
                 LCE 把这件事变成一次调用：Agent 描述它要解决的问题，LCE 返回一整包相关代码——语义向量、全文索引、符号图谱<span className="text-white">三路召回</span>合并排序，附带调用链、定义、引用等结构化证据。Agent 不需要提前知道该搜什么关键词，也不需要多轮试探。
               </p>
               <p>
-                LCE 提供开箱即用的云端服务。你无需在本地安装任何组件，只需在编码 Agent 中添加一个 MCP 服务器地址，就能直接使用全部检索能力。
+                LCE 提供开箱即用的云端服务。下载一个轻量客户端脚本，添加 MCP 配置，即可自动监听文件变化并推送到云端完成索引与检索。
               </p>
             </div>
           </section>
@@ -146,16 +146,19 @@ export default function Home() {
               <StepCard step={1} title="注册并获取 API Key">
                 登录控制台，在「密钥管理」中生成你的 API Key。
               </StepCard>
-              <StepCard step={2} title="添加远程 MCP 服务器">
+              <StepCard step={2} title="下载客户端并添加 MCP 配置">
                 <div className="space-y-3">
-                  <span>Cursor 与 Claude Code 使用远程 HTTP JSON，Codex 使用 TOML。登录控制台后，可在「配置说明」中选择客户端并一键复制完整配置：</span>
+                  <span>
+                    下载 <code className="text-cyan-400 text-xs">lce-cloud.js</code> 到 home 目录（需要 Node.js 20+），然后将以下配置添加到 IDE 的 MCP 设置中。
+                    登录控制台后，可在「配置说明」中一键复制带密钥的完整配置：
+                  </span>
                   <p className="text-xs text-slate-500">Cursor / Claude Code</p>
                   <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-sm overflow-x-auto">
-                    <pre className="text-slate-300 whitespace-pre">{buildMcpConfigJson(null, null)}</pre>
+                    <pre className="text-slate-300 whitespace-pre">{buildCloudMcpConfigJson(null, "~/lce-cloud.js")}</pre>
                   </div>
                   <p className="pt-2 text-xs text-slate-500">Codex</p>
                   <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-sm overflow-x-auto">
-                    <pre className="text-slate-300 whitespace-pre">{buildMcpConfigToml(null, null)}</pre>
+                    <pre className="text-slate-300 whitespace-pre">{buildCloudMcpConfigToml(null, "~/lce-cloud.js")}</pre>
                   </div>
                 </div>
               </StepCard>
@@ -172,33 +175,8 @@ export default function Home() {
                   </div>
                 </div>
               </StepCard>
-              <StepCard step={4} title="初始化代码索引">
-                <div className="space-y-3">
-                  <span>连接 MCP 后，让 AI Agent 同步当前项目。Agent 使用自身文件读取能力，云端服务负责差量计算与索引处理：</span>
-                  <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 space-y-3">
-                    <div className="flex gap-3">
-                      <span className="text-cyan-400 font-mono text-xs shrink-0 mt-0.5">1.</span>
-                      <p className="text-slate-400 text-sm">
-                        Agent 扫描可索引的文本文件，计算清单并调用 codebase_index
-                      </p>
-                    </div>
-                    <div className="flex gap-3">
-                      <span className="text-cyan-400 font-mono text-xs shrink-0 mt-0.5">2.</span>
-                      <p className="text-slate-400 text-sm">
-                        服务端返回待更新文件，Agent 仅分批上传这些内容
-                      </p>
-                    </div>
-                    <div className="flex gap-3">
-                      <span className="text-cyan-400 font-mono text-xs shrink-0 mt-0.5">3.</span>
-                      <p className="text-slate-400 text-sm">
-                        服务端完成语义、全文、向量和符号索引；再次同步时只处理差异
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </StepCard>
-              <StepCard step={5} title="开始检索">
-                索引就绪后，AI Agent 在编码过程中会自动调用语义检索搜索相关代码。你也可以直接要求 Agent 搜索特定功能或符号。
+              <StepCard step={4} title="开始检索">
+                客户端启动后会自动监听文件变化并推送到云端索引。索引就绪后，AI Agent 在编码过程中会自动调用语义检索搜索相关代码。你也可以直接要求 Agent 搜索特定功能或符号。
               </StepCard>
             </div>
           </section>
@@ -219,7 +197,7 @@ export default function Home() {
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>
-                    <span>远程 MCP 无法主动读取本地磁盘或监听文件变化；索引同步由编码 Agent 使用自身文件工具发起</span>
+                    <span>Cloud 模式下，本地客户端监听文件变化并自动推送到云端；索引处理和检索均在云端完成</span>
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>

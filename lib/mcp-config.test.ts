@@ -1,33 +1,61 @@
 import { describe, expect, it } from "vitest";
-import { buildMcpConfigJson, buildMcpConfigToml } from "./mcp-config";
+import { buildMcpConfigJson, buildMcpConfigToml, buildCloudMcpConfigJson, buildCloudMcpConfigToml } from "./mcp-config";
 import { RELAY_URL } from "./relay";
 
 describe("MCP config", () => {
-  it("includes the registered client header in the homepage placeholder config", () => {
-    const config = JSON.parse(buildMcpConfigJson(null, null));
+  describe("remote HTTP mode", () => {
+    it("generates placeholder config without key", () => {
+      const config = JSON.parse(buildMcpConfigJson(null));
 
-    expect(config).toEqual({
-      mcpServers: {
-        lce: {
-          type: "http",
-          url: `${RELAY_URL}/mcp`,
-          headers: {
-            Authorization: "Bearer YOUR_API_KEY",
-            "X-Client-Id": "YOUR_CLIENT_ID",
+      expect(config).toEqual({
+        mcpServers: {
+          lce: {
+            type: "http",
+            url: `${RELAY_URL}/mcp`,
+            headers: {
+              Authorization: "Bearer YOUR_API_KEY",
+            },
           },
         },
-      },
+      });
+    });
+
+    it("uses the same credentials in JSON and TOML", () => {
+      const json = buildMcpConfigJson("key-value");
+      const toml = buildMcpConfigToml("key-value");
+
+      expect(json).toContain('"Authorization": "Bearer key-value"');
+      expect(json).toContain('"type": "http"');
+      expect(toml).toContain('Authorization = "Bearer key-value"');
     });
   });
 
-  it("uses the same credentials in JSON and Codex TOML configs", () => {
-    const json = buildMcpConfigJson("key-value", "client-value");
-    const toml = buildMcpConfigToml("key-value", "client-value");
+  describe("cloud stdio mode", () => {
+    it("generates stdio config with command and args", () => {
+      const config = JSON.parse(buildCloudMcpConfigJson("sk-test", "~/lce-cloud.js"));
 
-    expect(json).toContain('"Authorization": "Bearer key-value"');
-    expect(json).toContain('"X-Client-Id": "client-value"');
-    expect(json).toContain('"type": "http"');
-    expect(toml).toContain('Authorization = "Bearer key-value"');
-    expect(toml).toContain('"X-Client-Id" = "client-value"');
+      expect(config).toEqual({
+        mcpServers: {
+          lce: {
+            command: "node",
+            args: ["~/lce-cloud.js", "--key", "sk-test"],
+          },
+        },
+      });
+    });
+
+    it("generates placeholder config without key", () => {
+      const config = JSON.parse(buildCloudMcpConfigJson(null, "~/lce-cloud.js"));
+
+      expect(config.mcpServers.lce.args).toEqual(["~/lce-cloud.js", "--key", "YOUR_API_KEY"]);
+    });
+
+    it("generates TOML config", () => {
+      const toml = buildCloudMcpConfigToml("sk-test", "~/lce-cloud.js");
+
+      expect(toml).toContain('command = "node"');
+      expect(toml).toContain('"~/lce-cloud.js"');
+      expect(toml).toContain('"sk-test"');
+    });
   });
 });
