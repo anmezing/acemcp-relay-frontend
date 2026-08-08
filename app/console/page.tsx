@@ -979,24 +979,26 @@ export default function ConsolePage() {
                             连接后，编码 Agent 会自动发现以下工具：
                           </p>
                           <div className="space-y-2">
-                            {[
-                              { name: "codebase-retrieval", desc: "语义检索项目代码上下文" },
-                              { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析" },
-                              ...(mcpConfigMode === "remote"
-                                ? [{ name: "codebase_index", desc: "首次与增量同步项目代码索引" }]
-                                : []),
-                            ].map((tool) => (
+                            {(mcpConfigMode === "cloud"
+                              ? [
+                                  { name: "codebase-retrieval", desc: "语义检索项目代码上下文" },
+                                  { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析" },
+                                  { name: "codebase_tenant_stats", desc: "索引统计信息" },
+                                  { name: "codebase_git_context", desc: "Git 状态、diff、历史、blame（本地执行）" },
+                                  { name: "codebase_review_changes", desc: "变更评审与检索计划（本地执行）" },
+                                ]
+                              : [
+                                  { name: "codebase-retrieval", desc: "语义检索项目代码上下文" },
+                                  { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析" },
+                                  { name: "codebase_index", desc: "首次与增量同步项目代码索引" },
+                                ]
+                            ).map((tool) => (
                               <div key={tool.name} className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
                                 <code className="text-cyan-400 text-xs font-mono shrink-0">{tool.name}</code>
                                 <p className="text-slate-400 text-xs">{tool.desc}</p>
                               </div>
                             ))}
                           </div>
-                          <p className="text-slate-500 text-xs mt-4 leading-relaxed">
-                            {mcpConfigMode === "cloud"
-                              ? "Cloud 模式下无需 Agent 手动调用 codebase_index，索引自动完成。"
-                              : "本地文件与 Git 信息由编码 Agent 自身工具读取；LCE 只接收 Agent 明确提交的可索引文本内容。"}
-                          </p>
                         </CardContent>
                       </Card>
 
