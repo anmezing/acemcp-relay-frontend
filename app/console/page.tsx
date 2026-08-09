@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { buildCloudMcpConfigJson, buildCloudMcpConfigToml, buildMcpConfigJson, buildMcpConfigToml, INSTALL_COMMAND, INSTALL_COMMAND_WIN } from "@/lib/mcp-config";
+import { buildCloudMcpConfigJson, buildCloudMcpConfigToml, buildMcpConfigJson, buildMcpConfigToml } from "@/lib/mcp-config";
 import {
   Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github, Trash2,
   Key, FileText, User, Database, ScrollText, Building2, Users, Coins,
@@ -840,37 +840,12 @@ export default function ConsolePage() {
                     <h2 className="text-lg font-medium text-white mb-6">配置说明</h2>
 
                     <div className="space-y-6">
-                      {/* Step 1: Install (cloud mode only) */}
-                      {mcpConfigMode === "cloud" && (
-                        <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
-                          <CardContent className="p-5">
-                            <div className="flex items-center gap-3 mb-3">
-                              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
-                                1
-                              </span>
-                              <h3 className="text-white font-medium">安装客户端</h3>
-                            </div>
-                            <p className="text-slate-400 text-sm mb-3">在终端运行以下命令，需要 Node.js 20+：</p>
-                            <div className="space-y-2">
-                              <p className="text-xs text-slate-500">macOS / Linux</p>
-                              <div className="bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-3 font-mono text-xs overflow-x-auto">
-                                <pre className="text-slate-300 whitespace-pre select-all">{INSTALL_COMMAND}</pre>
-                              </div>
-                              <p className="text-xs text-slate-500 pt-1">Windows (PowerShell)</p>
-                              <div className="bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-3 font-mono text-xs overflow-x-auto">
-                                <pre className="text-slate-300 whitespace-pre select-all">{INSTALL_COMMAND_WIN}</pre>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
-
-                      {/* Step 2: MCP Config */}
+                      {/* Step 1: MCP Config */}
                       <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
                         <CardContent className="p-5">
                           <div className="flex items-center gap-3 mb-3">
                             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
-                              {mcpConfigMode === "cloud" ? 2 : 1}
+                              1
                             </span>
                             <h3 className="text-white font-medium">添加 MCP 服务器</h3>
                           </div>
@@ -909,7 +884,7 @@ export default function ConsolePage() {
 
                           <p className="text-slate-400 text-sm mb-4 leading-relaxed">
                             {mcpConfigMode === "cloud"
-                              ? "复制配置到 IDE 即可使用。选择格式后点击「一键复制」生成密钥："
+                              ? "复制配置到 IDE 即可使用，客户端由 npx 自动获取并保持最新（需要 Node.js 20+）。选择格式后点击「一键复制」生成密钥："
                               : "Cursor、Claude Code 和 Codex 均可直接连接远程 MCP。选择格式后点击「一键复制」生成密钥："}
                           </p>
 
@@ -971,7 +946,7 @@ export default function ConsolePage() {
                         <CardContent className="p-5">
                           <div className="flex items-center gap-3 mb-3">
                             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
-                              {mcpConfigMode === "cloud" ? 3 : 2}
+                              2
                             </span>
                             <h3 className="text-white font-medium">可用工具</h3>
                           </div>
