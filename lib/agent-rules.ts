@@ -13,6 +13,3 @@ export const AGENT_RULES_REMOTE = `## 代码检索（LCE）
 - 分析调用关系与修改影响用 \`codebase_symbol_graph\`。
 - 本地文件读取和 Git 状态/历史仍使用当前编码 Agent 自身工具；不要把 .env、密钥、二进制、依赖目录或构建产物提交到索引。
 - 仅当 LCE 工具不可用，或需要精确的正则 / 字面量匹配时，才退回本地全文搜索。`;
-
-// 兼容旧导入
-export const AGENT_RULES_SNIPPET = AGENT_RULES_REMOTE;

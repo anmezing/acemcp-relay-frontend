@@ -1,7 +1,9 @@
 import { RELAY_URL } from "./relay";
 
 const KEY_PLACEHOLDER = "YOUR_API_KEY";
-const BOOT_PATH = "~/.lce/boot.js";
+// npx 每次启动解析 @latest 并使用缓存，客户端更新随 npm 发布自动到达用户，
+// 无需安装命令、无需本地路径（也因此不存在 ~ 展开问题）。
+const CLOUD_PACKAGE = "@anmezing/lce-cloud@latest";
 
 // ── Cloud Mode (stdio, 推荐) ──────────────────────────────────
 
@@ -10,8 +12,8 @@ export function buildCloudMcpConfigJson(apiKey: string | null): string {
     {
       mcpServers: {
         lce: {
-          command: "node",
-          args: [BOOT_PATH, "--key", apiKey || KEY_PLACEHOLDER],
+          command: "npx",
+          args: ["-y", CLOUD_PACKAGE, "--key", apiKey || KEY_PLACEHOLDER],
         },
       },
     },
@@ -27,13 +29,10 @@ function tomlString(value: string): string {
 export function buildCloudMcpConfigToml(apiKey: string | null): string {
   return [
     `[mcp_servers.lce]`,
-    `command = "node"`,
-    `args = [${tomlString(BOOT_PATH)}, "--key", ${tomlString(apiKey || KEY_PLACEHOLDER)}]`,
+    `command = "npx"`,
+    `args = ["-y", ${tomlString(CLOUD_PACKAGE)}, "--key", ${tomlString(apiKey || KEY_PLACEHOLDER)}]`,
   ].join("\n");
 }
-
-export const INSTALL_COMMAND = "curl -sL https://513689.xyz/boot.js -o ~/.lce/boot.js && curl -sL https://513689.xyz/lce-cloud.cjs -o ~/.lce/lce-cloud.cjs";
-export const INSTALL_COMMAND_WIN = 'powershell -c "New-Item -ItemType Directory -Force $HOME\\.lce | Out-Null; Invoke-WebRequest https://513689.xyz/boot.js -OutFile $HOME\\.lce\\boot.js; Invoke-WebRequest https://513689.xyz/lce-cloud.cjs -OutFile $HOME\\.lce\\lce-cloud.cjs"';
 
 // ── Remote HTTP Mode (备选) ──────────────────────────────────
 
