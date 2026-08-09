@@ -22,14 +22,14 @@ vi.mock("redis", () => ({
   })),
 }));
 
-import { createApiKey, deviceLogin, resetApiKey } from "./db";
+import { createApiKey, resetApiKey } from "./db";
 
 describe("API credential transactions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("serializes reset with device login and invalidates cache after commit", async () => {
+  it("serializes reset under the credential lock and invalidates cache after commit", async () => {
     const oldRecord = { id: "old-id" };
     const newRecord = { id: "new-id", api_key: "ace_new" };
     mocks.query.mockImplementation(async (sql: string) => {
@@ -63,23 +63,6 @@ describe("API credential transactions", () => {
     const statements = mocks.query.mock.calls.map(([sql]) => String(sql));
     expect(statements[1]).toContain("acemcp:user-credentials");
     expect(statements.some((sql) => sql.includes("INSERT INTO api_keys"))).toBe(false);
-    expect(statements.at(-1)).toBe("COMMIT");
-  });
-
-  it("uses the same credential lock for device login", async () => {
-    const existing = { id: "existing-id", api_key: "ace_existing" };
-    mocks.query.mockImplementation(async (sql: string) => {
-      if (sql.includes("SELECT * FROM api_keys")) return { rows: [existing] };
-      return { rows: [] };
-    });
-
-    await expect(deviceLogin("user-1", null, null)).resolves.toMatchObject({
-      keyRecord: existing,
-      rotated: false,
-    });
-
-    const statements = mocks.query.mock.calls.map(([sql]) => String(sql));
-    expect(statements[1]).toContain("acemcp:user-credentials");
     expect(statements.at(-1)).toBe("COMMIT");
   });
 

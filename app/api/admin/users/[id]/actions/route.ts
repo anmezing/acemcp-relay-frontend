@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/admin";
-import {
-  adminRemoveDevice,
-  adminResetUserKey,
-  setUserBanned,
-} from "@/lib/admin-db";
+import { adminResetUserKey, setUserBanned } from "@/lib/admin-db";
 
 // 管理动作统一入口：
 //   { action: "reset-key" }                      重置该用户 API key（旧 token 立即失效）
-//   { action: "remove-device", deviceId }        解绑设备（enforce 模式下该设备立即 401）
 //   { action: "ban", reason? } / { action: "unban" }  封禁/解封（relay 请求层拦截）
 export async function POST(
   request: NextRequest,
@@ -19,7 +14,7 @@ export async function POST(
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
   const { id } = await params;
-  let body: { action?: string; deviceId?: string; reason?: string } = {};
+  let body: { action?: string; reason?: string } = {};
   try {
     body = await request.json();
   } catch {}
@@ -29,14 +24,6 @@ export async function POST(
       case "reset-key":
         await adminResetUserKey(id);
         return NextResponse.json({ ok: true });
-      case "remove-device": {
-        const deviceId = (body.deviceId || "").trim();
-        if (!deviceId) {
-          return NextResponse.json({ error: "missing deviceId" }, { status: 400 });
-        }
-        await adminRemoveDevice(id, deviceId);
-        return NextResponse.json({ ok: true });
-      }
       case "ban":
         if (id === session.user.id) {
           return NextResponse.json({ error: "cannot ban yourself" }, { status: 400 });

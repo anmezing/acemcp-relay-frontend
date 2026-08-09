@@ -132,11 +132,6 @@ export function AdminLogsTab() {
           className="h-7 px-2.5 text-[11px] text-red-400">
           清空全部日志
         </Button>
-        <Button variant="glass" size="sm" disabled={loading}
-          onClick={() => runMaintenance("clear-alerts", undefined, "清空全部设备告警？此操作不可撤销。")}
-          className="h-7 px-2.5 text-[11px] text-red-400">
-          清空设备告警
-        </Button>
         {notice && (
           <span className={cn("text-xs", notice.startsWith("已清理") ? "text-emerald-400" : "text-red-400")}>
             {notice}

@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronRight, RefreshCw, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { AlertKindBadge } from "./AlertKindBadge";
 
 interface UserRow {
   id: string;
@@ -14,25 +13,7 @@ interface UserRow {
   created_at: string;
   request_count: number;
   last_request_at: string | null;
-  device_count: number;
   banned: boolean;
-}
-
-interface UserDetail {
-  devices: {
-    device_id: string;
-    device_name: string | null;
-    created_at: string;
-    last_seen_at: string;
-    last_ip: string | null;
-  }[];
-  alerts: {
-    id: number;
-    device_id: string | null;
-    kind: string;
-    detail: string | null;
-    created_at: string;
-  }[];
 }
 
 function fmtTime(value: string | null) {
@@ -45,12 +26,8 @@ export function AdminUsersTab() {
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [detail, setDetail] = useState<UserDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [notice, setNotice] = useState("");
-  // 详情请求的目标用户：响应返回时若已切换到别的用户，丢弃过期响应（防串号）
-  const detailTargetRef = useRef<string | null>(null);
 
   // load 首个语句即 await，setState 全部发生在 await 之后（满足
   // react-hooks/set-state-in-effect）；effect 发起的请求携带 AbortSignal，
@@ -82,22 +59,6 @@ export function AdminUsersTab() {
     return () => controller.abort();
   }, [load]);
 
-  const openDetail = useCallback(async (userId: string) => {
-    detailTargetRef.current = userId;
-    setExpanded(userId);
-    setDetail(null);
-    setDetailLoading(true);
-    try {
-      const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`);
-      const data = res.ok ? await res.json() : null;
-      // 快速切换用户时旧响应可能后到：只有目标仍是本次请求的用户才写入
-      if (detailTargetRef.current !== userId) return;
-      if (data) setDetail(data);
-    } finally {
-      if (detailTargetRef.current === userId) setDetailLoading(false);
-    }
-  }, []);
-
   const runAction = useCallback(
     async (userId: string, action: string, extra?: Record<string, string>) => {
       setActionBusy(true);
@@ -113,7 +74,6 @@ export function AdminUsersTab() {
           throw new Error(data?.error || `HTTP ${res.status}`);
         }
         await fetchUsers();
-        if (expanded === userId) await openDetail(userId);
         setNotice("操作成功");
       } catch (error) {
         setNotice(`操作失败: ${error instanceof Error ? error.message : String(error)}`);
@@ -121,7 +81,7 @@ export function AdminUsersTab() {
         setActionBusy(false);
       }
     },
-    [expanded, fetchUsers, openDetail]
+    [fetchUsers]
   );
 
   const filtered = (users || []).filter((u) => {
@@ -192,14 +152,7 @@ export function AdminUsersTab() {
                 u.banned ? "border-red-500/30" : "border-white/[0.06]"
               )}>
               <button
-                onClick={() => {
-                  if (isOpen) {
-                    detailTargetRef.current = null;
-                    setExpanded(null);
-                  } else {
-                    openDetail(u.id);
-                  }
-                }}
+                onClick={() => setExpanded(isOpen ? null : u.id)}
                 className="w-full text-left px-3 sm:px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-1">
                 {isOpen
                   ? <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
@@ -215,9 +168,6 @@ export function AdminUsersTab() {
                 <span className="text-slate-500 text-xs ml-auto whitespace-nowrap">
                   {u.request_count.toLocaleString()} 次请求
                 </span>
-                <span className="text-slate-600 text-xs whitespace-nowrap hidden sm:inline">
-                  {u.device_count} 台设备
-                </span>
                 <span className="text-slate-600 text-[10px] whitespace-nowrap hidden md:inline">
                   最近 {fmtTime(u.last_request_at)}
                 </span>
@@ -229,64 +179,6 @@ export function AdminUsersTab() {
                     <span>ID: <span className="font-mono text-slate-400">{u.id}</span></span>
                     <span>注册于 {fmtTime(u.created_at)}</span>
                   </div>
-
-                  {detailLoading && <Skeleton className="h-16 bg-white/[0.06] rounded-lg" />}
-
-                  {detail && (
-                    <>
-                      <div>
-                        <p className="text-slate-400 text-xs mb-2">设备（{detail.devices.length}）</p>
-                        {detail.devices.length === 0 ? (
-                          <p className="text-slate-600 text-xs">无在册设备</p>
-                        ) : (
-                          <div className="space-y-1.5">
-                            {detail.devices.map((d) => (
-                              <div key={d.device_id}
-                                className="flex flex-wrap items-center gap-x-3 gap-y-1 bg-white/[0.02] rounded-lg px-2.5 py-1.5">
-                                <span className="text-slate-300 text-xs">{d.device_name || "未知设备"}</span>
-                                <span className="text-slate-600 text-[10px] font-mono truncate max-w-[140px]">
-                                  {d.device_id}
-                                </span>
-                                {d.last_ip && <span className="text-slate-500 text-[10px]">{d.last_ip}</span>}
-                                <span className="text-slate-600 text-[10px] whitespace-nowrap">
-                                  活跃 {fmtTime(d.last_seen_at)}
-                                </span>
-                                <Button variant="ghost" size="sm" disabled={actionBusy}
-                                  onClick={() => {
-                                    if (confirm(`解绑设备 ${d.device_name || d.device_id}？该设备需重新登录。`)) {
-                                      runAction(u.id, "remove-device", { deviceId: d.device_id });
-                                    }
-                                  }}
-                                  className="ml-auto h-6 px-2 text-[10px] text-slate-400 hover:text-red-400">
-                                  解绑
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {detail.alerts.length > 0 && (
-                        <div>
-                          <p className="text-slate-400 text-xs mb-2">最近告警</p>
-                          <div className="space-y-1.5">
-                            {detail.alerts.map((a) => (
-                              <div key={a.id}
-                                className="flex flex-wrap items-center gap-x-2 gap-y-1 bg-white/[0.02] rounded-lg px-2.5 py-1.5">
-                                <AlertKindBadge kind={a.kind} />
-                                <span className="text-slate-500 text-[10px] break-all flex-1 min-w-[120px]">
-                                  {a.detail}
-                                </span>
-                                <span className="text-slate-600 text-[10px] whitespace-nowrap">
-                                  {fmtTime(a.created_at)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
 
                   <div className="flex flex-wrap gap-2 pt-1">
                     <Button variant="glass" size="sm" disabled={actionBusy}
