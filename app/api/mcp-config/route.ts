@@ -4,9 +4,8 @@ import { auth } from "@/lib/auth";
 import { initDB, createApiKey } from "@/lib/db";
 import { ensureOrgApiKey, getMemberRole } from "@/lib/org-db";
 
-// 为控制台「一键复制 MCP 配置」提供 apiKey（已有 key 时复用，没有则创建，
-// 绝不轮换）。一人多密钥：body.orgId 选择组织密钥（须为该组织成员，
-// fail-closed 403），缺省个人密钥。设备绑定功能已从 relay 移除。
+// Return the selected personal or organization API key for one-click MCP config generation.
+// Existing keys are reused and never rotated by this endpoint.
 export async function POST(request: Request) {
   try {
     await initDB().catch(console.error);
@@ -34,10 +33,7 @@ export async function POST(request: Request) {
     }
 
     const keyRecord = await createApiKey(session.user.id);
-
-    return NextResponse.json({
-      apiKey: keyRecord.api_key,
-    });
+    return NextResponse.json({ apiKey: keyRecord.api_key });
   } catch (error) {
     console.error("获取 MCP 配置失败:", error);
     return NextResponse.json({ error: "服务器错误" }, { status: 500 });

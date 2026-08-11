@@ -35,7 +35,7 @@ import {
   setOrgMemberQuota,
 } from "@/lib/org-db";
 import { GET as memberQuotaGet, POST as memberQuotaPost } from "./member-quota/route";
-import { POST as mcpDevicePost } from "../mcp-device/route";
+import { POST as mcpConfigPost } from "../mcp-config/route";
 import { GET as keysGet } from "../keys/route";
 
 const getSession = vi.mocked(auth.api.getSession);
@@ -155,13 +155,13 @@ describe("POST /api/org/member-quota（谁能调：仅该组织 owner）", () =>
   });
 });
 
-describe("POST /api/mcp-device（谁能调：登录用户；orgId 须为该组织成员）", () => {
-  const deviceRequest = (body: unknown) =>
-    jsonRequest("http://localhost/api/mcp-device", body);
+describe("POST /api/mcp-config（谁能调：登录用户；orgId 须为该组织成员）", () => {
+  const configRequest = (body: unknown) =>
+    jsonRequest("http://localhost/api/mcp-config", body);
 
   it("未登录 401", async () => {
     loginAs(null);
-    const res = await mcpDevicePost(deviceRequest({}));
+    const res = await mcpConfigPost(configRequest({}));
     expect(res.status).toBe(401);
   });
 
@@ -169,7 +169,7 @@ describe("POST /api/mcp-device（谁能调：登录用户；orgId 须为该组�
     createApiKeyMock.mockResolvedValue(
       { api_key: "ace_personal" } as Awaited<ReturnType<typeof createApiKey>>
     );
-    const res = await mcpDevicePost(deviceRequest({}));
+    const res = await mcpConfigPost(configRequest({}));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ apiKey: "ace_personal" });
     expect(ensureOrgApiKeyMock).not.toHaveBeenCalled();
@@ -177,7 +177,7 @@ describe("POST /api/mcp-device（谁能调：登录用户；orgId 须为该组�
 
   it("orgId：非成员 403，不发密钥（fail-closed）", async () => {
     getMemberRoleMock.mockResolvedValue(null);
-    const res = await mcpDevicePost(deviceRequest({ orgId: "o1" }));
+    const res = await mcpConfigPost(configRequest({ orgId: "o1" }));
     expect(res.status).toBe(403);
     expect(ensureOrgApiKeyMock).not.toHaveBeenCalled();
     expect(createApiKeyMock).not.toHaveBeenCalled();
@@ -185,7 +185,7 @@ describe("POST /api/mcp-device（谁能调：登录用户；orgId 须为该组�
 
   it("orgId：成员按 (user, org) 复用/发放组织密钥", async () => {
     getMemberRoleMock.mockResolvedValue("member");
-    const res = await mcpDevicePost(deviceRequest({ orgId: "o1" }));
+    const res = await mcpConfigPost(configRequest({ orgId: "o1" }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ apiKey: "ace_org" });
     expect(ensureOrgApiKeyMock).toHaveBeenCalledWith("owner-1", "o1", "member");

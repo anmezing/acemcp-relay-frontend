@@ -74,7 +74,7 @@ export function OrgKeysCards() {
 
   const copyConfig = async (orgId: string) => {
     try {
-      const res = await fetch("/api/mcp-device", {
+      const res = await fetch("/api/mcp-config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId }),

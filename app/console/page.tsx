@@ -401,7 +401,7 @@ export default function ConsolePage() {
     setConfigError("");
     setLoading(true);
     try {
-      const res = await fetch("/api/mcp-device", { method: "POST" });
+      const res = await fetch("/api/mcp-config", { method: "POST" });
       if (!res.ok) throw new Error(`获取 MCP 配置失败（HTTP ${res.status}）`);
       const data = await res.json();
       const key = data.apiKey as string;
