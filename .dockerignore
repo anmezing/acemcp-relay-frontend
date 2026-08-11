@@ -1,0 +1,10 @@
+.git
+.github
+.next
+.env
+.env.*
+node_modules
+coverage
+*.log
+**/*.test.ts
+**/*.test.tsx
