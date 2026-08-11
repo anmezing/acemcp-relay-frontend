@@ -1,8 +1,16 @@
 import { betterAuth } from "better-auth";
-import { APIError } from "better-auth/api";
-import { genericOAuth } from "better-auth/plugins";
+import { APIError, createAuthMiddleware } from "better-auth/api";
+import { genericOAuth, organization } from "better-auth/plugins";
 import { Pool } from "pg";
-import { isRegistrationDisabled } from "@/lib/db";
+import { initDB, isRegistrationDisabled } from "@/lib/db";
+import {
+  onMemberAdded,
+  onMemberLeft,
+  onMemberRemoved,
+  onMemberRoleUpdated,
+  onOrganizationCreated,
+  onOrganizationDeleted,
+} from "@/lib/org-sync";
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
@@ -76,7 +84,46 @@ export const auth = betterAuth({
       },
     },
   },
+  hooks: {
+    // 组织路由依赖 initDB 建的表/列（organization、api_keys.org_*）；
+    // better-auth handler 不经过业务路由的惰性 initDB，这里补上（幂等）。
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path.startsWith("/organization")) {
+        await initDB();
+      }
+    }),
+    // better-auth 1.6.23 的 /organization/leave 不触发 member hooks，
+    // 在全局 after hook 兜底删除退出者的组织密钥（覆盖直接调用 API 的路径）。
+    after: createAuthMiddleware(async (ctx) => {
+      if (ctx.path !== "/organization/leave") return;
+      const returned = ctx.context.returned;
+      if (
+        returned &&
+        typeof returned === "object" &&
+        "userId" in returned &&
+        typeof returned.userId === "string" &&
+        "organizationId" in returned &&
+        typeof returned.organizationId === "string"
+      ) {
+        await onMemberLeft(returned.userId, returned.organizationId);
+      }
+    }),
+  },
   plugins: [
+    organization({
+      // 邀请制：任何用户可创建组织成为 owner。角色只用 owner/member 两档。
+      creatorRole: "owner",
+      invitationExpiresIn: 60 * 60 * 48,
+      organizationHooks: {
+        afterCreateOrganization: onOrganizationCreated,
+        afterAddMember: onMemberAdded,
+        // acceptInvitation 不走 addMember hooks，单独接；ensure 幂等，双触发安全
+        afterAcceptInvitation: onMemberAdded,
+        afterRemoveMember: onMemberRemoved,
+        afterUpdateMemberRole: onMemberRoleUpdated,
+        afterDeleteOrganization: onOrganizationDeleted,
+      },
+    }),
     genericOAuth({
       config: [
         {

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/admin";
-import { adminResetUserKey, setUserBanned } from "@/lib/admin-db";
+import { adminResetUserKey, adminSetTier, setUserBanned } from "@/lib/admin-db";
 
 // 管理动作统一入口：
 //   { action: "reset-key" }                      重置该用户 API key（旧 token 立即失效）
 //   { action: "ban", reason? } / { action: "unban" }  封禁/解封（relay 请求层拦截）
+//   { action: "set-tier", tier: "free"|"pro" }   设置分层（relay 认证缓存 30s 内生效）
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -14,7 +15,7 @@ export async function POST(
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
   const { id } = await params;
-  let body: { action?: string; reason?: string } = {};
+  let body: { action?: string; reason?: string; tier?: string } = {};
   try {
     body = await request.json();
   } catch {}
@@ -33,6 +34,20 @@ export async function POST(
       case "unban":
         await setUserBanned(id, false);
         return NextResponse.json({ ok: true });
+      case "set-tier": {
+        // fail-closed：只放行显式合法值
+        if (body.tier !== "free" && body.tier !== "pro") {
+          return NextResponse.json({ error: "invalid tier" }, { status: 400 });
+        }
+        const updated = await adminSetTier(id, body.tier);
+        if (!updated) {
+          return NextResponse.json(
+            { error: "user has no api key" },
+            { status: 400 }
+          );
+        }
+        return NextResponse.json({ ok: true });
+      }
       default:
         return NextResponse.json({ error: "unknown action" }, { status: 400 });
     }

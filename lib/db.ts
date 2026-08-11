@@ -26,16 +26,6 @@ async function getRedisClient(): Promise<RedisClientType> {
   return redisClient;
 }
 
-// 删除 API Key 缓存
-async function deleteApiKeyCache(keyId: string) {
-  try {
-    const redis = await getRedisClient();
-    await redis.del(`apikey:${keyId}`);
-  } catch (error) {
-    console.error("Failed to delete API key cache:", error);
-  }
-}
-
 // 删除封禁状态缓存（relay 侧以 banned:{userId} 缓存，封禁/解封后立即生效）
 export async function deleteBannedCache(userId: string) {
   try {
@@ -56,6 +46,30 @@ export async function deleteQuotaLimitCache(userId: string) {
   }
 }
 
+// 删除组织成员配额缓存。key 的摘要输入与 relay 的 memberQuotaLimitCacheKey
+// 完全一致，使用 NUL 分隔避免 (org, user) 拼接歧义。
+export async function deleteOrgMemberQuotaCache(orgId: string, userId: string) {
+  try {
+    const redis = await getRedisClient();
+    const digest = crypto
+      .createHash("sha256")
+      .update(`${orgId}\0${userId}`)
+      .digest("hex");
+    await redis.del(`quota:limit:member:${digest}`);
+  } catch (error) {
+    console.error("Failed to delete organization member quota cache:", error);
+  }
+}
+
+export async function deleteOrgQuotaCache(orgId: string) {
+  try {
+    const redis = await getRedisClient();
+    await redis.del(`quota:limit:orgq:${orgId}`);
+  } catch (error) {
+    console.error("Failed to delete organization quota cache:", error);
+  }
+}
+
 // 删除模型配置缓存（relay 侧以 modelcfg:{userId} 缓存，保存后立即生效）
 export async function deleteModelConfigCache(userId: string) {
   try {
@@ -67,8 +81,23 @@ export async function deleteModelConfigCache(userId: string) {
 }
 
 let dbInitialized = false;
+let dbInitialization: Promise<void> | undefined;
 
-export async function initDB() {
+// Serialize the first request's migration work. Without this single-flight
+// guard, concurrent cold-start requests can race between inspection and ALTER
+// or constraint creation even though each individual statement is intended to
+// be idempotent.
+export function initDB(): Promise<void> {
+  if (dbInitialized) return Promise.resolve();
+  if (!dbInitialization) {
+    dbInitialization = initializeDB().finally(() => {
+      dbInitialization = undefined;
+    });
+  }
+  return dbInitialization;
+}
+
+async function initializeDB() {
   if (dbInitialized) return;
 
   const client = await pool.connect();
@@ -83,18 +112,190 @@ export async function initDB() {
     `);
 
     if (!apiKeysTableExists.rows[0].exists) {
+      // 一人多密钥模型：个人密钥 org_id/org_role 为 NULL；组织密钥每
+      // (user, org) 唯一。relay 契约：tenant := org_id ?? user_id。
       await client.query(`
         CREATE TABLE IF NOT EXISTS api_keys (
-          id VARCHAR(32) PRIMARY KEY,
+          id VARCHAR(64) PRIMARY KEY,
           user_id VARCHAR(255) NOT NULL,
           api_key VARCHAR(64) UNIQUE NOT NULL,
+          tier TEXT NOT NULL DEFAULT 'free',
+          org_id TEXT,
+          org_role TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(user_id)
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
       console.log("API keys table created");
+    } else {
+      // 存量表 id 为 VARCHAR(32)（MD5 时代），SHA-256 hex 需要 64 位。幂等放宽。
+      await client.query(`ALTER TABLE api_keys ALTER COLUMN id TYPE VARCHAR(64)`);
     }
+
+    // tier 分层（'free' | 'pro'），与 relay 侧契约一致：relay 认证缓存每 30 秒
+    // 刷新读取，改 tier 后半分钟内生效。幂等迁移，存量表补列。
+    await client.query(
+      `ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'free'`
+    );
+
+    // 多密钥迁移：补 org 双列，去掉"一人一 key"约束，改为
+    // 个人 key（org_id IS NULL）每人一把 + 组织 key 每 (user, org) 一把。
+    await client.query(`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS org_id TEXT`);
+    await client.query(`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS org_role TEXT`);
+    await client.query(`ALTER TABLE api_keys DROP CONSTRAINT IF EXISTS api_keys_user_id_key`);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS api_keys_personal_uniq
+        ON api_keys (user_id) WHERE org_id IS NULL
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS api_keys_user_org_uniq
+        ON api_keys (user_id, org_id) WHERE org_id IS NOT NULL
+    `);
+
+    // Better Auth organization 插件表（camelCase 与 better-auth CLI 生成的
+    // user/session 表保持一致口径）。user/session 由 better-auth 建表，这里
+    // 不对其加外键（初始化顺序不保证）。
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "organization" (
+        "id" TEXT PRIMARY KEY,
+        "name" TEXT NOT NULL,
+        "slug" TEXT NOT NULL UNIQUE,
+        "logo" TEXT,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+        "metadata" TEXT
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "member" (
+        "id" TEXT PRIMARY KEY,
+        "organizationId" TEXT NOT NULL REFERENCES "organization"("id") ON DELETE CASCADE,
+        "userId" TEXT NOT NULL,
+        "role" TEXT NOT NULL DEFAULT 'member',
+        "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS "invitation" (
+        "id" TEXT PRIMARY KEY,
+        "organizationId" TEXT NOT NULL REFERENCES "organization"("id") ON DELETE CASCADE,
+        "email" TEXT NOT NULL,
+        "role" TEXT,
+        "status" TEXT NOT NULL DEFAULT 'pending',
+        "expiresAt" TIMESTAMP,
+        "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+        "inviterId" TEXT NOT NULL
+      )
+    `);
+    // 组织插件需要 session.activeOrganizationId；session 表由 better-auth
+    // 创建，可能尚不存在（全新库首个请求），存在时才补列。
+    const sessionExists = await client.query(
+      `SELECT to_regclass('public.session') IS NOT NULL AS ok`
+    );
+    if (sessionExists.rows[0].ok) {
+      await client.query(
+        `ALTER TABLE "session" ADD COLUMN IF NOT EXISTS "activeOrganizationId" TEXT`
+      );
+    }
+
+    // 组织共享配额池（平台管理员写，relay 读）。跨仓库契约 DDL；旧版 Relay
+    // 可能已经建成 NOT NULL/default，必须幂等放宽才能支持 null=继承默认。
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS org_quotas (
+        org_id TEXT PRIMARY KEY,
+        daily_request_limit BIGINT,
+        daily_index_bytes_limit BIGINT,
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      ALTER TABLE org_quotas
+        ALTER COLUMN daily_request_limit DROP NOT NULL,
+        ALTER COLUMN daily_request_limit DROP DEFAULT,
+        ALTER COLUMN daily_index_bytes_limit DROP NOT NULL,
+        ALTER COLUMN daily_index_bytes_limit DROP DEFAULT
+    `);
+
+    // 组织 owner 设置的成员上限按 (org, user) 隔离；个人 user_quotas 保持独立。
+    // DDL 与 relay migrateQuotaTables 完全一致。
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS org_member_quotas (
+        org_id TEXT NOT NULL,
+        user_id VARCHAR(255) NOT NULL,
+        daily_limit INTEGER NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (org_id, user_id)
+      )
+    `);
+
+    // Better Auth 的成员表是组织授权的权威来源。先清理历史孤儿，再用外键让
+    // 后续成员/组织删除与组织密钥、成员配额在 PostgreSQL 内原子级联。
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS member_org_user_uniq
+        ON "member" ("organizationId", "userId")
+    `);
+    await client.query(`
+      DELETE FROM api_keys AS keys
+      WHERE keys.org_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM "member" AS members
+          WHERE members."organizationId" = keys.org_id
+            AND members."userId" = keys.user_id
+        )
+    `);
+    await client.query(`
+      DELETE FROM org_member_quotas AS quotas
+      WHERE NOT EXISTS (
+        SELECT 1 FROM "member" AS members
+        WHERE members."organizationId" = quotas.org_id
+          AND members."userId" = quotas.user_id
+      )
+    `);
+    await client.query(`
+      DELETE FROM org_quotas AS quotas
+      WHERE NOT EXISTS (
+        SELECT 1 FROM "organization" AS organizations
+        WHERE organizations."id" = quotas.org_id
+      )
+    `);
+
+    const addConstraintIfMissing = async (
+      table: string,
+      name: string,
+      statement: string
+    ) => {
+      const existing = await client.query(
+        `SELECT 1 FROM pg_constraint
+         WHERE conrelid = $1::regclass AND conname = $2`,
+        [table, name]
+      );
+      if (!existing.rows[0]) await client.query(statement);
+    };
+    await addConstraintIfMissing(
+      "api_keys",
+      "api_keys_member_fk",
+      `ALTER TABLE api_keys
+       ADD CONSTRAINT api_keys_member_fk
+       FOREIGN KEY (org_id, user_id)
+       REFERENCES "member" ("organizationId", "userId")
+       ON DELETE CASCADE`
+    );
+    await addConstraintIfMissing(
+      "org_member_quotas",
+      "org_member_quotas_member_fk",
+      `ALTER TABLE org_member_quotas
+       ADD CONSTRAINT org_member_quotas_member_fk
+       FOREIGN KEY (org_id, user_id)
+       REFERENCES "member" ("organizationId", "userId")
+       ON DELETE CASCADE`
+    );
+    await addConstraintIfMissing(
+      "org_quotas",
+      "org_quotas_organization_fk",
+      `ALTER TABLE org_quotas
+       ADD CONSTRAINT org_quotas_organization_fk
+       FOREIGN KEY (org_id) REFERENCES "organization" ("id")
+       ON DELETE CASCADE`
+    );
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS banned_users (
@@ -127,34 +328,53 @@ export async function initDB() {
       )
     `);
 
+    // request_logs 由 relay 建表并写入，tenant_id 列由 relay 迁移补充。
+    // 组织用量报表按 (tenant_id, request_timestamp) 过滤，缺索引会全表扫，
+    // 这里幂等补复合索引。表/列尚不存在（relay 未部署新版）时跳过，
+    // initDB 每进程只跑一次，下次进程启动会再补。
+    const tenantIdColumn = await client.query(`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'request_logs'
+        AND column_name = 'tenant_id'
+    `);
+    if (tenantIdColumn.rows[0]) {
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_request_logs_tenant_ts
+          ON request_logs (tenant_id, request_timestamp)
+      `);
+    }
+
     dbInitialized = true;
   } finally {
     client.release();
   }
 }
 
-function generateApiKey(): { id: string; apiKey: string } {
+export function generateApiKey(): { id: string; apiKey: string } {
   const apiKey = `ace_${crypto.randomBytes(20).toString("hex")}`;
-  const id = crypto.createHash("md5").update(apiKey).digest("hex");
+  // SHA-256（64 位 hex）。relay 侧认证已双读 md5/sha256，存量 MD5 key 继续可用。
+  const id = crypto.createHash("sha256").update(apiKey).digest("hex");
   return { id, apiKey };
 }
 
 export function getIdFromKey(apiKey: string): string {
-  return crypto.createHash("md5").update(apiKey).digest("hex");
+  return crypto.createHash("sha256").update(apiKey).digest("hex");
 }
 
-async function lockUserCredentialsTx(client: PoolClient, userId: string): Promise<void> {
+export async function lockUserCredentialsTx(client: PoolClient, userId: string): Promise<void> {
   await client.query(
     `SELECT pg_advisory_xact_lock(hashtext('acemcp:user-credentials'), hashtext($1))`,
     [userId]
   );
 }
 
+// 个人密钥（org_id IS NULL）。组织密钥见 lib/org-db.ts。
 export async function getApiKey(userId: string) {
   const client = await pool.connect();
   try {
     const result = await client.query(
-      `SELECT * FROM api_keys WHERE user_id = $1`,
+      `SELECT * FROM api_keys WHERE user_id = $1 AND org_id IS NULL`,
       [userId]
     );
     return result.rows[0] || null;
@@ -169,7 +389,7 @@ export async function createApiKey(userId: string) {
     await client.query("BEGIN");
     await lockUserCredentialsTx(client, userId);
     const existing = await client.query(
-      `SELECT * FROM api_keys WHERE user_id = $1 FOR UPDATE`,
+      `SELECT * FROM api_keys WHERE user_id = $1 AND org_id IS NULL FOR UPDATE`,
       [userId]
     );
     if (existing.rows[0]) {
@@ -201,7 +421,7 @@ export async function resetApiKey(userId: string) {
     await client.query("BEGIN");
     await lockUserCredentialsTx(client, userId);
     const oldResult = await client.query(
-      `SELECT id FROM api_keys WHERE user_id = $1 FOR UPDATE`,
+      `SELECT id FROM api_keys WHERE user_id = $1 AND org_id IS NULL FOR UPDATE`,
       [userId]
     );
     oldKeyId = oldResult.rows[0]?.id ?? null;
@@ -211,7 +431,7 @@ export async function resetApiKey(userId: string) {
       ? await client.query(
           `UPDATE api_keys
            SET id = $2, api_key = $3, updated_at = CURRENT_TIMESTAMP
-           WHERE user_id = $1
+           WHERE user_id = $1 AND org_id IS NULL
            RETURNING *`,
           [userId, id, apiKey]
         )
@@ -228,9 +448,6 @@ export async function resetApiKey(userId: string) {
     throw error;
   } finally {
     client.release();
-  }
-  if (oldKeyId) {
-    await deleteApiKeyCache(oldKeyId);
   }
   return keyRecord;
 }

@@ -14,6 +14,7 @@ interface UserRow {
   request_count: number;
   last_request_at: string | null;
   banned: boolean;
+  tier: "free" | "pro";
 }
 
 function fmtTime(value: string | null) {
@@ -160,6 +161,15 @@ export function AdminUsersTab() {
                 <span className="text-slate-200 text-sm truncate max-w-[200px]">
                   {u.email || u.name || u.id}
                 </span>
+                <span
+                  className={cn(
+                    "text-[10px] px-1.5 py-0.5 rounded border",
+                    u.tier === "pro"
+                      ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/20"
+                      : "bg-white/[0.04] text-slate-500 border-white/[0.08]"
+                  )}>
+                  {u.tier === "pro" ? "Pro" : "Free"}
+                </span>
                 {u.banned && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded border bg-red-500/10 text-red-400 border-red-500/20">
                     已封禁
@@ -190,6 +200,27 @@ export function AdminUsersTab() {
                       className="text-xs">
                       重置密钥
                     </Button>
+                    {u.tier === "pro" ? (
+                      <Button variant="glass" size="sm" disabled={actionBusy}
+                        onClick={() => {
+                          if (confirm("将该用户降为 Free？relay 侧约半分钟内生效。")) {
+                            runAction(u.id, "set-tier", { tier: "free" });
+                          }
+                        }}
+                        className="text-xs">
+                        降为 Free
+                      </Button>
+                    ) : (
+                      <Button variant="glass" size="sm" disabled={actionBusy}
+                        onClick={() => {
+                          if (confirm("将该用户设为 Pro？relay 侧约半分钟内生效。")) {
+                            runAction(u.id, "set-tier", { tier: "pro" });
+                          }
+                        }}
+                        className="text-xs text-cyan-400">
+                        设为 Pro
+                      </Button>
+                    )}
                     {u.banned ? (
                       <Button variant="glass" size="sm" disabled={actionBusy}
                         onClick={() => runAction(u.id, "unban")}

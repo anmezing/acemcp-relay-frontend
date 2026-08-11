@@ -57,6 +57,7 @@ export interface AdminUserRow {
   request_count: number;
   last_request_at: Date | null;
   banned: boolean;
+  tier: "free" | "pro";
 }
 
 export async function listUsersWithStats(): Promise<AdminUserRow[]> {
@@ -66,13 +67,15 @@ export async function listUsersWithStats(): Promise<AdminUserRow[]> {
       SELECT u.id, u.email, u.name, u."createdAt" AS created_at,
         COALESCE(r.total, 0)::bigint AS request_count,
         r.last_at AS last_request_at,
-        (b.user_id IS NOT NULL) AS banned
+        (b.user_id IS NOT NULL) AS banned,
+        COALESCE(k.tier, 'free') AS tier
       FROM "user" u
       LEFT JOIN (
         SELECT user_id, COUNT(*) AS total, MAX(request_timestamp) AS last_at
         FROM request_logs GROUP BY user_id
       ) r ON r.user_id = u.id
       LEFT JOIN banned_users b ON b.user_id = u.id
+      LEFT JOIN api_keys k ON k.user_id = u.id AND k.org_id IS NULL
       ORDER BY r.last_at DESC NULLS LAST, u."createdAt" DESC
     `);
     return result.rows.map((r) => ({
@@ -87,6 +90,26 @@ export async function listUsersWithStats(): Promise<AdminUserRow[]> {
 // 重置用户密钥：旧 token 立即失效（resetApiKey 内部会清 apikey 缓存）
 export async function adminResetUserKey(userId: string) {
   return resetApiKey(userId);
+}
+
+// 设置用户 tier（'free' | 'pro'）。tier 存在 api_keys 上，一人多密钥后对该
+// 用户全部密钥（个人 + 组织）统一生效；用户尚未生成任何 key 时无行可改（此时 relay 侧也无从认证），返回 false 让调用方报错。
+// relay 认证缓存每 30 秒刷新，无需清缓存，半分钟内生效。
+export async function adminSetTier(
+  userId: string,
+  tier: "free" | "pro"
+): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(
+      `UPDATE api_keys SET tier = $2, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $1`,
+      [userId, tier]
+    );
+    return (result.rowCount || 0) > 0;
+  } finally {
+    client.release();
+  }
 }
 
 export async function setUserBanned(userId: string, banned: boolean, reason?: string) {

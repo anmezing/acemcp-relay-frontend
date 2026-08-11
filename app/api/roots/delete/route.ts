@@ -7,6 +7,8 @@ import { getRelayConsoleHeaders } from "@/lib/relay-console";
 
 const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
 
+// 谁能调：登录用户删自己个人租户的索引；body.org_id 时仅该组织 owner
+// （成员 403，前端先挡；Relay 再按 Better Auth member.role 权威校验）。
 export async function POST(request: Request) {
   try {
     await initDB();
@@ -19,15 +21,26 @@ export async function POST(request: Request) {
     }
 
     const body: unknown = await request.json().catch(() => null);
+    const rootId =
+      body && typeof body === "object" && "root_id" in body && typeof body.root_id === "string"
+        ? body.root_id.trim()
+        : "";
+    if (!rootId) {
+      return NextResponse.json({ error: "缺少 root_id" }, { status: 400 });
+    }
     const orgId =
       body && typeof body === "object" && "org_id" in body && typeof body.org_id === "string"
         ? body.org_id.trim()
         : "";
+
     let apiKey: string;
     if (orgId) {
       const role = await getMemberRole(session.user.id, orgId);
       if (role !== "owner") {
-        return NextResponse.json({ error: "仅组织所有者可清除组织索引" }, { status: 403 });
+        return NextResponse.json(
+          { error: "仅组织所有者可删除组织索引" },
+          { status: 403 }
+        );
       }
       apiKey = (await ensureOrgApiKey(session.user.id, orgId, role)).api_key;
     } else {
@@ -41,26 +54,27 @@ export async function POST(request: Request) {
       apiKey = keyRecord.api_key;
     }
 
-    const res = await fetch(`${RELAY_URL}/mcp/clear-index`, {
+    const res = await fetch(`${RELAY_URL}/mcp/delete-root`, {
       method: "POST",
       headers: {
         ...getRelayConsoleHeaders(apiKey),
         "Content-Type": "application/json",
       },
+      body: JSON.stringify({ root_id: rootId }),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
       return NextResponse.json(
-        { error: data.error || "清除失败" },
+        { error: data.error || "删除失败" },
         { status: res.status }
       );
     }
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error("清除索引失败:", error);
+    console.error("删除索引失败:", error);
     return NextResponse.json({ error: "服务器错误" }, { status: 500 });
   }
 }

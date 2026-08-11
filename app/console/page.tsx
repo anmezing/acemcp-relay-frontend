@@ -38,13 +38,16 @@ import { AdminStatsTab } from "@/components/admin/AdminStatsTab";
 import { AdminQuotaTab } from "@/components/admin/AdminQuotaTab";
 import { AdminModelsTab } from "@/components/admin/AdminModelsTab";
 import { AdminSettingsTab } from "@/components/admin/AdminSettingsTab";
-import { AGENT_RULES_CLOUD, AGENT_RULES_REMOTE } from "@/lib/agent-rules";
+import { AdminOrgsTab } from "@/components/admin/AdminOrgsTab";
+import { OrgTab } from "@/components/OrgTab";
+import { OrgKeysCards } from "@/components/OrgKeysCards";
+import { AGENT_RULES_CLOUD, AGENT_RULES_REMOTE, CLOUD_TOOLS, REMOTE_TOOLS } from "@/lib/agent-rules";
 import { UserModelConfigTab } from "@/components/UserModelConfigTab";
 
 type Tab =
-  | "keys" | "docs" | "profile" | "model-config"
+  | "keys" | "docs" | "profile" | "model-config" | "team"
   | "index" | "logs"
-  | "org" | "users" | "call-stats" | "quota" | "models"
+  | "org" | "users" | "call-stats" | "quota" | "admin-orgs" | "models"
   | "system-settings" | "system-logs";
 
 interface SidebarSection {
@@ -58,6 +61,7 @@ const ALL_SECTIONS: SidebarSection[] = [
     label: "我的",
     items: [
       { id: "keys", label: "密钥管理", icon: <Key className="w-4 h-4" /> },
+      { id: "team", label: "组织", icon: <Building2 className="w-4 h-4" /> },
       { id: "docs", label: "配置说明", icon: <FileText className="w-4 h-4" /> },
       { id: "model-config", label: "模型设置", icon: <Cpu className="w-4 h-4" /> },
       { id: "profile", label: "用户信息", icon: <User className="w-4 h-4" /> },
@@ -78,6 +82,7 @@ const ALL_SECTIONS: SidebarSection[] = [
       { id: "users", label: "用户管理", icon: <Users className="w-4 h-4" /> },
       { id: "call-stats", label: "调用统计", icon: <Coins className="w-4 h-4" /> },
       { id: "quota", label: "配额管理", icon: <Gauge className="w-4 h-4" /> },
+      { id: "admin-orgs", label: "组织管理", icon: <Building2 className="w-4 h-4" /> },
       { id: "models", label: "模型管理", icon: <Cpu className="w-4 h-4" /> },
     ],
   },
@@ -158,6 +163,14 @@ interface KeyInfo {
   maskedKey: string | null;
   createdAt: string | null;
   updatedAt?: string | null;
+  tier?: "free" | "pro";
+}
+
+interface ActiveIndexJob {
+  root_id: string;
+  indexed_files: number;
+  total_files: number;
+  phase: string;
 }
 
 interface TenantStats {
@@ -168,6 +181,108 @@ interface TenantStats {
   totalSizeBytes: number;
   languages: Record<string, number>;
   indexingCount?: number;
+  active_job?: ActiveIndexJob;
+}
+
+interface RelayRoot {
+  workspace_id: string;
+  root_id: string;
+  // relay 派生字段：root_id 按最后一个 '@' 拆分出 base_root_id 与 view_branch
+  // （无 '@' 时 view_branch = "default"）。旧 relay 可能缺失，前端用
+  // resolveRootView 自行拆分兜底。注意 branch 是 start 上报的 git 元数据，
+  // 不参与分支视图分组。
+  base_root_id?: string;
+  view_branch?: string;
+  branch: string;
+  revision: string;
+  cloud_revision: number;
+  indexed_at: string;
+  file_count: number;
+  total_size_bytes: number;
+}
+
+function isActiveIndexJob(value: unknown): value is ActiveIndexJob {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const job = value as Partial<ActiveIndexJob>;
+  return (
+    typeof job.root_id === "string" &&
+    typeof job.phase === "string" &&
+    typeof job.indexed_files === "number" &&
+    Number.isFinite(job.indexed_files) &&
+    typeof job.total_files === "number" &&
+    Number.isFinite(job.total_files)
+  );
+}
+
+function isRelayRoot(value: unknown): value is RelayRoot {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const root = value as Partial<RelayRoot>;
+  return (
+    typeof root.workspace_id === "string" &&
+    typeof root.root_id === "string" &&
+    // 派生字段向后兼容：旧 relay 不发 base_root_id/view_branch，缺失时放行，
+    // 由 resolveRootView 按最后一个 '@' 拆分兜底
+    (root.base_root_id === undefined || typeof root.base_root_id === "string") &&
+    (root.view_branch === undefined || typeof root.view_branch === "string") &&
+    typeof root.branch === "string" &&
+    typeof root.revision === "string" &&
+    typeof root.indexed_at === "string" &&
+    typeof root.cloud_revision === "number" &&
+    typeof root.file_count === "number" &&
+    typeof root.total_size_bytes === "number"
+  );
+}
+
+function formatSizeBytes(bytes: number): string {
+  return bytes >= 1048576
+    ? `${(bytes / 1048576).toFixed(1)} MB`
+    : `${(bytes / 1024).toFixed(0)} KB`;
+}
+
+// 分支视图归属：优先用 relay 派生的 base_root_id + view_branch；旧 relay
+// 缺失时按最后一个 '@' 拆分 root_id 兜底（无 '@' 时 base=root_id、
+// branch="default"）。不使用 git 元数据 branch 做分组。
+function resolveRootView(root: RelayRoot): { baseRootId: string; branch: string } {
+  if (root.base_root_id && root.view_branch) {
+    return { baseRootId: root.base_root_id, branch: root.view_branch };
+  }
+  const at = root.root_id.lastIndexOf("@");
+  if (at > 0 && at < root.root_id.length - 1) {
+    return { baseRootId: root.root_id.slice(0, at), branch: root.root_id.slice(at + 1) };
+  }
+  return { baseRootId: root.root_id, branch: "default" };
+}
+
+// 徽标文案："default" 视图沿用 start 上报的 git 分支（与旧展示一致），
+// 具名分支视图显示视图分支名
+function rootBranchLabel(root: RelayRoot): string {
+  const { branch } = resolveRootView(root);
+  return branch !== "default" ? branch : root.branch || "";
+}
+
+interface RootGroup {
+  baseRootId: string;
+  workspaceId: string;
+  entries: { root: RelayRoot; branch: string }[];
+}
+
+// 按 base_root_id 分组（保持 relay 返回顺序），组内每项是一个分支视图
+function groupRootsByBase(roots: RelayRoot[]): RootGroup[] {
+  const groups = new Map<string, RootGroup>();
+  for (const root of roots) {
+    const { baseRootId, branch } = resolveRootView(root);
+    const existing = groups.get(baseRootId);
+    if (existing) {
+      existing.entries.push({ root, branch });
+    } else {
+      groups.set(baseRootId, {
+        baseRootId,
+        workspaceId: root.workspace_id,
+        entries: [{ root, branch }],
+      });
+    }
+  }
+  return [...groups.values()];
 }
 
 function isTenantStats(value: unknown): value is TenantStats {
@@ -188,7 +303,8 @@ function isTenantStats(value: unknown): value is TenantStats {
     typeof stats.languages === "object" &&
     !Array.isArray(stats.languages) &&
     (stats.indexingCount == null ||
-      (typeof stats.indexingCount === "number" && Number.isFinite(stats.indexingCount)))
+      (typeof stats.indexingCount === "number" && Number.isFinite(stats.indexingCount))) &&
+    (stats.active_job == null || isActiveIndexJob(stats.active_job))
   );
 }
 
@@ -254,6 +370,16 @@ export default function ConsolePage() {
   const [tenantStats, setTenantStats] = useState<TenantStats | null>(null);
   const [tenantStatsLoading, setTenantStatsLoading] = useState(true);
   const [tenantStatsError, setTenantStatsError] = useState<string | null>(null);
+  const [roots, setRoots] = useState<RelayRoot[] | null>(null);
+  const [rootsLoading, setRootsLoading] = useState(false);
+  const [rootsError, setRootsError] = useState<string | null>(null);
+  const [rootPendingDelete, setRootPendingDelete] = useState<RelayRoot | null>(null);
+  const [deleteRootLoading, setDeleteRootLoading] = useState(false);
+  const [deleteRootResult, setDeleteRootResult] = useState<{ success: boolean; message: string } | null>(null);
+  // 索引上下文：null = 个人租户；组织时按组织密钥查询，删除权限依 orgRole
+  const [rootsOrg, setRootsOrg] = useState<{ id: string; name: string } | null>(null);
+  const [rootsOrgRole, setRootsOrgRole] = useState<"owner" | "member" | null>(null);
+  const { data: myOrgs } = authClient.useListOrganizations();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mcpConfigFormat, setMcpConfigFormat] = useState<"json" | "toml">("json");
   const [mcpConfigMode, setMcpConfigMode] = useState<"cloud" | "remote">("cloud");
@@ -328,11 +454,17 @@ export default function ConsolePage() {
     }
   }, []);
 
-  const fetchTenantStats = useCallback(async () => {
-    setTenantStatsLoading(true);
-    setTenantStatsError(null);
+  // background=true 用于轮询：不闪 loading 态，静默失败（保留上次数据）
+  const fetchTenantStats = useCallback(async (background = false, orgContext = rootsOrg) => {
+    if (!background) {
+      setTenantStatsLoading(true);
+      setTenantStatsError(null);
+    }
     try {
-      const res = await fetch("/api/tenant-stats");
+      const url = orgContext
+        ? `/api/tenant-stats?orgId=${encodeURIComponent(orgContext.id)}`
+        : "/api/tenant-stats";
+      const res = await fetch(url);
       const data: unknown = await res.json().catch(() => null);
 
       if (!res.ok) {
@@ -347,13 +479,93 @@ export default function ConsolePage() {
       }
 
       setTenantStats(data);
+      if (background) setTenantStatsError(null);
     } catch (error) {
       console.error("获取索引统计失败:", error);
-      setTenantStatsError(error instanceof Error ? error.message : "获取索引统计失败");
+      if (!background) {
+        setTenantStatsError(error instanceof Error ? error.message : "获取索引统计失败");
+      }
     } finally {
-      setTenantStatsLoading(false);
+      if (!background) setTenantStatsLoading(false);
     }
-  }, []);
+  }, [rootsOrg]);
+
+  const fetchRoots = useCallback(async (background = false) => {
+    if (!background) {
+      setRootsLoading(true);
+      setRootsError(null);
+    }
+    try {
+      const url = rootsOrg
+        ? `/api/roots?orgId=${encodeURIComponent(rootsOrg.id)}`
+        : "/api/roots";
+      const res = await fetch(url);
+      const data: unknown = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        const message =
+          data && typeof data === "object" && "error" in data && typeof data.error === "string"
+            ? data.error
+            : `获取索引列表失败（HTTP ${res.status}）`;
+        throw new Error(message);
+      }
+      if (
+        !data || typeof data !== "object" || !("roots" in data) ||
+        !Array.isArray((data as { roots: unknown }).roots) ||
+        !(data as { roots: unknown[] }).roots.every(isRelayRoot)
+      ) {
+        throw new Error("索引列表响应格式异常");
+      }
+
+      setRoots((data as { roots: RelayRoot[] }).roots);
+      const orgRole = (data as { orgRole?: unknown }).orgRole;
+      setRootsOrgRole(orgRole === "owner" || orgRole === "member" ? orgRole : null);
+      if (background) setRootsError(null);
+    } catch (error) {
+      console.error("获取索引列表失败:", error);
+      if (!background) {
+        setRootsError(error instanceof Error ? error.message : "获取索引列表失败");
+      }
+    } finally {
+      if (!background) setRootsLoading(false);
+    }
+  }, [rootsOrg]);
+
+  const handleDeleteRoot = useCallback(async () => {
+    if (!rootPendingDelete) return;
+    setDeleteRootLoading(true);
+    setDeleteRootResult(null);
+    try {
+      const res = await fetch("/api/roots/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          root_id: rootPendingDelete.root_id,
+          ...(rootsOrg ? { org_id: rootsOrg.id } : {}),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setDeleteRootResult({
+          success: true,
+          message: `已删除索引（清理 ${data.deleted_files ?? 0} 个文件），该项目下次使用时需重新索引`,
+        });
+        await Promise.all([fetchRoots(), fetchTenantStats(false, rootsOrg)]);
+      } else if (res.status === 409) {
+        setDeleteRootResult({
+          success: false,
+          message: data.error || "该项目正在索引中，请等待完成后再删除",
+        });
+      } else {
+        setDeleteRootResult({ success: false, message: data.error || "删除失败" });
+      }
+    } catch {
+      setDeleteRootResult({ success: false, message: "网络错误" });
+    } finally {
+      setDeleteRootLoading(false);
+      setRootPendingDelete(null);
+    }
+  }, [rootPendingDelete, rootsOrg, fetchRoots, fetchTenantStats]);
 
   const fetchIsAdmin = useCallback(async () => {
     try {
@@ -463,6 +675,52 @@ export default function ConsolePage() {
 
     return () => clearInterval(intervalId);
   }, [autoRefresh, activeTab, fetchLogs]);
+
+  // 进入索引管理页时拉取"我的索引"列表（只在首次进入时触发）
+  useEffect(() => {
+    if (activeTab !== "index" || !session || roots !== null) return;
+
+    const timeoutId = window.setTimeout(() => {
+      void fetchRoots();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeTab, session, roots, fetchRoots]);
+
+  // 索引统计轮询：仅在索引管理页且页面可见时进行；有构建任务时缩短到
+  // 5 秒并同时刷新索引列表，否则 30 秒兜底刷新
+  const hasActiveJob = Boolean(tenantStats?.active_job);
+  useEffect(() => {
+    if (activeTab !== "index" || !session) return;
+
+    const intervalMs = hasActiveJob ? 5000 : 30000;
+    let intervalId: number | null = null;
+
+    const tick = () => {
+      void fetchTenantStats(true);
+      if (hasActiveJob) void fetchRoots(true);
+    };
+    const stop = () => {
+      if (intervalId !== null) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+    const sync = () => {
+      if (document.visibilityState === "visible") {
+        if (intervalId === null) intervalId = window.setInterval(tick, intervalMs);
+      } else {
+        stop();
+      }
+    };
+
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", sync);
+    };
+  }, [activeTab, session, hasActiveJob, fetchTenantStats, fetchRoots]);
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -584,12 +842,16 @@ export default function ConsolePage() {
     setClearLoading(true);
     setClearResult(null);
     try {
-      const res = await fetch("/api/clear-index", { method: "POST" });
+      const res = await fetch("/api/clear-index", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(rootsOrg ? { org_id: rootsOrg.id } : {}),
+      });
       const data = await res.json();
       if (res.ok) {
         setClearResult({ success: true, message: data.message || "索引和日志已清除" });
         setLogsData(null);
-        await fetchTenantStats();
+        await fetchTenantStats(false, rootsOrg);
       } else {
         setClearResult({ success: false, message: data.error || "清除失败" });
       }
@@ -769,7 +1031,12 @@ export default function ConsolePage() {
                           <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                               <div className="flex-1 min-w-0">
-                                <p className="text-slate-500 text-xs mb-1">API Key</p>
+                                <p className="text-slate-500 text-xs mb-1">
+                                  API Key
+                                  <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded border bg-white/[0.04] text-slate-400 border-white/[0.1] text-[10px]">
+                                    个人
+                                  </span>
+                                </p>
                                 <p className="text-white font-mono text-sm truncate">
                                   {showKey && fullKey ? fullKey : keyInfo.maskedKey}
                                 </p>
@@ -798,6 +1065,12 @@ export default function ConsolePage() {
                                 创建于 {new Date(keyInfo.createdAt).toLocaleString("zh-CN")}
                               </p>
                             )}
+                            <p className="text-slate-600 text-xs mt-1">
+                              当前套餐：
+                              <span className={keyInfo.tier === "pro" ? "text-cyan-400" : "text-slate-400"}>
+                                {keyInfo.tier === "pro" ? "Pro" : "Free"}
+                              </span>
+                            </p>
                           </CardContent>
                         </Card>
 
@@ -812,6 +1085,9 @@ export default function ConsolePage() {
                         <p className="text-slate-600 text-xs">
                           重置后旧密钥将立即失效，请谨慎操作
                         </p>
+
+                        {/* 组织密钥列表 */}
+                        <OrgKeysCards />
                       </div>
                     ) : (
                       <div className="text-center py-8">
@@ -954,19 +1230,7 @@ export default function ConsolePage() {
                             连接后，编码 Agent 会自动发现以下工具：
                           </p>
                           <div className="space-y-2">
-                            {(mcpConfigMode === "cloud"
-                              ? [
-                                  { name: "codebase-retrieval", desc: "语义检索项目代码上下文" },
-                                  { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析" },
-                                  { name: "codebase_git_context", desc: "Git 状态、diff、提交历史、blame" },
-                                  { name: "codebase_review_changes", desc: "变更评审与检索计划" },
-                                ]
-                              : [
-                                  { name: "codebase-retrieval", desc: "语义检索项目代码上下文" },
-                                  { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析" },
-                                  { name: "codebase_index", desc: "首次与增量建立项目代码索引" },
-                                ]
-                            ).map((tool) => (
+                            {(mcpConfigMode === "cloud" ? CLOUD_TOOLS : REMOTE_TOOLS).map((tool) => (
                               <div key={tool.name} className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
                                 <code className="text-cyan-400 text-xs font-mono shrink-0">{tool.name}</code>
                                 <p className="text-slate-400 text-xs">{tool.desc}</p>
@@ -1241,6 +1505,9 @@ export default function ConsolePage() {
                         <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
                           <CardContent className="p-4">
                             <p className="text-slate-500 text-xs mb-3">索引统计</p>
+                            {tenantStats.active_job && (
+                              <IndexingProgress job={tenantStats.active_job} />
+                            )}
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                               <div>
                                 <p className="text-2xl font-semibold text-white">{tenantStats.fileCount.toLocaleString()}</p>
@@ -1294,6 +1561,32 @@ export default function ConsolePage() {
                           {tenantStatsLoading ? "刷新中..." : "刷新统计"}
                         </Button>
 
+                        {/* 我的索引 */}
+                        <RootsSection
+                          roots={roots}
+                          loading={rootsLoading}
+                          error={rootsError}
+                          deleteResult={deleteRootResult}
+                          orgOptions={(myOrgs ?? []).map((o) => ({ id: o.id, name: o.name }))}
+                          activeOrg={rootsOrg}
+                          onSelectOrg={(org) => {
+                            setRootsOrg(org);
+                            setRootsOrgRole(null);
+                            setRoots(null);
+                            setTenantStats(null);
+                            setTenantStatsError(null);
+                            setRootsError(null);
+                            setDeleteRootResult(null);
+                            void fetchTenantStats(false, org);
+                          }}
+                          canDelete={!rootsOrg || rootsOrgRole === "owner"}
+                          onRefresh={() => fetchRoots()}
+                          onDelete={(root) => {
+                            setDeleteRootResult(null);
+                            setRootPendingDelete(root);
+                          }}
+                        />
+
                         {/* Clear index */}
                         <div className="mt-6 pt-6 border-t border-white/[0.06]">
                           <h3 className="text-sm font-medium text-red-400 mb-3">危险操作</h3>
@@ -1310,7 +1603,7 @@ export default function ConsolePage() {
                                   variant="warning"
                                   size="sm"
                                   onClick={() => setShowClearConfirm(true)}
-                                  disabled={clearLoading}
+                                  disabled={clearLoading || (!!rootsOrg && rootsOrgRole !== "owner")}
                                   className="shrink-0"
                                 >
                                   <Trash2 className="w-4 h-4 mr-1" />
@@ -1331,6 +1624,11 @@ export default function ConsolePage() {
                       </div>
                     ) : tenantStats && !tenantStats.exists ? (
                       <div className="flex flex-col items-center py-8 text-center text-slate-500">
+                        {tenantStats.active_job && (
+                          <div className="mb-6 w-full max-w-md text-left">
+                            <IndexingProgress job={tenantStats.active_job} />
+                          </div>
+                        )}
                         <p>尚未建立索引。{mcpConfigMode === "cloud" ? "配置完成后启动 IDE，首次连接会自动完成索引。" : "请让编码 Agent 调用 codebase_index 建立项目索引。"}</p>
                         <Button
                           variant="glass"
@@ -1355,6 +1653,12 @@ export default function ConsolePage() {
                   <TabsContent value="model-config" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                     <h2 className="text-lg font-medium text-white mb-6">模型设置</h2>
                     <UserModelConfigTab />
+                  </TabsContent>
+
+                  {/* 我的 - 组织 */}
+                  <TabsContent value="team" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
+                    <h2 className="text-lg font-medium text-white mb-6">组织</h2>
+                    <OrgTab currentUserId={session.user.id} />
                   </TabsContent>
 
                   {/* 管理员 - 组织概览 */}
@@ -1386,6 +1690,14 @@ export default function ConsolePage() {
                     <TabsContent value="quota" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                       <h2 className="text-lg font-medium text-white mb-6">配额管理</h2>
                       <AdminQuotaTab />
+                    </TabsContent>
+                  )}
+
+                  {/* 管理员 - 组织管理（org_quotas 分配） */}
+                  {isAdmin && (
+                    <TabsContent value="admin-orgs" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
+                      <h2 className="text-lg font-medium text-white mb-6">组织管理</h2>
+                      <AdminOrgsTab />
                     </TabsContent>
                   )}
 
@@ -1485,6 +1797,42 @@ export default function ConsolePage() {
               className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-white"
             >
               {clearLoading ? "清除中..." : "确认清除"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete root confirm dialog */}
+      <AlertDialog
+        open={rootPendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setRootPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent className="bg-[#0d1424] border-white/[0.08]">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">确认删除该项目索引</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              即将删除{" "}
+              <span className="font-mono text-cyan-300 break-all">
+                {rootPendingDelete?.workspace_id}
+              </span>
+              {rootPendingDelete && rootBranchLabel(rootPendingDelete)
+                ? `（分支 ${rootBranchLabel(rootPendingDelete)}）`
+                : ""}
+              {" "}的云端索引。删除后该项目需重新索引才能继续使用检索功能。确定要继续吗？
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-transparent border-white/[0.08] text-slate-400 hover:text-white hover:bg-white/[0.06]">
+              取消
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteRoot}
+              disabled={deleteRootLoading}
+              className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-white"
+            >
+              {deleteRootLoading ? "删除中..." : "确认删除"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1776,6 +2124,233 @@ function LogEntry({ log, onClick }: { log: RequestLog; onClick?: () => void }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// 索引统计卡片内的构建进度条：消费 tenant-stats 的 active_job 字段
+function IndexingProgress({ job }: { job: ActiveIndexJob }) {
+  const percent =
+    job.total_files > 0
+      ? Math.min(100, Math.round((job.indexed_files / job.total_files) * 100))
+      : 0;
+  return (
+    <div className="mb-4 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.06] p-3">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <p className="flex items-center gap-2 text-xs text-cyan-300">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          索引构建中 {job.indexed_files.toLocaleString()}/{job.total_files.toLocaleString()} 文件
+        </p>
+        <span className="text-xs text-slate-500">{job.phase}</span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-500"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// 我的索引：按 root 维度列出已索引项目，支持逐个删除。支持个人/组织租户
+// 切换；组织租户下成员角色隐藏删除按钮（仅组织所有者可删除）。
+function RootsSection({
+  roots,
+  loading,
+  error,
+  deleteResult,
+  orgOptions,
+  activeOrg,
+  onSelectOrg,
+  canDelete,
+  onRefresh,
+  onDelete,
+}: {
+  roots: RelayRoot[] | null;
+  loading: boolean;
+  error: string | null;
+  deleteResult: { success: boolean; message: string } | null;
+  orgOptions: { id: string; name: string }[];
+  activeOrg: { id: string; name: string } | null;
+  onSelectOrg: (org: { id: string; name: string } | null) => void;
+  canDelete: boolean;
+  onRefresh: () => void;
+  onDelete: (root: RelayRoot) => void;
+}) {
+  return (
+    <div className="mt-6 pt-6 border-t border-white/[0.06]">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-medium text-white">我的索引</h3>
+        <Button variant="glass" size="sm" onClick={onRefresh} disabled={loading}>
+          <RefreshCw className={cn("w-4 h-4 mr-1", loading && "animate-spin")} />
+          {loading ? "刷新中..." : "刷新"}
+        </Button>
+      </div>
+      <p className="-mt-1 mb-3 text-[11px] text-slate-600">
+        同一项目的不同分支各自维护独立的索引视图，互不影响，可分别删除。
+      </p>
+
+      {orgOptions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <button
+            type="button"
+            onClick={() => onSelectOrg(null)}
+            className={cn(
+              "px-2.5 py-1 rounded-lg text-xs border transition-colors",
+              !activeOrg
+                ? "bg-cyan-400/10 text-cyan-200 border-cyan-500/30"
+                : "text-slate-500 border-white/[0.08] hover:text-slate-300"
+            )}
+          >
+            个人
+          </button>
+          {orgOptions.map((org) => (
+            <button
+              key={org.id}
+              type="button"
+              onClick={() => onSelectOrg(org)}
+              className={cn(
+                "px-2.5 py-1 rounded-lg text-xs border transition-colors",
+                activeOrg?.id === org.id
+                  ? "bg-cyan-400/10 text-cyan-200 border-cyan-500/30"
+                  : "text-slate-500 border-white/[0.08] hover:text-slate-300"
+              )}
+            >
+              <Building2 className="w-3 h-3 inline mr-1 -mt-0.5" />
+              {org.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {activeOrg && !canDelete && roots !== null && (
+        <p className="text-xs text-slate-500 mb-3">仅组织所有者可删除组织索引</p>
+      )}
+
+      {deleteResult && (
+        <p
+          className={cn(
+            "text-xs mb-3",
+            deleteResult.success ? "text-green-400" : "text-red-400"
+          )}
+        >
+          {deleteResult.message}
+        </p>
+      )}
+
+      {error ? (
+        <div className="flex flex-col gap-3 rounded-lg border border-red-500/20 bg-red-500/[0.05] p-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-red-300">{error}</p>
+          <Button variant="glass" size="sm" onClick={onRefresh} disabled={loading} className="shrink-0">
+            <RefreshCw className={cn("mr-1 h-4 w-4", loading && "animate-spin")} />
+            重试
+          </Button>
+        </div>
+      ) : roots === null ? (
+        <div className="space-y-2">
+          <Skeleton className="h-16 w-full bg-white/[0.06]" />
+          <Skeleton className="h-16 w-full bg-white/[0.06]" />
+        </div>
+      ) : roots.length === 0 ? (
+        <div className="rounded-lg border border-white/[0.04] bg-[#0a0f1a]/60 px-4 py-6 text-center text-xs text-slate-500">
+          暂无已索引的项目。在 IDE 中连接 MCP 并完成首次索引后，项目会出现在这里。
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {groupRootsByBase(roots).map((group) =>
+            group.entries.length === 1 ? (
+              // 单分支：与原有单卡片展示一致，不额外分组
+              <Card key={group.baseRootId} className="bg-[#0a0f1a]/60 border-white/[0.06]">
+                <CardContent className="p-3 sm:p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-white text-sm font-mono truncate" title={group.entries[0].root.workspace_id}>
+                          {group.entries[0].root.workspace_id}
+                        </p>
+                        {rootBranchLabel(group.entries[0].root) && (
+                          <Badge variant="outline" className="shrink-0 bg-white/[0.04] text-slate-400 border-white/[0.1] text-[10px] font-mono">
+                            {rootBranchLabel(group.entries[0].root)}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {group.entries[0].root.file_count.toLocaleString()} 个文件
+                        <span className="text-slate-700"> · </span>
+                        {formatSizeBytes(group.entries[0].root.total_size_bytes)}
+                        <span className="text-slate-700"> · </span>
+                        最后索引 {new Date(group.entries[0].root.indexed_at).toLocaleString("zh-CN")}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onDelete(group.entries[0].root)}
+                      className={cn(
+                        "shrink-0 text-slate-500 hover:text-red-400 hover:bg-red-500/10",
+                        !canDelete && "hidden"
+                      )}
+                      aria-label={`删除 ${group.entries[0].root.workspace_id} 的索引`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              // 多分支：同一项目下列出各分支视图，逐视图统计与删除
+              <Card key={group.baseRootId} className="bg-[#0a0f1a]/60 border-white/[0.06]">
+                <CardContent className="p-3 sm:p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-white text-sm font-mono truncate" title={group.workspaceId}>
+                      {group.workspaceId}
+                    </p>
+                    <span className="text-[10px] text-slate-600">
+                      {group.entries.length} 个分支视图
+                    </span>
+                  </div>
+                  <div className="mt-2 space-y-1.5">
+                    {group.entries.map(({ root, branch }) => (
+                      <div
+                        key={root.root_id}
+                        className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.04] bg-white/[0.02] px-2.5 py-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="outline" className="shrink-0 bg-white/[0.04] text-slate-400 border-white/[0.1] text-[10px] font-mono">
+                              {branch}
+                            </Badge>
+                            <p className="text-xs text-slate-500">
+                              {root.file_count.toLocaleString()} 个文件
+                              <span className="text-slate-700"> · </span>
+                              {formatSizeBytes(root.total_size_bytes)}
+                              <span className="text-slate-700"> · </span>
+                              最后索引 {new Date(root.indexed_at).toLocaleString("zh-CN")}
+                            </p>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onDelete(root)}
+                          className={cn(
+                            "shrink-0 text-slate-500 hover:text-red-400 hover:bg-red-500/10",
+                            !canDelete && "hidden"
+                          )}
+                          aria-label={`删除 ${group.workspaceId} 分支 ${branch} 的索引`}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

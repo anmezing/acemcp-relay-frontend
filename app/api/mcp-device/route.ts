@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { initDB, createApiKey } from "@/lib/db";
+import { ensureOrgApiKey, getMemberRole } from "@/lib/org-db";
 
 // 为控制台「一键复制 MCP 配置」提供 apiKey（已有 key 时复用，没有则创建，
-// 绝不轮换）。设备绑定功能已从 relay 移除，本端点不再登记设备、也不再返回
-// 设备 ID——前端只消费 apiKey 字段。
-export async function POST() {
+// 绝不轮换）。一人多密钥：body.orgId 选择组织密钥（须为该组织成员，
+// fail-closed 403），缺省个人密钥。设备绑定功能已从 relay 移除。
+export async function POST(request: Request) {
   try {
     await initDB().catch(console.error);
     const session = await auth.api.getSession({
@@ -15,6 +16,21 @@ export async function POST() {
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "未登录" }, { status: 401 });
+    }
+
+    const body: unknown = await request.json().catch(() => null);
+    const orgId =
+      body && typeof body === "object" && "orgId" in body && typeof body.orgId === "string"
+        ? body.orgId.trim()
+        : "";
+
+    if (orgId) {
+      const role = await getMemberRole(session.user.id, orgId);
+      if (!role) {
+        return NextResponse.json({ error: "不是该组织成员" }, { status: 403 });
+      }
+      const keyRecord = await ensureOrgApiKey(session.user.id, orgId, role);
+      return NextResponse.json({ apiKey: keyRecord.api_key });
     }
 
     const keyRecord = await createApiKey(session.user.id);

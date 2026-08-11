@@ -6,15 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, ArrowLeft, Github, AlertCircle } from "lucide-react";
-
-// 只接受站内相对路径，防开放重定向：外部 URL / 协议相对（//host）/ 反斜杠
-// 变体（/\host，部分浏览器按 // 处理）一律回退首页。
-function sanitizeCallbackUrl(raw: string | null): string {
-  if (raw && raw.startsWith("/") && !raw.startsWith("//") && !raw.startsWith("/\\")) {
-    return raw;
-  }
-  return "/";
-}
+import { loginUrl, sanitizeCallbackUrl } from "@/lib/auth-redirect";
 
 function parseAuthError(raw: string | null): string | null {
   if (!raw) return null;
@@ -35,12 +27,13 @@ function LoginContent() {
   const params = useSearchParams();
   const errorMessage = parseAuthError(params.get("error"));
   const callbackUrl = sanitizeCallbackUrl(params.get("callbackUrl"));
+  const errorCallbackUrl = loginUrl(callbackUrl);
 
   const handleLinuxDoLogin = () => {
     authClient.signIn.oauth2({
       providerId: "linuxdo",
       callbackURL: callbackUrl,
-      errorCallbackURL: "/login",
+      errorCallbackURL: errorCallbackUrl,
     });
   };
 
@@ -48,7 +41,7 @@ function LoginContent() {
     authClient.signIn.social({
       provider: "github",
       callbackURL: callbackUrl,
-      errorCallbackURL: "/login",
+      errorCallbackURL: errorCallbackUrl,
     });
   };
 

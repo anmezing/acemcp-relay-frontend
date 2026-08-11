@@ -29,6 +29,7 @@ export async function GET() {
         hasKey: false,
         maskedKey: null,
         createdAt: null,
+        tier: "free",
       });
     }
 
@@ -37,6 +38,7 @@ export async function GET() {
       maskedKey: maskApiKey(keyRecord.api_key),
       createdAt: keyRecord.created_at,
       updatedAt: keyRecord.updated_at,
+      tier: keyRecord.tier === "pro" ? "pro" : "free",
     });
   } catch (error) {
     console.error("获取 API Key 失败:", error);
