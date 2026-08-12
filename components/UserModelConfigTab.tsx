@@ -1,14 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { RotateCcw, Save } from "lucide-react";
+import { Loader2, RefreshCw, RotateCcw, Save } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  RERANK_PROVIDER_PRESETS,
+  type RerankProvider,
+} from "@/lib/rerank-providers";
 
 interface FormState {
-  provider: string;
+  provider: RerankProvider;
   model: string;
   baseUrl: string;
   apiKey: string;
@@ -17,7 +21,7 @@ interface FormState {
 const EMPTY_FORM: FormState = {
   provider: "siliconflow-compatible",
   model: "",
-  baseUrl: "",
+  baseUrl: RERANK_PROVIDER_PRESETS["siliconflow-compatible"].baseUrl,
   apiKey: "",
 };
 
@@ -42,6 +46,9 @@ export function UserModelConfigTab() {
     rerank: { provider: "", model: "" },
   });
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [configuredProvider, setConfiguredProvider] = useState<RerankProvider | null>(null);
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [noticeOk, setNoticeOk] = useState(false);
@@ -56,14 +63,24 @@ export function UserModelConfigTab() {
       setConfigured(data.configured);
       if (data.platformDefaults) setPlatformDefaults(data.platformDefaults);
       if (data.configured && data.rerank) {
+        const provider = data.rerank.provider as RerankProvider;
+        const preset = RERANK_PROVIDER_PRESETS[provider];
+        setConfiguredProvider(provider);
         setForm({
-          provider: data.rerank.provider,
+          provider,
           model: data.rerank.model,
-          baseUrl: data.rerank.baseUrl,
+          baseUrl: provider === "custom" ? data.rerank.baseUrl : preset.baseUrl,
           apiKey: "",
         });
+        setModelOptions(
+          provider === "custom"
+            ? []
+            : [...new Set([data.rerank.model, ...preset.models].filter(Boolean))]
+        );
       } else {
+        setConfiguredProvider(null);
         setForm(EMPTY_FORM);
+        setModelOptions([]);
       }
       setLoaded(true);
     } catch {
@@ -84,6 +101,46 @@ export function UserModelConfigTab() {
     setNotice(text);
     setNoticeOk(ok);
   };
+
+  const selectProvider = (provider: RerankProvider) => {
+    const preset = RERANK_PROVIDER_PRESETS[provider];
+    setForm({
+      provider,
+      baseUrl: preset.baseUrl,
+      apiKey: "",
+      model: preset.models[0] || "",
+    });
+    setModelOptions([...preset.models]);
+    setNotice("");
+  };
+
+  const fetchModels = useCallback(async () => {
+    setModelsLoading(true);
+    setNotice("");
+    try {
+      const response = await fetch("/api/model-config/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: form.provider, apiKey: form.apiKey }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      const models = Array.isArray(data.models)
+        ? data.models.filter((model: unknown): model is string => typeof model === "string")
+        : [];
+      if (models.length === 0) throw new Error("没有可用的 Rerank 模型");
+      setModelOptions(models);
+      setForm((current) => ({
+        ...current,
+        model: models.includes(current.model) ? current.model : models[0],
+      }));
+      showNotice(`已获取 ${models.length} 个 Rerank 模型`, true);
+    } catch (error) {
+      showNotice(`获取模型失败：${error instanceof Error ? error.message : String(error)}`, false);
+    } finally {
+      setModelsLoading(false);
+    }
+  }, [form.apiKey, form.provider]);
 
   const save = useCallback(async () => {
     setBusy(true);
@@ -152,25 +209,87 @@ export function UserModelConfigTab() {
         <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
           <CardContent className="p-4 space-y-4">
             <h3 className="text-white text-sm font-medium">Rerank</h3>
-            <div className="grid sm:grid-cols-2 gap-3">
-              <Field label="Provider">
-                <select value={form.provider} onChange={(event) => set({ provider: event.target.value })} className={inputCls}>
-                  <option value="siliconflow-compatible">siliconflow-compatible</option>
-                  <option value="voyage">voyage</option>
-                  <option value="custom">custom</option>
+            <div className="grid gap-3">
+              <Field label="供应商">
+                <select
+                  value={form.provider}
+                  onChange={(event) => selectProvider(event.target.value as RerankProvider)}
+                  className={inputCls}
+                >
+                  {Object.entries(RERANK_PROVIDER_PRESETS).map(([value, preset]) => (
+                    <option key={value} value={value}>{preset.label}</option>
+                  ))}
                 </select>
               </Field>
-              <Field label="Model">
-                <input value={form.model} onChange={(event) => set({ model: event.target.value })}
-                  placeholder="bge-reranker-v2-m3" className={inputCls} />
-              </Field>
               <Field label="Base URL">
-                <input value={form.baseUrl} onChange={(event) => set({ baseUrl: event.target.value })}
-                  placeholder="https://api.siliconflow.cn/v1/rerank" className={inputCls} />
+                <input
+                  value={form.baseUrl}
+                  onChange={(event) => set({ baseUrl: event.target.value })}
+                  readOnly={form.provider !== "custom"}
+                  placeholder="https://provider.example.com/v1/rerank"
+                  className={cn(inputCls, form.provider !== "custom" && "cursor-default text-slate-400")}
+                />
               </Field>
-              <Field label={configured ? "API Key（留空表示不修改）" : "API Key"}>
-                <input type="password" value={form.apiKey} onChange={(event) => set({ apiKey: event.target.value })}
-                  placeholder={configured ? "已保存" : "sk-..."} className={inputCls} />
+              <Field
+                label={
+                  configured && form.provider === configuredProvider
+                    ? "API Key（留空表示使用已保存的 Key）"
+                    : "API Key"
+                }
+              >
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={form.apiKey}
+                    onChange={(event) => set({ apiKey: event.target.value })}
+                    placeholder={
+                      configured && form.provider === configuredProvider ? "已保存" : "sk-..."
+                    }
+                    className={inputCls}
+                  />
+                  {RERANK_PROVIDER_PRESETS[form.provider].dynamicModels && (
+                    <Button
+                      type="button"
+                      variant="glass"
+                      size="sm"
+                      onClick={fetchModels}
+                      disabled={modelsLoading || (!form.apiKey && form.provider !== configuredProvider)}
+                      className="h-[30px] shrink-0 px-3 text-xs text-cyan-400"
+                    >
+                      {modelsLoading
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <RefreshCw className="h-3.5 w-3.5" />}
+                      获取模型
+                    </Button>
+                  )}
+                </div>
+              </Field>
+              <Field label="模型">
+                {form.provider === "custom" ? (
+                  <input
+                    value={form.model}
+                    onChange={(event) => set({ model: event.target.value })}
+                    placeholder="输入兼容服务的模型 ID"
+                    className={inputCls}
+                  />
+                ) : (
+                  <select
+                    value={form.model}
+                    onChange={(event) => set({ model: event.target.value })}
+                    disabled={modelOptions.length === 0}
+                    className={cn(inputCls, modelOptions.length === 0 && "cursor-not-allowed text-slate-600")}
+                  >
+                    {modelOptions.length === 0 ? (
+                      <option value="">
+                        {form.provider === "siliconflow-compatible"
+                          ? "填写 API Key 后获取模型"
+                          : "暂无可用模型"}
+                      </option>
+                    ) : modelOptions.map((model) => (
+                      <option key={model} value={model}>{model}</option>
+                    ))}
+                  </select>
+                )}
               </Field>
             </div>
           </CardContent>
@@ -183,7 +302,13 @@ export function UserModelConfigTab() {
 
       {enabled && (
         <div className="flex flex-wrap gap-2">
-          <Button variant="glass" size="sm" disabled={busy} onClick={save} className="text-xs text-cyan-400">
+          <Button
+            variant="glass"
+            size="sm"
+            disabled={busy || !form.model || !form.baseUrl || (!form.apiKey && form.provider !== configuredProvider)}
+            onClick={save}
+            className="text-xs text-cyan-400"
+          >
             <Save className="w-3.5 h-3.5" />
             保存
           </Button>

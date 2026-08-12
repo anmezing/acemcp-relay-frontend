@@ -1,12 +1,17 @@
 import crypto from "crypto";
 
 import { ValidationError } from "./errors";
+import {
+  isRerankProvider,
+  normalizedRerankBaseUrl,
+  type RerankProvider,
+} from "./rerank-providers";
 import { validateUserRerankProviderUrl } from "./safe-outbound";
 
 // AES-256-GCM layout: base64(nonce[12] || ciphertext || tag[16]).
 // Keep this format aligned with acemcp-relay/modelconfig.go.
 export interface RerankModelConfig {
-  provider: "siliconflow-compatible" | "voyage" | "custom";
+  provider: RerankProvider;
   model: string;
   baseUrl: string;
   apiKey: string;
@@ -61,14 +66,13 @@ export function normalizeUserModelConfig(raw: {
 }): UserModelConfig {
   const rerank = raw.rerank;
   if (!rerank) throw new ValidationError("rerank 配置缺失");
-  if (
-    rerank.provider !== "siliconflow-compatible" &&
-    rerank.provider !== "voyage" &&
-    rerank.provider !== "custom"
-  ) {
+  if (!isRerankProvider(rerank.provider)) {
     throw new ValidationError("rerank.provider 仅支持 siliconflow-compatible / voyage / custom");
   }
-  const baseUrl = requireString(rerank.baseUrl, "rerank.baseUrl");
+  const baseUrl = requireString(
+    normalizedRerankBaseUrl(rerank.provider, rerank.baseUrl),
+    "rerank.baseUrl"
+  );
   validateUserRerankProviderUrl(baseUrl, "rerank.baseUrl");
   return {
     rerank: {

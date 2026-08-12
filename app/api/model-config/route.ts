@@ -84,7 +84,9 @@ export async function POST(request: NextRequest) {
       const existing: UserModelConfig | null = row
         ? decryptModelConfig(row.config_enc)
         : null;
-      const previous = existing?.rerank.apiKey || "";
+      const previous = existing?.rerank.provider === config.rerank.provider
+        ? existing.rerank.apiKey
+        : "";
       if (!previous) {
         return NextResponse.json({ error: "请填写 rerank API Key" }, { status: 400 });
       }
