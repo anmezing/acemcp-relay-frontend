@@ -31,10 +31,12 @@ export async function GET() {
       embeddings: {
         provider: process.env.EMBEDDINGS_PROVIDER || "",
         model: process.env.EMBEDDINGS_MODEL || "",
+        baseUrl: process.env.EMBEDDINGS_BASE_URL || "",
       },
       rerank: {
         provider: process.env.RERANK_PROVIDER || "",
         model: process.env.RERANK_MODEL || "",
+        baseUrl: process.env.RERANK_BASE_URL || "",
       },
     },
   };

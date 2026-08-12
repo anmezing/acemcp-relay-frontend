@@ -38,12 +38,13 @@ const inputCls =
   "w-full bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/40 font-mono";
 
 export function UserModelConfigTab() {
+  const [activeSide, setActiveSide] = useState<"embeddings" | "rerank">("rerank");
   const [loaded, setLoaded] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [configured, setConfigured] = useState(false);
   const [platformDefaults, setPlatformDefaults] = useState({
-    embeddings: { provider: "", model: "" },
-    rerank: { provider: "", model: "" },
+    embeddings: { provider: "", model: "", baseUrl: "" },
+    rerank: { provider: "", model: "", baseUrl: "" },
   });
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [configuredProvider, setConfiguredProvider] = useState<RerankProvider | null>(null);
@@ -185,23 +186,72 @@ export function UserModelConfigTab() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="text-slate-500">Embedding</span>
-        <span className="font-mono text-slate-300">
-          {platformDefaults.embeddings.model || "平台统一配置"}
-        </span>
-        <span className="text-slate-700">|</span>
-        <span className={cn(
-          "px-2 py-0.5 rounded border",
-          configured
-            ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/20"
-            : "bg-slate-500/10 text-slate-400 border-slate-500/20"
-        )}>
-          {configured ? "自定义 Rerank" : "平台 Rerank"}
-        </span>
+      <div className="flex items-center gap-1 border-b border-white/[0.08]" role="tablist" aria-label="模型类型">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeSide === "embeddings"}
+          onClick={() => setActiveSide("embeddings")}
+          className={cn(
+            "border-b-2 px-2.5 py-2 text-xs transition-colors",
+            activeSide === "embeddings"
+              ? "border-cyan-400 text-cyan-300"
+              : "border-transparent text-slate-500 hover:text-slate-300"
+          )}
+        >
+          Embedding
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeSide === "rerank"}
+          onClick={() => setActiveSide("rerank")}
+          className={cn(
+            "border-b-2 px-2.5 py-2 text-xs transition-colors",
+            activeSide === "rerank"
+              ? "border-cyan-400 text-cyan-300"
+              : "border-transparent text-slate-500 hover:text-slate-300"
+          )}
+        >
+          Rerank
+        </button>
       </div>
 
-      {!enabled ? (
+      {activeSide === "embeddings" ? (
+        <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
+          <CardContent className="space-y-4 p-4">
+            <div>
+              <h3 className="text-sm font-medium text-white">Embedding</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Embedding 由平台统一管理，保证所有用户共享索引的向量空间一致，当前不可在个人设置中修改。
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Provider">
+                <input
+                  readOnly
+                  value={platformDefaults.embeddings.provider || "平台统一配置"}
+                  className={cn(inputCls, "cursor-default text-slate-400")}
+                />
+              </Field>
+              <Field label="Model">
+                <input
+                  readOnly
+                  value={platformDefaults.embeddings.model || "平台统一配置"}
+                  className={cn(inputCls, "cursor-default text-slate-400")}
+                />
+              </Field>
+              <Field label="Base URL">
+                <input
+                  readOnly
+                  value={platformDefaults.embeddings.baseUrl || "平台统一配置"}
+                  className={cn(inputCls, "cursor-default text-slate-400")}
+                />
+              </Field>
+            </div>
+          </CardContent>
+        </Card>
+      ) : !enabled ? (
         <p className="text-slate-500 text-sm py-6">
           {platformDefaults.rerank.model || "平台 Rerank"}
         </p>
