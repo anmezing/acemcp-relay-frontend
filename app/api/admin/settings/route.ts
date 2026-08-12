@@ -4,23 +4,6 @@ import { getSystemSetting, setSystemSetting } from "@/lib/db";
 import { countUserModelConfigs } from "@/lib/model-config-db";
 import { modelConfigEnabled } from "@/lib/model-config-crypto";
 
-// 模型配置只读展示：LCE 的模型由容器环境变量决定，改动需编辑 deploy/.env
-// 并重启 lce，因此这里不提供在线修改。API key 一律不下发。
-function modelConfig() {
-  return {
-    embeddings: {
-      provider: process.env.EMBEDDINGS_PROVIDER || "",
-      model: process.env.EMBEDDINGS_MODEL || "",
-      baseUrl: process.env.EMBEDDINGS_BASE_URL || "",
-    },
-    rerank: {
-      provider: process.env.RERANK_PROVIDER || "",
-      model: process.env.RERANK_MODEL || "",
-      baseUrl: process.env.RERANK_BASE_URL || "",
-    },
-  };
-}
-
 export async function GET() {
   if (!(await requireAdminSession())) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
@@ -33,7 +16,6 @@ export async function GET() {
       : 0;
     return NextResponse.json({
       registrationEnabled,
-      models: modelConfig(),
       customRerank: { enabled: modelConfigEnabled(), userCount: customModelUsers },
     });
   } catch (error) {

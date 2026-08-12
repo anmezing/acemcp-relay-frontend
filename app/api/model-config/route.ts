@@ -14,6 +14,7 @@ import {
   resetUserModelConfig,
   saveUserModelConfig,
 } from "@/lib/model-config-db";
+import { fetchPlatformModelConfig } from "@/lib/platform-model-config";
 
 async function requireUser() {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -24,19 +25,27 @@ export async function GET() {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
+  let platform;
+  try {
+    platform = await fetchPlatformModelConfig();
+  } catch (error) {
+    console.error("platform model config read failed:", error);
+    return NextResponse.json({ error: "模型配置服务不可用" }, { status: 502 });
+  }
+
   const enabled = modelConfigEnabled();
   const base = {
     enabled,
     platformDefaults: {
       embeddings: {
-        provider: process.env.EMBEDDINGS_PROVIDER || "",
-        model: process.env.EMBEDDINGS_MODEL || "",
-        baseUrl: process.env.EMBEDDINGS_BASE_URL || "",
+        provider: platform.embeddings.provider,
+        model: platform.embeddings.model,
+        baseUrl: platform.embeddings.baseUrl,
       },
       rerank: {
-        provider: process.env.RERANK_PROVIDER || "",
-        model: process.env.RERANK_MODEL || "",
-        baseUrl: process.env.RERANK_BASE_URL || "",
+        provider: platform.rerank.provider,
+        model: platform.rerank.model,
+        baseUrl: platform.rerank.baseUrl,
       },
     },
   };

@@ -8,6 +8,9 @@ vi.mock("@/lib/model-config-db", () => ({
   resetUserModelConfig: vi.fn(),
   saveUserModelConfig: vi.fn(),
 }));
+vi.mock("@/lib/platform-model-config", () => ({
+  fetchPlatformModelConfig: vi.fn(),
+}));
 
 import { auth } from "@/lib/auth";
 import { encryptModelConfig } from "@/lib/model-config-crypto";
@@ -15,11 +18,13 @@ import {
   getUserModelConfigRow,
   saveUserModelConfig,
 } from "@/lib/model-config-db";
-import { POST } from "./route";
+import { fetchPlatformModelConfig } from "@/lib/platform-model-config";
+import { GET, POST } from "./route";
 
 const getSession = vi.mocked(auth.api.getSession);
 const getRow = vi.mocked(getUserModelConfigRow);
 const saveConfig = vi.mocked(saveUserModelConfig);
+const getPlatformConfig = vi.mocked(fetchPlatformModelConfig);
 
 function request(rerank: Record<string, unknown>) {
   return new NextRequest("http://localhost/api/model-config", {
@@ -33,6 +38,43 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.MODEL_CONFIG_SECRET = "model-config-route-test-secret";
   getSession.mockResolvedValue({ user: { id: "user-1" } } as Awaited<ReturnType<typeof auth.api.getSession>>);
+  getPlatformConfig.mockResolvedValue({
+    embeddings: {
+      provider: "voyage",
+      model: "voyage-code-3",
+      baseUrl: "https://api.voyageai.com/v1/embeddings",
+      dimensions: 1024,
+      apiKeyConfigured: true,
+    },
+    rerank: {
+      provider: "siliconflow-compatible",
+      model: "BAAI/bge-reranker-v2-m3",
+      baseUrl: "https://api.siliconflow.cn/v1/rerank",
+      apiKeyConfigured: true,
+    },
+  });
+});
+
+describe("GET /api/model-config", () => {
+  it("returns live platform defaults from Relay", async () => {
+    const response = await GET();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      platformDefaults: {
+        embeddings: { provider: "voyage", model: "voyage-code-3" },
+        rerank: { provider: "siliconflow-compatible" },
+      },
+    });
+    expect(getPlatformConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed when Relay platform config is unavailable", async () => {
+    getPlatformConfig.mockRejectedValueOnce(new Error("down"));
+    const response = await GET();
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: "模型配置服务不可用" });
+    expect(getRow).not.toHaveBeenCalled();
+  });
 });
 
 describe("POST /api/model-config", () => {
