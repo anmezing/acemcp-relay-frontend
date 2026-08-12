@@ -985,11 +985,11 @@ export default function ConsolePage() {
 
             <div className="flex gap-4 flex-1 min-h-0">
               {/* Sidebar - desktop only */}
-              <aside className="hidden md:block flex-shrink-0 w-44 overflow-y-auto scrollbar-thin">
-                <nav className="flex flex-col gap-3">
+              <aside className="hidden md:block flex-shrink-0 w-48 overflow-y-auto pr-1 scrollbar-thin">
+                <nav className="flex flex-col gap-4">
                   {sections.map((section) => (
-                    <div key={section.label}>
-                      <p className="text-[10px] text-slate-600 px-3 mb-1 uppercase tracking-widest font-medium">
+                    <div key={section.label} className="rounded-xl border border-white/[0.04] bg-white/[0.012] p-1.5">
+                      <p className="px-2.5 pb-1 pt-1 text-[10px] font-medium uppercase tracking-widest text-slate-500">
                         {section.label}
                         {section.admin && <Shield className="w-3 h-3 inline ml-1 -mt-0.5 text-amber-500/60" />}
                       </p>
@@ -1163,6 +1163,18 @@ export default function ConsolePage() {
                               ? "复制配置到 IDE 即可使用，客户端由 npx 自动获取并保持最新（需要 Node.js 20+）。选择格式后点击「一键复制」生成密钥："
                               : "Cursor、Claude Code 和 Codex 均可直接连接远程 MCP。选择格式后点击「一键复制」生成密钥："}
                           </p>
+                          {mcpConfigMode === "cloud" && (
+                            <div className="mb-4 rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] p-3 text-sm text-slate-400">
+                              <p className="text-slate-300">可选的全局安装方式：</p>
+                              <code className="mt-2 block overflow-x-auto whitespace-pre font-mono text-xs text-cyan-300">
+                                npm install -g @anmezing/lce-cloud@latest
+                              </code>
+                              <p className="mt-2 text-xs text-slate-500">
+                                预装后可将配置中的 <code className="text-slate-300">npx</code> 改为{" "}
+                                <code className="text-slate-300">lce-cloud</code>；默认 npx 配置无需额外安装。
+                              </p>
+                            </div>
+                          )}
 
                           {/* Format toggle: JSON / TOML */}
                           <div

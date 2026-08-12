@@ -103,7 +103,7 @@ export default function Home() {
           {/* Core capabilities */}
           <section>
             <SectionTitle>核心能力</SectionTitle>
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid items-stretch gap-4 md:grid-cols-2">
               <FeatureCard
                 title="语义代码理解"
                 description="融合语义、关键词与精确术语检索。直接描述任务或问题，LCE 会理解意图并召回相关实现，无需提前知道函数名或变量名。"
@@ -152,6 +152,16 @@ export default function Home() {
                     将 MCP 配置添加到 IDE 即可，客户端由 npx 自动获取并保持最新（需要 Node.js 20+）。
                     登录控制台后，可在「配置说明」中一键复制带密钥的完整配置：
                   </span>
+                  <div className="rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] p-3 text-sm text-slate-400">
+                    <p className="text-slate-300">可选：如果希望预先安装客户端，也可以执行：</p>
+                    <code className="mt-2 block overflow-x-auto whitespace-pre font-mono text-xs text-cyan-300">
+                      npm install -g @anmezing/lce-cloud@latest
+                    </code>
+                    <p className="mt-2 text-xs text-slate-500">
+                      全局安装后可将配置中的 <code className="text-slate-300">npx</code> 改为{" "}
+                      <code className="text-slate-300">lce-cloud</code>；默认 npx 配置无需额外安装步骤。
+                    </p>
+                  </div>
                   <p className="text-xs text-slate-500">Cursor / Claude Code</p>
                   <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-sm overflow-x-auto">
                     <pre className="text-slate-300 whitespace-pre">{buildCloudMcpConfigJson(null)}</pre>
@@ -240,8 +250,8 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function FeatureCard({ title, description }: { title: string; description: string }) {
   return (
-    <Card className="bg-[#0d1424]/60 border-white/[0.06] hover:border-white/[0.12] transition-colors">
-      <CardContent className="p-5">
+    <Card className="h-full bg-[#0d1424]/60 border-white/[0.06] text-left transition-colors hover:border-white/[0.12]">
+      <CardContent className="h-full p-5 text-left">
         <h3 className="text-white font-medium mb-2">{title}</h3>
         <p className="text-slate-400 text-sm leading-relaxed">{description}</p>
       </CardContent>
