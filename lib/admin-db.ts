@@ -58,6 +58,7 @@ export interface AdminUserRow {
   last_request_at: Date | null;
   banned: boolean;
   tier: "free" | "pro";
+  auth_providers: string[];
 }
 
 export async function listUsersWithStats(): Promise<AdminUserRow[]> {
@@ -68,7 +69,8 @@ export async function listUsersWithStats(): Promise<AdminUserRow[]> {
         COALESCE(r.total, 0)::bigint AS request_count,
         r.last_at AS last_request_at,
         (b.user_id IS NOT NULL) AS banned,
-        COALESCE(k.tier, 'free') AS tier
+        COALESCE(k.tier, 'free') AS tier,
+        a.auth_providers
       FROM "user" u
       LEFT JOIN (
         SELECT user_id, COUNT(*) AS total, MAX(request_timestamp) AS last_at
@@ -76,10 +78,17 @@ export async function listUsersWithStats(): Promise<AdminUserRow[]> {
       ) r ON r.user_id = u.id
       LEFT JOIN banned_users b ON b.user_id = u.id
       LEFT JOIN api_keys k ON k.user_id = u.id AND k.org_id IS NULL
+      LEFT JOIN (
+        SELECT "userId" AS user_id,
+          ARRAY_AGG(DISTINCT "providerId" ORDER BY "providerId") AS auth_providers
+        FROM account
+        GROUP BY "userId"
+      ) a ON a.user_id = u.id
       ORDER BY r.last_at DESC NULLS LAST, u."createdAt" DESC
     `);
     return result.rows.map((r) => ({
       ...r,
+      auth_providers: Array.isArray(r.auth_providers) ? r.auth_providers : [],
       request_count: parseInt(r.request_count),
     }));
   } finally {

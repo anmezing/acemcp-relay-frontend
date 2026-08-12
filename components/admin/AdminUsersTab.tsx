@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronRight, RefreshCw, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { authProviderLabels } from "@/lib/auth-provider";
 
 interface UserRow {
   id: string;
@@ -15,6 +16,7 @@ interface UserRow {
   last_request_at: string | null;
   banned: boolean;
   tier: "free" | "pro";
+  auth_providers: string[];
 }
 
 function fmtTime(value: string | null) {
@@ -91,7 +93,9 @@ export function AdminUsersTab() {
     return (
       (u.email || "").toLowerCase().includes(q) ||
       (u.name || "").toLowerCase().includes(q) ||
-      u.id.toLowerCase().includes(q)
+      u.id.toLowerCase().includes(q) ||
+      authProviderLabels(Array.isArray(u.auth_providers) ? u.auth_providers : [])
+        .some((provider) => provider.toLowerCase().includes(q))
     );
   });
 
@@ -125,7 +129,7 @@ export function AdminUsersTab() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索邮箱 / 用户名 / ID"
+            placeholder="搜索邮箱 / 用户名 / ID / 登录方式"
             className="w-full bg-[#0a0f1a]/60 border border-white/[0.08] rounded-lg pl-9 pr-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/40"
           />
         </div>
@@ -146,6 +150,9 @@ export function AdminUsersTab() {
       <div className="space-y-2">
         {filtered.map((u) => {
           const isOpen = expanded === u.id;
+          const providerLabels = authProviderLabels(
+            Array.isArray(u.auth_providers) ? u.auth_providers : []
+          );
           return (
             <div key={u.id}
               className={cn(
@@ -170,6 +177,14 @@ export function AdminUsersTab() {
                   )}>
                   {u.tier === "pro" ? "Pro" : "Free"}
                 </span>
+                {(providerLabels.length ? providerLabels : ["来源未知"]).map((provider) => (
+                  <span
+                    key={provider}
+                    className="rounded border border-white/[0.08] bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-slate-400"
+                  >
+                    {provider}
+                  </span>
+                ))}
                 {u.banned && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded border bg-red-500/10 text-red-400 border-red-500/20">
                     已封禁
@@ -188,6 +203,12 @@ export function AdminUsersTab() {
                   <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
                     <span>ID: <span className="font-mono text-slate-400">{u.id}</span></span>
                     <span>注册于 {fmtTime(u.created_at)}</span>
+                    <span>
+                      登录方式：
+                      <span className="text-slate-300">
+                        {providerLabels.join("、") || "来源未知"}
+                      </span>
+                    </span>
                   </div>
 
                   <div className="flex flex-wrap gap-2 pt-1">
