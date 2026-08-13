@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title description">
+  <title id="title">LCE icon</title>
+  <desc id="description">A friendly one-eyed retrieval robot with graph nodes and index slots.</desc>
+
+  <rect x="24" y="24" width="464" height="464" rx="108" fill="#0d1821"/>
+  <rect x="25" y="25" width="462" height="462" rx="107" fill="none" stroke="#263640" stroke-width="2"/>
+
+  <!-- A three-node graph doubles as the robot antenna. -->
+  <path
+    d="M256 137V96M256 96L208 74M256 96L304 74"
+    fill="none"
+    stroke="#57d6c1"
+    stroke-width="14"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <circle cx="208" cy="74" r="14" fill="#f4f7f5"/>
+  <circle cx="304" cy="74" r="14" fill="#f4f7f5"/>
+  <circle cx="256" cy="96" r="15" fill="#ff806a"/>
+
+  <!-- Side modules stay visible when the icon is reduced to app-icon size. -->
+  <rect x="82" y="215" width="54" height="104" rx="24" fill="#57d6c1"/>
+  <rect x="376" y="215" width="54" height="104" rx="24" fill="#57d6c1"/>
+
+  <rect x="116" y="126" width="280" height="270" rx="66" fill="#f4f7f5"/>
+  <rect x="146" y="164" width="220" height="164" rx="54" fill="#14242e"/>
+
+  <!-- The central search lens gives LCE a silhouette distinct from bracket-based coding mascots. -->
+  <circle cx="256" cy="232" r="57" fill="#57d6c1"/>
+  <circle cx="256" cy="232" r="34" fill="#0d1821"/>
+  <circle cx="243" cy="218" r="11" fill="#f4f7f5"/>
+  <circle cx="269" cy="247" r="7" fill="#ff806a"/>
+
+  <path
+    d="M213 292Q256 318 299 292"
+    fill="none"
+    stroke="#f4f7f5"
+    stroke-width="14"
+    stroke-linecap="round"
+  />
+
+  <!-- Three result slots represent LCE's layered retrieval index. -->
+  <path d="M190 354h132" fill="none" stroke="#14242e" stroke-width="14" stroke-linecap="round"/>
+  <path d="M211 377h90" fill="none" stroke="#ff806a" stroke-width="10" stroke-linecap="round"/>
+</svg>

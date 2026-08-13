@@ -4,10 +4,11 @@ import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
-import { RefreshCw, Zap, Radio, Clock, Activity } from "lucide-react";
+import { RefreshCw, Zap, Radio, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LceBrand } from "@/components/LceBrand";
 
 interface HealthCheck {
   id: number;
@@ -215,8 +216,8 @@ export default function StatusPage() {
       {/* Header */}
       <header className="border-b border-white/[0.06] bg-[#0a0f1a]/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
-          <Link href="/" className="text-lg sm:text-xl font-semibold whitespace-nowrap text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-400">
-            LCE
+          <Link href="/" className="whitespace-nowrap" aria-label="LCE 首页">
+            <LceBrand iconSize={32} textClassName="text-lg sm:text-xl" priority />
           </Link>
           <nav className="order-3 grid w-full grid-cols-3 sm:order-none sm:flex sm:w-auto sm:items-center sm:gap-1">
             <Link
@@ -269,9 +270,11 @@ export default function StatusPage() {
             <div className="rounded-xl border border-white/[0.06] bg-[#0d1424]/60 backdrop-blur-xl p-6">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-                  <div className="w-11 h-11 sm:w-14 sm:h-14 shrink-0 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-white/[0.08] flex items-center justify-center">
-                    <Activity className="w-5 h-5 sm:w-7 sm:h-7 text-cyan-400" />
-                  </div>
+                  <LceBrand
+                    iconSize={56}
+                    showName={false}
+                    iconClassName="w-11 h-11 sm:w-14 sm:h-14"
+                  />
                   <div className="min-w-0">
                     <h1 className="text-lg sm:text-xl font-semibold text-white">LCE</h1>
                     <div className="flex items-center gap-2 mt-1">

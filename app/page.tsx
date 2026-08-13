@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { AGENT_RULES_CLOUD } from "@/lib/agent-rules";
 import { buildCloudMcpConfigJson, buildCloudMcpConfigToml } from "@/lib/mcp-config";
+import { LceBrand } from "@/components/LceBrand";
 
 export default function Home() {
   return (
@@ -30,10 +31,14 @@ export default function Home() {
               <div className="absolute bottom-1/3 left-1/3 w-[280px] h-[160px] bg-blue-500/55 blur-[75px] rounded-full animate-aurora-3" />
               <div className="absolute top-1/2 right-1/3 -translate-y-1/2 w-[220px] h-[140px] bg-indigo-500/45 blur-[60px] rounded-full animate-aurora-4" />
             </div>
-            <h1 className="relative text-5xl md:text-7xl font-semibold tracking-tight">
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-cyan-400 to-blue-400">
-                LCE
-              </span>
+            <h1 className="relative">
+              <LceBrand
+                iconSize={112}
+                priority
+                className="flex-col gap-4"
+                iconClassName="w-24 h-24 md:w-28 md:h-28 drop-shadow-[0_18px_46px_rgba(87,214,193,0.2)]"
+                textClassName="text-5xl md:text-7xl"
+              />
             </h1>
           </div>
 

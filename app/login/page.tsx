@@ -7,6 +7,7 @@ import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, ArrowLeft, Github, AlertCircle } from "lucide-react";
 import { loginUrl, sanitizeCallbackUrl } from "@/lib/auth-redirect";
+import { LceBrand } from "@/components/LceBrand";
 
 function parseAuthError(raw: string | null): string | null {
   if (!raw) return null;
@@ -46,7 +47,7 @@ function LoginContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0f1a] flex items-center justify-center overflow-hidden animate-page-fade-in">
+    <div className="relative min-h-screen bg-[#0a0f1a] flex items-center justify-center overflow-hidden animate-page-fade-in">
       {/* Aurora background effects */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {/* Aurora blob 1 - Main cyan */}
@@ -76,10 +77,13 @@ function LoginContent() {
         <div className="relative bg-[#0d1424]/90 backdrop-blur-xl border border-white/[0.06] rounded-2xl p-8">
           {/* Header */}
           <div className="text-center mb-8">
-            <Link href="/" className="inline-block mb-3">
-              <span className="text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-400">
-                LCE
-              </span>
+            <Link href="/" className="inline-block mb-3" aria-label="LCE 首页">
+              <LceBrand
+                iconSize={64}
+                className="flex-col gap-2"
+                textClassName="text-2xl"
+                priority
+              />
             </Link>
             <p className="text-slate-500 text-sm font-light opacity-0 animate-float-up animate-delay-200">
               登录以访问转发控制台

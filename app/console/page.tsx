@@ -43,6 +43,7 @@ import { OrgTab } from "@/components/OrgTab";
 import { OrgKeysCards } from "@/components/OrgKeysCards";
 import { AGENT_RULES_CLOUD, AGENT_RULES_REMOTE, CLOUD_TOOLS, REMOTE_TOOLS } from "@/lib/agent-rules";
 import { UserModelConfigTab } from "@/components/UserModelConfigTab";
+import { LceBrand } from "@/components/LceBrand";
 
 type Tab =
   | "keys" | "docs" | "profile" | "model-config" | "team"
@@ -888,8 +889,8 @@ export default function ConsolePage() {
       {/* Header */}
       <header className="relative border-b border-white/[0.06] flex-shrink-0 bg-[#0a0f1a]/80 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
-          <Link href="/" className="text-lg sm:text-xl font-semibold whitespace-nowrap text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-blue-400">
-            LCE
+          <Link href="/" className="whitespace-nowrap" aria-label="LCE 首页">
+            <LceBrand iconSize={32} textClassName="text-lg sm:text-xl" priority />
           </Link>
           <nav className="order-3 grid w-full grid-cols-3 sm:order-none sm:flex sm:w-auto sm:items-center sm:gap-1">
             <Link
