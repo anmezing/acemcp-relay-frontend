@@ -58,6 +58,9 @@ export interface AdminUserRow {
   last_request_at: Date | null;
   banned: boolean;
   tier: "free" | "pro";
+  base_tier: "free" | "pro";
+  subscription_plan_name: string | null;
+  subscription_expires_at: Date | null;
   auth_providers: string[];
 }
 
@@ -69,7 +72,10 @@ export async function listUsersWithStats(): Promise<AdminUserRow[]> {
         COALESCE(r.total, 0)::bigint AS request_count,
         r.last_at AS last_request_at,
         (b.user_id IS NOT NULL) AS banned,
-        COALESCE(k.tier, 'free') AS tier,
+        COALESCE(s.tier, k.tier, 'free') AS tier,
+        COALESCE(k.tier, 'free') AS base_tier,
+        s.plan_name AS subscription_plan_name,
+        s.expires_at AS subscription_expires_at,
         a.auth_providers
       FROM "user" u
       LEFT JOIN (
@@ -78,6 +84,14 @@ export async function listUsersWithStats(): Promise<AdminUserRow[]> {
       ) r ON r.user_id = u.id
       LEFT JOIN banned_users b ON b.user_id = u.id
       LEFT JOIN api_keys k ON k.user_id = u.id AND k.org_id IS NULL
+      LEFT JOIN LATERAL (
+        SELECT tier, plan_name, expires_at
+          FROM user_subscriptions
+         WHERE user_id = u.id
+           AND starts_at <= NOW()
+           AND expires_at > NOW()
+         LIMIT 1
+      ) s ON TRUE
       LEFT JOIN (
         SELECT "userId" AS user_id,
           ARRAY_AGG(DISTINCT "providerId" ORDER BY "providerId") AS auth_providers
@@ -246,6 +260,33 @@ export interface QuotaRow {
   email: string | null;
   today_count: number;
   daily_limit: number | null; // null = 使用默认值
+  daily_index_bytes_limit: number | null;
+  effective_daily_limit: number;
+  effective_daily_index_bytes_limit: number;
+  daily_limit_source: UserQuotaSource;
+  daily_index_bytes_limit_source: UserQuotaSource;
+  base_tier: "free" | "pro";
+  subscription_plan_name: string | null;
+}
+
+export type UserQuotaSource =
+  | "admin_override"
+  | "subscription"
+  | "base_tier"
+  | "platform_default";
+
+function nullableQuotaLimit(value: unknown): number | null {
+  if (value == null) return null;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`INVALID_QUOTA_LIMIT:${String(value)}`);
+  }
+  return parsed;
+}
+
+function configuredQuotaLimit(name: string): number {
+  const parsed = Number(process.env[name] ?? "0");
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
 }
 
 export async function listQuotas(): Promise<QuotaRow[]> {
@@ -253,9 +294,30 @@ export async function listQuotas(): Promise<QuotaRow[]> {
   try {
     const result = await client.query(`
       SELECT u.id AS user_id, u.email, q.daily_limit,
+        q.daily_index_bytes_limit, k.tier AS base_tier,
+        s.plan_name AS subscription_plan_name,
+        s.daily_request_limit AS subscription_daily_request_limit,
+        s.daily_index_bytes_limit AS subscription_daily_index_bytes_limit,
         COALESCE(t.cnt, 0)::int AS today_count
       FROM "user" u
       LEFT JOIN user_quotas q ON q.user_id = u.id
+      LEFT JOIN LATERAL (
+        SELECT keys.tier
+          FROM api_keys keys
+         WHERE keys.user_id = u.id
+         ORDER BY (keys.org_id IS NULL) DESC, keys.created_at, keys.id
+         LIMIT 1
+      ) k ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT active.plan_name,
+               active.daily_request_limit,
+               active.daily_index_bytes_limit
+          FROM user_subscriptions active
+         WHERE active.user_id = u.id
+           AND active.starts_at <= NOW()
+           AND active.expires_at > NOW()
+         LIMIT 1
+      ) s ON TRUE
       LEFT JOIN (
         SELECT user_id, COUNT(*) AS cnt FROM request_logs
         WHERE (request_timestamp AT TIME ZONE '${TZ}')::date
@@ -264,23 +326,91 @@ export async function listQuotas(): Promise<QuotaRow[]> {
       ) t ON t.user_id = u.id
       ORDER BY t.cnt DESC NULLS LAST, u."createdAt" DESC
     `);
-    return result.rows;
+    return result.rows.map((row) => {
+      const requestOverride = nullableQuotaLimit(row.daily_limit);
+      const indexBytesOverride = nullableQuotaLimit(
+        row.daily_index_bytes_limit
+      );
+      const subscriptionRequest = nullableQuotaLimit(
+        row.subscription_daily_request_limit
+      );
+      const subscriptionIndexBytes = nullableQuotaLimit(
+        row.subscription_daily_index_bytes_limit
+      );
+      const hasSubscription =
+        row.subscription_plan_name != null &&
+        subscriptionRequest !== null &&
+        subscriptionIndexBytes !== null;
+      const hasBaseTier = typeof row.base_tier === "string";
+      const baseTier = row.base_tier?.trim() === "pro" ? "pro" : "free";
+      const fallbackRequest = configuredQuotaLimit(
+        baseTier === "pro"
+          ? "PRO_DAILY_REQUEST_LIMIT"
+          : "DEFAULT_DAILY_REQUEST_LIMIT"
+      );
+      const fallbackIndexBytes = configuredQuotaLimit(
+        baseTier === "pro"
+          ? "PRO_DAILY_INDEX_BYTES_LIMIT"
+          : "DAILY_INDEX_BYTES_LIMIT"
+      );
+      const fallbackSource: UserQuotaSource = hasBaseTier
+        ? "base_tier"
+        : "platform_default";
+      return {
+        user_id: String(row.user_id),
+        email: typeof row.email === "string" ? row.email : null,
+        today_count: Number(row.today_count),
+        daily_limit: requestOverride,
+        daily_index_bytes_limit: indexBytesOverride,
+        effective_daily_limit:
+          requestOverride ??
+          (hasSubscription ? subscriptionRequest : fallbackRequest),
+        effective_daily_index_bytes_limit:
+          indexBytesOverride ??
+          (hasSubscription ? subscriptionIndexBytes : fallbackIndexBytes),
+        daily_limit_source:
+          requestOverride !== null
+            ? "admin_override"
+            : hasSubscription
+              ? "subscription"
+              : fallbackSource,
+        daily_index_bytes_limit_source:
+          indexBytesOverride !== null
+            ? "admin_override"
+            : hasSubscription
+              ? "subscription"
+              : fallbackSource,
+        base_tier: baseTier,
+        subscription_plan_name: hasSubscription
+          ? String(row.subscription_plan_name)
+          : null,
+      };
+    });
   } finally {
     client.release();
   }
 }
 
-// limit: null = 恢复默认；0 = 不限；正整数 = 每日上限
-export async function setUserQuota(userId: string, limit: number | null) {
+// 两个维度都为 null 时删除覆盖；0 = 不限；正整数 = 每日上限。
+export async function setUserQuota(
+  userId: string,
+  requestLimit: number | null,
+  indexBytesLimit: number | null
+) {
   const client = await pool.connect();
   try {
-    if (limit === null) {
+    if (requestLimit === null && indexBytesLimit === null) {
       await client.query(`DELETE FROM user_quotas WHERE user_id = $1`, [userId]);
     } else {
       await client.query(
-        `INSERT INTO user_quotas (user_id, daily_limit) VALUES ($1, $2)
-         ON CONFLICT (user_id) DO UPDATE SET daily_limit = $2, updated_at = NOW()`,
-        [userId, limit]
+        `INSERT INTO user_quotas (
+           user_id, daily_limit, daily_index_bytes_limit
+         ) VALUES ($1, $2, $3)
+         ON CONFLICT (user_id) DO UPDATE SET
+           daily_limit = EXCLUDED.daily_limit,
+           daily_index_bytes_limit = EXCLUDED.daily_index_bytes_limit,
+           updated_at = NOW()`,
+        [userId, requestLimit, indexBytesLimit]
       );
     }
   } finally {

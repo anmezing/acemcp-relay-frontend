@@ -43,8 +43,26 @@ interface OrgInvitation {
 interface OrgUsageData {
   daily: { date: string; count: number }[];
   topMembers: { user_id: string; email: string | null; name: string | null; count: number }[];
-  // limit：null = 未设限，0 = 不限（org_quotas.daily_request_limit）
-  today: { used: number; limit: number | null };
+  // limit 是 relay 最终执行额度；0 = 不限。
+  today: {
+    used: number;
+    limit: number;
+    source: "admin_override" | "subscription" | "owner_tier" | "platform_default";
+    planName: string | null;
+  };
+}
+
+function quotaSourceLabel(today: OrgUsageData["today"]): string {
+  switch (today.source) {
+    case "admin_override":
+      return "管理员覆盖";
+    case "subscription":
+      return today.planName ? `套餐：${today.planName}` : "有效套餐";
+    case "owner_tier":
+      return "组织所有者基础档位";
+    default:
+      return "平台 Free 默认";
+  }
 }
 
 function isOwnerRole(role: string | null | undefined): boolean {
@@ -674,19 +692,22 @@ function OrgUsageSection({ orgId }: { orgId: string }) {
             <>
               {/* 当日配额使用进度 */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <p className="text-xs text-slate-500">今日请求 / 组织日配额</p>
+                <div className="flex items-start justify-between gap-3 mb-1.5">
+                  <div>
+                    <p className="text-xs text-slate-500">今日请求 / 组织日配额</p>
+                    <p className="mt-0.5 text-[10px] text-slate-600">
+                      {quotaSourceLabel(usage.today)}
+                    </p>
+                  </div>
                   <p className="text-xs font-mono text-slate-300">
                     {usage.today.used.toLocaleString()}
                     <span className="text-slate-600"> / </span>
-                    {usage.today.limit === null
-                      ? "未设限"
-                      : usage.today.limit === 0
-                        ? "不限"
-                        : usage.today.limit.toLocaleString()}
+                    {usage.today.limit === 0
+                      ? "不限"
+                      : usage.today.limit.toLocaleString()}
                   </p>
                 </div>
-                {usage.today.limit !== null && usage.today.limit > 0 && (
+                {usage.today.limit > 0 && (
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
                     <div
                       className={cn(

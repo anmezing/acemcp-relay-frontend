@@ -5,7 +5,7 @@ import { adminResetUserKey, adminSetTier, setUserBanned } from "@/lib/admin-db";
 // 管理动作统一入口：
 //   { action: "reset-key" }                      重置该用户 API key（旧 token 立即失效）
 //   { action: "ban", reason? } / { action: "unban" }  封禁/解封（relay 请求层拦截）
-//   { action: "set-tier", tier: "free"|"pro" }   设置分层（relay 认证缓存 30s 内生效）
+//   { action: "set-tier", tier: "free"|"pro" }   设置手工基础分层；有效套餐优先提供额度
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

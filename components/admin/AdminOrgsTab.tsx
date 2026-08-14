@@ -15,6 +15,44 @@ interface AdminOrgRow {
   requests_7d: number;
   daily_request_limit: number | null;
   daily_index_bytes_limit: number | null;
+  effective_daily_request_limit: number;
+  effective_daily_index_bytes_limit: number;
+  daily_request_source: OrgQuotaSource;
+  daily_index_bytes_source: OrgQuotaSource;
+  plan_name: string | null;
+  owner_tier: "free" | "pro";
+}
+
+type OrgQuotaSource =
+  | "admin_override"
+  | "subscription"
+  | "owner_tier"
+  | "platform_default";
+
+function sourceLabel(source: OrgQuotaSource, org: AdminOrgRow): string {
+  switch (source) {
+    case "admin_override":
+      return "管理员覆盖";
+    case "subscription":
+      return org.plan_name ? `套餐 ${org.plan_name}` : "有效套餐";
+    case "owner_tier":
+      return `owner ${org.owner_tier === "pro" ? "Pro" : "Free"}`;
+    default:
+      return "平台 Free 默认";
+  }
+}
+
+function formatLimit(value: number, bytes = false): string {
+  if (value === 0) return "不限";
+  if (!bytes) return value.toLocaleString();
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let amount = value;
+  let unit = 0;
+  while (amount >= 1024 && unit < units.length - 1) {
+    amount /= 1024;
+    unit += 1;
+  }
+  return `${amount >= 10 || unit === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[unit]}`;
 }
 
 // 平台管理员：组织列表 + 共享配额池分配（org_quotas，relay 消费）。
@@ -164,10 +202,24 @@ export function AdminOrgsTab() {
                   <span className="text-slate-700"> · </span>
                   近 7 天 {(org.requests_7d ?? 0).toLocaleString()} 请求
                 </p>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-500">
+                  <span>
+                    生效请求：{formatLimit(org.effective_daily_request_limit)} / 日
+                    <span className="text-slate-600">
+                      {`（${sourceLabel(org.daily_request_source, org)}）`}
+                    </span>
+                  </span>
+                  <span>
+                    生效索引：{formatLimit(org.effective_daily_index_bytes_limit, true)} / 日
+                    <span className="text-slate-600">
+                      {`（${sourceLabel(org.daily_index_bytes_source, org)}）`}
+                    </span>
+                  </span>
+                </div>
               </div>
               {(org.daily_request_limit !== null || org.daily_index_bytes_limit !== null) && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded border bg-cyan-500/10 text-cyan-400 border-cyan-500/20">
-                  已分配
+                  管理员覆盖
                 </span>
               )}
               <div className="flex items-center gap-2 ml-auto">
@@ -223,7 +275,8 @@ export function AdminOrgsTab() {
       </div>
 
       <p className="text-slate-600 text-[10px]">
-        输入框留空 = 未设置（relay 按默认策略处理）；0 = 不限；正整数 = 上限。保存后立即生效。
+        输入框只编辑管理员覆盖值：留空 = 继承 owner 套餐或基础档位；0 = 不限；正整数 = 上限。
+        保存后立即生效。
       </p>
     </div>
   );

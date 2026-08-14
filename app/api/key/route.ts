@@ -8,6 +8,7 @@ import {
   maskApiKey,
   initDB,
 } from "@/lib/db";
+import { getActiveSubscription } from "@/lib/billing";
 
 export async function GET() {
   try {
@@ -22,14 +23,21 @@ export async function GET() {
       return NextResponse.json({ error: "未登录" }, { status: 401 });
     }
 
-    const keyRecord = await getApiKey(session.user.id);
+    const [keyRecord, subscription] = await Promise.all([
+      getApiKey(session.user.id),
+      getActiveSubscription(session.user.id),
+    ]);
+    const effectiveTier =
+      subscription?.tier === "pro" || keyRecord?.tier === "pro"
+        ? "pro"
+        : "free";
 
     if (!keyRecord) {
       return NextResponse.json({
         hasKey: false,
         maskedKey: null,
         createdAt: null,
-        tier: "free",
+        tier: effectiveTier,
       });
     }
 
@@ -38,7 +46,7 @@ export async function GET() {
       maskedKey: maskApiKey(keyRecord.api_key),
       createdAt: keyRecord.created_at,
       updatedAt: keyRecord.updated_at,
-      tier: keyRecord.tier === "pro" ? "pro" : "free",
+      tier: effectiveTier,
     });
   } catch (error) {
     console.error("获取 API Key 失败:", error);

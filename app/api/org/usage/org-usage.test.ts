@@ -31,7 +31,7 @@ const getOrgUsageMock = vi.mocked(getOrgUsage);
 const usagePayload = {
   daily: [{ date: "2026-08-01", count: 12 }],
   topMembers: [{ user_id: "u1", email: "a@b.dev", name: "A", count: 9 }],
-  today: { used: 3, limit: 100 },
+  today: { used: 3, limit: 100, source: "subscription" as const, planName: "Team" },
 };
 
 function usageRequest(orgId?: string) {

@@ -3,8 +3,23 @@ import { requireAdminSession } from "@/lib/admin";
 import { listQuotas, setUserQuota } from "@/lib/admin-db";
 
 function defaultDailyLimit(): number {
-  const n = parseInt(process.env.DEFAULT_DAILY_REQUEST_LIMIT || "0");
-  return Number.isFinite(n) && n > 0 ? n : 0;
+  const n = Number(process.env.DEFAULT_DAILY_REQUEST_LIMIT || "0");
+  return Number.isSafeInteger(n) && n > 0 ? n : 0;
+}
+
+function defaultDailyIndexBytesLimit(): number {
+  const n = Number(process.env.DAILY_INDEX_BYTES_LIMIT || "0");
+  return Number.isSafeInteger(n) && n > 0 ? n : 0;
+}
+
+function proDailyLimit(): number {
+  const n = Number(process.env.PRO_DAILY_REQUEST_LIMIT || "0");
+  return Number.isSafeInteger(n) && n > 0 ? n : 0;
+}
+
+function proDailyIndexBytesLimit(): number {
+  const n = Number(process.env.PRO_DAILY_INDEX_BYTES_LIMIT || "0");
+  return Number.isSafeInteger(n) && n > 0 ? n : 0;
 }
 
 export async function GET() {
@@ -15,6 +30,9 @@ export async function GET() {
     return NextResponse.json({
       quotas: await listQuotas(),
       defaultLimit: defaultDailyLimit(),
+      defaultIndexBytesLimit: defaultDailyIndexBytesLimit(),
+      proLimit: proDailyLimit(),
+      proIndexBytesLimit: proDailyIndexBytesLimit(),
     });
   } catch (error) {
     console.error("admin quotas failed:", error);
@@ -22,12 +40,16 @@ export async function GET() {
   }
 }
 
-// body: { userId, limit } — limit null=恢复默认, 0=不限, 正整数=每日上限
+// null=恢复默认，0=不限，正整数=每日上限。
 export async function POST(request: NextRequest) {
   if (!(await requireAdminSession())) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  let body: { userId?: string; limit?: number | null } = {};
+  let body: {
+    userId?: string;
+    requestLimit?: number | null;
+    indexBytesLimit?: number | null;
+  } = {};
   try {
     body = await request.json();
   } catch {}
@@ -35,12 +57,27 @@ export async function POST(request: NextRequest) {
   if (!userId) {
     return NextResponse.json({ error: "missing userId" }, { status: 400 });
   }
-  const limit = body.limit === null || body.limit === undefined ? null : Number(body.limit);
-  if (limit !== null && (!Number.isInteger(limit) || limit < 0 || limit > 10_000_000)) {
+  const parseLimit = (
+    value: number | null | undefined,
+    max: number
+  ): number | null | undefined => {
+    if (value === null || value === undefined) return null;
+    const parsed = Number(value);
+    if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > max) {
+      return undefined;
+    }
+    return parsed;
+  };
+  const requestLimit = parseLimit(body.requestLimit, 1_000_000_000);
+  const indexBytesLimit = parseLimit(
+    body.indexBytesLimit,
+    Number.MAX_SAFE_INTEGER
+  );
+  if (requestLimit === undefined || indexBytesLimit === undefined) {
     return NextResponse.json({ error: "invalid limit" }, { status: 400 });
   }
   try {
-    await setUserQuota(userId, limit);
+    await setUserQuota(userId, requestLimit, indexBytesLimit);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("admin set quota failed:", error);

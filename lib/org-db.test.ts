@@ -26,6 +26,7 @@ import {
   deleteOrgApiKey,
   ensureOrgApiKey,
   getOrgUsage,
+  listOrgsWithQuotas,
   listOrgMemberQuotas,
   reconcileUserOrgApiKeys,
   setOrgMemberQuota,
@@ -35,6 +36,11 @@ import {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
+  vi.stubEnv("DEFAULT_DAILY_REQUEST_LIMIT", "0");
+  vi.stubEnv("DAILY_INDEX_BYTES_LIMIT", "0");
+  vi.stubEnv("PRO_DAILY_REQUEST_LIMIT", "0");
+  vi.stubEnv("PRO_DAILY_INDEX_BYTES_LIMIT", "0");
 });
 
 describe("ensureOrgApiKey", () => {
@@ -228,9 +234,20 @@ describe("organization shared quota", () => {
 });
 
 describe("getOrgUsage（组织用量聚合）", () => {
-  const mockUsageQueries = (quotaRows: { daily_request_limit: string | number | null }[]) => {
+  type QuotaRow = {
+    daily_request_limit?: string | number | null;
+    daily_index_bytes_limit?: string | number | null;
+    owner_user_id?: string | null;
+    owner_tier?: string | null;
+    plan_name?: string | null;
+    subscription_daily_request_limit?: string | number | null;
+    subscription_daily_index_bytes_limit?: string | number | null;
+    subscription_expires_at?: string | null;
+  };
+
+  const mockUsageQueries = (quotaRows: QuotaRow[]) => {
     mocks.query.mockImplementation(async (sql: string) => {
-      if (sql.includes("org_quotas")) return { rows: quotaRows };
+      if (sql.includes("org_effective_quota")) return { rows: quotaRows };
       if (sql.includes("AS used")) return { rows: [{ used: "7" }] };
       if (sql.includes("LEFT JOIN \"user\"")) {
         return { rows: [{ user_id: "u1", email: "a@b.dev", name: "A", count: "3" }] };
@@ -241,14 +258,24 @@ describe("getOrgUsage（组织用量聚合）", () => {
   };
 
   it("按 tenant_id 聚合，且每条 request_logs 查询都限定时间窗", async () => {
-    mockUsageQueries([{ daily_request_limit: "100" }]);
+    mockUsageQueries([{
+      daily_request_limit: "100",
+      daily_index_bytes_limit: null,
+      owner_user_id: "owner-1",
+      owner_tier: "free",
+    }]);
 
     const usage = await getOrgUsage("o1");
     expect(usage.daily).toEqual([{ date: "2026-08-01", count: 5 }]);
     expect(usage.topMembers).toEqual([
       { user_id: "u1", email: "a@b.dev", name: "A", count: 3 },
     ]);
-    expect(usage.today).toEqual({ used: 7, limit: 100 });
+    expect(usage.today).toEqual({
+      used: 7,
+      limit: 100,
+      source: "admin_override",
+      planName: null,
+    });
 
     const logQueries = mocks.query.mock.calls.filter(([sql]) =>
       String(sql).includes("request_logs")
@@ -261,9 +288,72 @@ describe("getOrgUsage（组织用量聚合）", () => {
     }
   });
 
-  it("未设组织配额时 limit 为 null（前端显示“未设限”）", async () => {
+  it("无 owner 和覆盖时使用平台 Free 默认，不再把未设置误报为未设限", async () => {
+    vi.stubEnv("DEFAULT_DAILY_REQUEST_LIMIT", "25");
     mockUsageQueries([]);
     const usage = await getOrgUsage("o1");
-    expect(usage.today.limit).toBeNull();
+    expect(usage.today).toEqual({
+      used: 7,
+      limit: 25,
+      source: "platform_default",
+      planName: null,
+    });
+  });
+
+  it("无管理员覆盖时继承 canonical owner 的有效套餐", async () => {
+    mockUsageQueries([{
+      daily_request_limit: null,
+      daily_index_bytes_limit: null,
+      owner_user_id: "owner-1",
+      owner_tier: "free",
+      plan_name: "Team",
+      subscription_daily_request_limit: "2000",
+      subscription_daily_index_bytes_limit: "4096",
+      subscription_expires_at: "2026-09-01T00:00:00.000Z",
+    }]);
+
+    const usage = await getOrgUsage("o1");
+    expect(usage.today).toEqual({
+      used: 7,
+      limit: 2000,
+      source: "subscription",
+      planName: "Team",
+    });
+  });
+});
+
+describe("listOrgsWithQuotas（管理员覆盖与继承值分离）", () => {
+  it("逐维度解析：请求使用管理员覆盖，索引字节继承 owner 套餐", async () => {
+    mocks.query.mockResolvedValue({
+      rows: [{
+        org_id: "o1",
+        name: "Acme",
+        slug: "acme",
+        owner_email: "owner@example.com",
+        member_count: 2,
+        requests_7d: 12,
+        daily_request_limit: "100",
+        daily_index_bytes_limit: null,
+        owner_user_id: "owner-1",
+        owner_tier: "free",
+        plan_name: "Team",
+        subscription_daily_request_limit: "2000",
+        subscription_daily_index_bytes_limit: "8192",
+        subscription_expires_at: "2026-09-01T00:00:00.000Z",
+        created_at: new Date("2026-08-01T00:00:00.000Z"),
+      }],
+    });
+
+    const [org] = await listOrgsWithQuotas();
+    expect(org).toMatchObject({
+      daily_request_limit: 100,
+      daily_index_bytes_limit: null,
+      effective_daily_request_limit: 100,
+      effective_daily_index_bytes_limit: 8192,
+      daily_request_source: "admin_override",
+      daily_index_bytes_source: "subscription",
+      plan_name: "Team",
+      owner_tier: "free",
+    });
   });
 });

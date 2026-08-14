@@ -40,7 +40,10 @@ export async function deleteBannedCache(userId: string) {
 export async function deleteQuotaLimitCache(userId: string) {
   try {
     const redis = await getRedisClient();
-    await redis.del(`quota:limit:${userId}`);
+    await redis.del([
+      `quota:limit:${userId}`,
+      `quota:limit:indexbytes:${userId}`
+    ]);
   } catch (error) {
     console.error("Failed to delete quota limit cache:", error);
   }
@@ -101,7 +104,15 @@ async function initializeDB() {
   if (dbInitialized) return;
 
   const client = await pool.connect();
+  let migrationLockAcquired = false;
   try {
+    // 进程内 single-flight 不能覆盖多副本/滚动发布；用数据库会话锁把
+    // 检查、DDL、触发器重建串起来，避免多个实例交错迁移。
+    await client.query(`
+      SELECT pg_advisory_lock(hashtext('acemcp:frontend-schema'))
+    `);
+    migrationLockAcquired = true;
+
     // Check if api_keys table exists
     const apiKeysTableExists = await client.query(`
       SELECT EXISTS (
@@ -308,9 +319,204 @@ async function initializeDB() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_quotas (
         user_id VARCHAR(255) PRIMARY KEY,
-        daily_limit INTEGER NOT NULL,
+        daily_limit INTEGER,
+        daily_index_bytes_limit BIGINT,
         updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
       )
+    `);
+    await client.query(`
+      ALTER TABLE user_quotas
+        ALTER COLUMN daily_limit DROP NOT NULL,
+        ADD COLUMN IF NOT EXISTS daily_index_bytes_limit BIGINT
+    `);
+
+    // 付费套餐是可配置数据，不在迁移里伪造价格或额度。订单保留购买时的
+    // plan_snapshot；后续管理员改套餐只影响新订单，不篡改已购买权益。
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS billing_plans (
+        id TEXT PRIMARY KEY,
+        code VARCHAR(64) NOT NULL UNIQUE,
+        name VARCHAR(120) NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        tier TEXT NOT NULL CHECK (tier IN ('free', 'pro')),
+        price_fen BIGINT NOT NULL CHECK (price_fen >= 0),
+        duration_days INTEGER NOT NULL CHECK (duration_days > 0),
+        daily_request_limit BIGINT NOT NULL CHECK (daily_request_limit >= 0),
+        daily_index_bytes_limit BIGINT NOT NULL CHECK (daily_index_bytes_limit >= 0),
+        subaccount_limit INTEGER NOT NULL CHECK (subaccount_limit >= 0),
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS billing_orders (
+        id TEXT PRIMARY KEY,
+        order_no VARCHAR(64) NOT NULL UNIQUE,
+        user_id VARCHAR(255) NOT NULL,
+        plan_id TEXT NOT NULL REFERENCES billing_plans(id) ON DELETE RESTRICT,
+        provider VARCHAR(16) NOT NULL CHECK (provider IN ('alipay', 'wechat')),
+        status VARCHAR(16) NOT NULL DEFAULT 'pending'
+          CHECK (status IN ('pending', 'paid', 'closed', 'failed')),
+        amount_fen BIGINT NOT NULL CHECK (amount_fen >= 0),
+        currency CHAR(3) NOT NULL DEFAULT 'CNY',
+        plan_snapshot JSONB NOT NULL,
+        provider_trade_no VARCHAR(128),
+        code_url TEXT,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        paid_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS billing_orders_provider_trade_uniq
+        ON billing_orders (provider, provider_trade_no)
+        WHERE provider_trade_no IS NOT NULL
+    `);
+    // 订阅列直接保存已购买快照，使 Relay 不依赖可变的 billing_plans 表。
+    // expires_at 是唯一有效期判断；过期后请求自动回落，不需要清理定时任务。
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_subscriptions (
+        user_id VARCHAR(255) PRIMARY KEY,
+        plan_id TEXT NOT NULL,
+        plan_name VARCHAR(120) NOT NULL,
+        tier TEXT NOT NULL CHECK (tier IN ('free', 'pro')),
+        daily_request_limit BIGINT NOT NULL CHECK (daily_request_limit >= 0),
+        daily_index_bytes_limit BIGINT NOT NULL CHECK (daily_index_bytes_limit >= 0),
+        subaccount_limit INTEGER NOT NULL CHECK (subaccount_limit >= 0),
+        starts_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+        source_order_id TEXT NOT NULL UNIQUE,
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS user_subscriptions_active_idx
+        ON user_subscriptions (user_id, expires_at)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS billing_orders_user_created_idx
+        ON billing_orders (user_id, created_at DESC)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS billing_orders_pending_expiry_idx
+        ON billing_orders (expires_at)
+        WHERE status = 'pending'
+    `);
+    // organization 插件的 membershipLimit 负责返回友好错误；触发器使用同一
+    // “套餐持有人名下全部组织中，除本人外的唯一账号”口径并加事务锁，兜住并发
+    // 接受邀请或直接写 member 表造成的超卖。角色升级不能绕过席位限制；
+    // 没有有效订阅时子账号上限为 0。
+    await client.query(`
+      CREATE OR REPLACE FUNCTION enforce_subscription_subaccount_limit()
+      RETURNS TRIGGER AS $$
+      DECLARE
+        owner_user_id TEXT;
+        seat_limit INTEGER;
+        used_seats BIGINT;
+        excluded_member_id TEXT;
+        new_seat_cost INTEGER;
+      BEGIN
+        IF TG_OP = 'UPDATE' THEN
+          excluded_member_id := OLD.id;
+        ELSE
+          excluded_member_id := NULL;
+        END IF;
+
+        SELECT candidate.user_id
+          INTO owner_user_id
+          FROM (
+            SELECT m."userId" AS user_id, m."createdAt" AS created_at, m.id
+              FROM "member" m
+             WHERE m."organizationId" = NEW."organizationId"
+               AND (
+                 excluded_member_id IS NULL OR m.id <> excluded_member_id
+               )
+               AND 'owner' = ANY(
+                 regexp_split_to_array(COALESCE(m.role, ''), '\\s*,\\s*')
+               )
+            UNION ALL
+            SELECT NEW."userId", NEW."createdAt", NEW.id
+             WHERE 'owner' = ANY(
+               regexp_split_to_array(COALESCE(NEW.role, ''), '\\s*,\\s*')
+             )
+          ) candidate
+         ORDER BY candidate.created_at, candidate.id
+         LIMIT 1;
+
+        IF owner_user_id IS NULL THEN
+          RAISE EXCEPTION 'ORGANIZATION_OWNER_REQUIRED';
+        END IF;
+
+        PERFORM pg_advisory_xact_lock(
+          hashtext('acemcp:subaccounts'),
+          hashtext(owner_user_id)
+        );
+
+        SELECT s.subaccount_limit
+          INTO seat_limit
+          FROM user_subscriptions s
+         WHERE s.user_id = owner_user_id
+           AND s.starts_at <= NOW()
+           AND s.expires_at > NOW();
+        seat_limit := COALESCE(seat_limit, 0);
+
+        WITH owned_organizations AS (
+          SELECT DISTINCT ownership."organizationId" AS organization_id
+            FROM "member" ownership
+           WHERE ownership."userId" = owner_user_id
+             AND (
+               excluded_member_id IS NULL OR ownership.id <> excluded_member_id
+             )
+             AND 'owner' = ANY(
+               regexp_split_to_array(COALESCE(ownership.role, ''), '\\s*,\\s*')
+             )
+          UNION
+          SELECT NEW."organizationId"
+           WHERE NEW."userId" = owner_user_id
+             AND 'owner' = ANY(
+               regexp_split_to_array(COALESCE(NEW.role, ''), '\\s*,\\s*')
+             )
+        )
+        , existing_accounts AS (
+          SELECT DISTINCT counted."userId" AS user_id
+            FROM "member" counted
+            JOIN owned_organizations owned
+              ON owned.organization_id = counted."organizationId"
+           WHERE counted."userId" <> owner_user_id
+             AND (
+               excluded_member_id IS NULL OR counted.id <> excluded_member_id
+             )
+        )
+        SELECT
+          COUNT(*),
+          CASE
+            WHEN NEW."userId" = owner_user_id THEN 0
+            WHEN COUNT(*) FILTER (
+              WHERE existing_accounts.user_id = NEW."userId"
+            ) > 0 THEN 0
+            ELSE 1
+          END
+          INTO used_seats, new_seat_cost
+          FROM existing_accounts;
+
+        IF used_seats + new_seat_cost > seat_limit THEN
+          RAISE EXCEPTION 'SUBACCOUNT_LIMIT_REACHED';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+    await client.query(`
+      DROP TRIGGER IF EXISTS member_subscription_subaccount_limit ON "member"
+    `);
+    await client.query(`
+      CREATE TRIGGER member_subscription_subaccount_limit
+      BEFORE INSERT OR UPDATE OF role, "organizationId", "userId" ON "member"
+      FOR EACH ROW
+      EXECUTE FUNCTION enforce_subscription_subaccount_limit()
     `);
     await client.query(`
       CREATE TABLE IF NOT EXISTS system_settings (
@@ -347,6 +553,13 @@ async function initializeDB() {
 
     dbInitialized = true;
   } finally {
+    if (migrationLockAcquired) {
+      await client
+        .query(`
+          SELECT pg_advisory_unlock(hashtext('acemcp:frontend-schema'))
+        `)
+        .catch(() => {});
+    }
     client.release();
   }
 }

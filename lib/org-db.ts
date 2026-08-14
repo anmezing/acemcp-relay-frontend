@@ -279,11 +279,138 @@ export async function setOrgMemberQuota(
 
 // ── 组织用量（request_logs.tenant_id 由 relay 回填，只覆盖新数据）──────────
 
+export type OrgQuotaSource =
+  | "admin_override"
+  | "subscription"
+  | "owner_tier"
+  | "platform_default";
+
+interface OrgQuotaEntitlementRow {
+  daily_request_limit?: string | number | null;
+  daily_index_bytes_limit?: string | number | null;
+  owner_user_id?: string | null;
+  owner_tier?: string | null;
+  plan_name?: string | null;
+  subscription_daily_request_limit?: string | number | null;
+  subscription_daily_index_bytes_limit?: string | number | null;
+  subscription_expires_at?: Date | string | null;
+}
+
+interface EffectiveOrgQuota {
+  dailyRequestLimit: number;
+  dailyIndexBytesLimit: number;
+  dailyRequestSource: OrgQuotaSource;
+  dailyIndexBytesSource: OrgQuotaSource;
+  planName: string | null;
+  ownerTier: "free" | "pro";
+}
+
+// 与 relay.getOrgOwnerQuotaLimits 保持同一 canonical owner、有效订阅和基础
+// tier 选择规则。查询固定返回一行，便于组织无 owner 时明确回退平台 Free 默认。
+const ORG_EFFECTIVE_QUOTA_SQL = `
+  /* org_effective_quota */
+  SELECT q.daily_request_limit,
+         q.daily_index_bytes_limit,
+         canonical_owner.owner_user_id,
+         COALESCE(owner_key.tier, 'free') AS owner_tier,
+         subscriptions.plan_name,
+         subscriptions.daily_request_limit AS subscription_daily_request_limit,
+         subscriptions.daily_index_bytes_limit AS subscription_daily_index_bytes_limit,
+         subscriptions.expires_at AS subscription_expires_at
+  FROM (SELECT $1::text AS org_id) AS requested_org
+  LEFT JOIN org_quotas AS q ON q.org_id = requested_org.org_id
+  LEFT JOIN LATERAL (
+    SELECT owners."userId" AS owner_user_id
+    FROM "member" AS owners
+    WHERE owners."organizationId" = requested_org.org_id
+      AND (',' || regexp_replace(owners.role, '\\s', '', 'g') || ',') LIKE '%,owner,%'
+    ORDER BY owners."createdAt", owners.id
+    LIMIT 1
+  ) AS canonical_owner ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT active.plan_name,
+           active.daily_request_limit,
+           active.daily_index_bytes_limit,
+           active.expires_at
+    FROM user_subscriptions AS active
+    WHERE active.user_id = canonical_owner.owner_user_id
+      AND active.starts_at <= NOW()
+      AND active.expires_at > NOW()
+    LIMIT 1
+  ) AS subscriptions ON TRUE
+  LEFT JOIN LATERAL (
+    SELECT keys.tier
+    FROM api_keys AS keys
+    WHERE keys.user_id = canonical_owner.owner_user_id
+    ORDER BY (keys.org_id IS NULL) DESC, keys.created_at, keys.id
+    LIMIT 1
+  ) AS owner_key ON TRUE
+`;
+
+function nullableQuotaLimit(value: string | number | null | undefined): number | null {
+  if (value == null) return null;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`Invalid quota limit: ${String(value)}`);
+  }
+  return parsed;
+}
+
+function configuredQuotaLimit(name: string): number {
+  const raw = process.env[name] ?? "0";
+  const parsed = Number(raw);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function resolveOrgQuota(row: OrgQuotaEntitlementRow | undefined): EffectiveOrgQuota {
+  const requestOverride = nullableQuotaLimit(row?.daily_request_limit);
+  const indexBytesOverride = nullableQuotaLimit(row?.daily_index_bytes_limit);
+  const subscriptionRequest = nullableQuotaLimit(row?.subscription_daily_request_limit);
+  const subscriptionIndexBytes = nullableQuotaLimit(
+    row?.subscription_daily_index_bytes_limit
+  );
+  const hasSubscription =
+    subscriptionRequest !== null &&
+    subscriptionIndexBytes !== null &&
+    row?.subscription_expires_at != null;
+  const ownerTier = row?.owner_tier?.trim() === "pro" ? "pro" : "free";
+  const hasOwner = Boolean(row?.owner_user_id);
+  const fallbackRequest = configuredQuotaLimit(
+    ownerTier === "pro" ? "PRO_DAILY_REQUEST_LIMIT" : "DEFAULT_DAILY_REQUEST_LIMIT"
+  );
+  const fallbackIndexBytes = configuredQuotaLimit(
+    ownerTier === "pro" ? "PRO_DAILY_INDEX_BYTES_LIMIT" : "DAILY_INDEX_BYTES_LIMIT"
+  );
+  const fallbackSource: OrgQuotaSource = hasOwner ? "owner_tier" : "platform_default";
+
+  return {
+    dailyRequestLimit:
+      requestOverride ?? (hasSubscription ? subscriptionRequest : fallbackRequest),
+    dailyIndexBytesLimit:
+      indexBytesOverride ??
+      (hasSubscription ? subscriptionIndexBytes : fallbackIndexBytes),
+    dailyRequestSource:
+      requestOverride !== null
+        ? "admin_override"
+        : hasSubscription
+          ? "subscription"
+          : fallbackSource,
+    dailyIndexBytesSource:
+      indexBytesOverride !== null
+        ? "admin_override"
+        : hasSubscription
+          ? "subscription"
+          : fallbackSource,
+    planName: hasSubscription ? row?.plan_name ?? null : null,
+    ownerTier,
+  };
+}
+
 export interface OrgUsage {
   daily: { date: string; count: number }[];
   topMembers: { user_id: string; email: string | null; name: string | null; count: number }[];
-  // limit 为 org_quotas.daily_request_limit：null = 未设限，0 = 不限
-  today: { used: number; limit: number | null };
+  // limit 是 relay 实际执行的最终额度；0 = 不限。
+  today: { used: number; limit: number; source: OrgQuotaSource; planName: string | null };
 }
 
 // 组织近 30 天用量。所有 request_logs 查询都带 tenant_id 等值 + 时间窗，
@@ -317,10 +444,8 @@ export async function getOrgUsage(orgId: string): Promise<OrgUsage> {
          AND (request_timestamp AT TIME ZONE '${TZ}')::date = (NOW() AT TIME ZONE '${TZ}')::date`,
       [orgId]
     );
-    const quota = await client.query(
-      `SELECT daily_request_limit FROM org_quotas WHERE org_id = $1`,
-      [orgId]
-    );
+    const quota = await client.query(ORG_EFFECTIVE_QUOTA_SQL, [orgId]);
+    const effectiveQuota = resolveOrgQuota(quota.rows[0]);
     return {
       daily: daily.rows.map((r) => ({ date: r.date, count: parseInt(r.count) })),
       topMembers: topMembers.rows.map((r) => ({
@@ -331,10 +456,9 @@ export async function getOrgUsage(orgId: string): Promise<OrgUsage> {
       })),
       today: {
         used: parseInt(today.rows[0].used),
-        limit:
-          quota.rows[0]?.daily_request_limit == null
-            ? null
-            : Number(quota.rows[0].daily_request_limit),
+        limit: effectiveQuota.dailyRequestLimit,
+        source: effectiveQuota.dailyRequestSource,
+        planName: effectiveQuota.planName,
       },
     };
   } finally {
@@ -353,6 +477,12 @@ export interface AdminOrgRow {
   requests_7d: number;
   daily_request_limit: number | null;
   daily_index_bytes_limit: number | null;
+  effective_daily_request_limit: number;
+  effective_daily_index_bytes_limit: number;
+  daily_request_source: OrgQuotaSource;
+  daily_index_bytes_source: OrgQuotaSource;
+  plan_name: string | null;
+  owner_tier: "free" | "pro";
   created_at: Date;
 }
 
@@ -368,18 +498,57 @@ export async function listOrgsWithQuotas(): Promise<AdminOrgRow[]> {
         (SELECT COUNT(*) FROM request_logs rl
           WHERE rl.tenant_id = o."id"
             AND rl.request_timestamp > NOW() - INTERVAL '7 days')::int AS requests_7d,
-        q.daily_request_limit, q.daily_index_bytes_limit
+        q.daily_request_limit, q.daily_index_bytes_limit,
+        canonical_owner.owner_user_id,
+        COALESCE(owner_key.tier, 'free') AS owner_tier,
+        subscriptions.plan_name,
+        subscriptions.daily_request_limit AS subscription_daily_request_limit,
+        subscriptions.daily_index_bytes_limit AS subscription_daily_index_bytes_limit,
+        subscriptions.expires_at AS subscription_expires_at
       FROM "organization" o
       LEFT JOIN org_quotas q ON q.org_id = o."id"
+      LEFT JOIN LATERAL (
+        SELECT owners."userId" AS owner_user_id
+        FROM "member" AS owners
+        WHERE owners."organizationId" = o."id"
+          AND (',' || regexp_replace(owners.role, '\\s', '', 'g') || ',') LIKE '%,owner,%'
+        ORDER BY owners."createdAt", owners.id
+        LIMIT 1
+      ) AS canonical_owner ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT active.plan_name,
+               active.daily_request_limit,
+               active.daily_index_bytes_limit,
+               active.expires_at
+        FROM user_subscriptions AS active
+        WHERE active.user_id = canonical_owner.owner_user_id
+          AND active.starts_at <= NOW()
+          AND active.expires_at > NOW()
+        LIMIT 1
+      ) AS subscriptions ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT keys.tier
+        FROM api_keys AS keys
+        WHERE keys.user_id = canonical_owner.owner_user_id
+        ORDER BY (keys.org_id IS NULL) DESC, keys.created_at, keys.id
+        LIMIT 1
+      ) AS owner_key ON TRUE
       ORDER BY o."createdAt" DESC
     `);
-    return result.rows.map((r) => ({
-      ...r,
-      daily_request_limit:
-        r.daily_request_limit === null ? null : Number(r.daily_request_limit),
-      daily_index_bytes_limit:
-        r.daily_index_bytes_limit === null ? null : Number(r.daily_index_bytes_limit),
-    }));
+    return result.rows.map((r) => {
+      const effectiveQuota = resolveOrgQuota(r);
+      return {
+        ...r,
+        daily_request_limit: nullableQuotaLimit(r.daily_request_limit),
+        daily_index_bytes_limit: nullableQuotaLimit(r.daily_index_bytes_limit),
+        effective_daily_request_limit: effectiveQuota.dailyRequestLimit,
+        effective_daily_index_bytes_limit: effectiveQuota.dailyIndexBytesLimit,
+        daily_request_source: effectiveQuota.dailyRequestSource,
+        daily_index_bytes_source: effectiveQuota.dailyIndexBytesSource,
+        plan_name: effectiveQuota.planName,
+        owner_tier: effectiveQuota.ownerTier,
+      };
+    });
   } finally {
     client.release();
   }

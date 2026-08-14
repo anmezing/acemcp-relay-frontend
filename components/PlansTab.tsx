@@ -1,0 +1,469 @@
+"use client";
+
+import Image from "next/image";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Check, Clock3, CreditCard, Loader2, RefreshCw, Users } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+
+interface BillingPlan {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  tier: "free" | "pro";
+  priceFen: number;
+  durationDays: number;
+  dailyRequestLimit: number;
+  dailyIndexBytesLimit: number;
+  subaccountLimit: number;
+}
+
+interface Subscription {
+  planId: string;
+  planName: string;
+  tier: "free" | "pro";
+  dailyRequestLimit: number;
+  dailyIndexBytesLimit: number;
+  subaccountLimit: number;
+  startsAt: string;
+  expiresAt: string;
+}
+
+interface BillingOrder {
+  orderNo: string;
+  provider: "alipay" | "wechat";
+  status: "pending" | "paid" | "closed" | "failed";
+  amountFen: number;
+  expiresAt: string;
+  createdAt: string;
+  planSnapshot: { name: string };
+}
+
+interface BillingOverview {
+  plans: BillingPlan[];
+  subscription: Subscription | null;
+  orders: BillingOrder[];
+  seats: { used: number; limit: number };
+  providers: { alipay: boolean; wechat: boolean };
+}
+
+interface CheckoutState {
+  order: BillingOrder;
+  qrCodeDataUrl: string;
+}
+
+function formatLimit(value: number, unit: string): string {
+  return value === 0
+    ? "不限"
+    : `${value.toLocaleString()}${unit ? ` ${unit}` : ""}`;
+}
+
+function formatBytes(value: number): string {
+  if (value === 0) return "不限";
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let current = value;
+  let index = 0;
+  while (current >= 1024 && index < units.length - 1) {
+    current /= 1024;
+    index += 1;
+  }
+  const digits = current >= 100 || Number.isInteger(current) ? 0 : 1;
+  return `${current.toFixed(digits)} ${units[index]}`;
+}
+
+function formatMoney(fen: number): string {
+  return `¥${(fen / 100).toFixed(2)}`;
+}
+
+function orderStatusLabel(status: BillingOrder["status"]): string {
+  if (status === "paid") return "已支付";
+  if (status === "pending") return "待支付";
+  if (status === "closed") return "已关闭";
+  return "失败";
+}
+
+export function PlansTab() {
+  const [data, setData] = useState<BillingOverview | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState("");
+  const [notice, setNotice] = useState("");
+  const [checkout, setCheckout] = useState<CheckoutState | null>(null);
+
+  const load = useCallback(async (signal?: AbortSignal) => {
+    const response = await fetch("/api/billing", { signal });
+    const payload = (await response.json().catch(() => ({}))) as
+      | BillingOverview
+      | { error?: string };
+    if (!response.ok) {
+      throw new Error("error" in payload ? payload.error : "套餐信息加载失败");
+    }
+    if (signal?.aborted) return;
+    setData(payload as BillingOverview);
+    setError("");
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.resolve()
+      .then(() => load(controller.signal))
+      .catch((reason) => {
+        if (!controller.signal.aborted) {
+          setError(reason instanceof Error ? reason.message : "套餐信息加载失败");
+        }
+      });
+    return () => controller.abort();
+  }, [load]);
+
+  useEffect(() => {
+    if (!checkout || checkout.order.status !== "pending") return;
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const response = await fetch(
+          `/api/billing/orders/${encodeURIComponent(checkout.order.orderNo)}`,
+          { cache: "no-store" }
+        );
+        const payload = (await response.json().catch(() => ({}))) as {
+          order?: BillingOrder;
+        };
+        if (stopped || !response.ok || !payload.order) return;
+        if (payload.order.status === "paid") {
+          setCheckout(null);
+          setNotice("支付成功，套餐权益已生效");
+          await load();
+        } else if (
+          payload.order.status === "closed" ||
+          payload.order.status === "failed"
+        ) {
+          setCheckout((current) =>
+            current ? { ...current, order: payload.order! } : current
+          );
+        }
+      } catch {
+        // 短暂网络失败不终止支付轮询。
+      }
+    };
+    const timer = window.setInterval(() => void poll(), 2_000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [checkout, load]);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      await load();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "套餐信息加载失败");
+    } finally {
+      setLoading(false);
+    }
+  }, [load]);
+
+  const startCheckout = useCallback(
+    async (plan: BillingPlan, provider: "alipay" | "wechat") => {
+      setBusy(`${plan.id}:${provider}`);
+      setNotice("");
+      try {
+        const response = await fetch("/api/billing/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ planId: plan.id, provider }),
+        });
+        const payload = (await response.json().catch(() => ({}))) as {
+          error?: string;
+          order?: BillingOrder;
+          qrCodeDataUrl?: string;
+        };
+        if (!response.ok || !payload.order || !payload.qrCodeDataUrl) {
+          throw new Error(payload.error || "创建支付订单失败");
+        }
+        setCheckout({
+          order: payload.order,
+          qrCodeDataUrl: payload.qrCodeDataUrl,
+        });
+      } catch (reason) {
+        setNotice(reason instanceof Error ? reason.message : "创建支付订单失败");
+      } finally {
+        setBusy("");
+      }
+    },
+    []
+  );
+
+  const recentOrders = useMemo(() => data?.orders.slice(0, 5) ?? [], [data]);
+
+  if (!data && !error) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-28 rounded-xl bg-white/[0.06]" />
+        <div className="grid gap-4 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <Skeleton key={index} className="h-72 rounded-xl bg-white/[0.06]" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-12">
+        <p className="text-sm text-red-400">{error}</p>
+        <Button variant="glass" size="sm" onClick={refresh}>
+          重试
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card className="border-cyan-500/15 bg-cyan-500/[0.035]">
+        <CardContent className="p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-slate-400">当前套餐</p>
+                <Badge variant="outline" className="border-cyan-500/25 text-cyan-300">
+                  {data.subscription?.tier === "pro" ? "Pro" : "Free"}
+                </Badge>
+              </div>
+              <p className="mt-2 text-xl font-semibold text-white">
+                {data.subscription?.planName || "免费套餐"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {data.subscription
+                  ? `有效期至 ${new Date(data.subscription.expiresAt).toLocaleString("zh-CN")}`
+                  : "当前没有有效付费订阅"}
+              </p>
+            </div>
+            <div className="grid min-w-[280px] grid-cols-3 gap-3 text-xs">
+              <div>
+                <p className="text-slate-500">请求/天</p>
+                <p className="mt-1 font-mono text-slate-200">
+                  {data.subscription
+                    ? formatLimit(data.subscription.dailyRequestLimit, "")
+                    : "按平台默认"}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">索引/天</p>
+                <p className="mt-1 font-mono text-slate-200">
+                  {data.subscription
+                    ? formatBytes(data.subscription.dailyIndexBytesLimit)
+                    : "按平台默认"}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">子账号</p>
+                <p className="mt-1 font-mono text-slate-200">
+                  {data.seats.used} / {data.seats.limit}
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {notice && (
+        <p
+          className={cn(
+            "text-sm",
+            notice.includes("成功") ? "text-emerald-400" : "text-red-400"
+          )}
+        >
+          {notice}
+        </p>
+      )}
+
+      {data.plans.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-white/[0.1] px-6 py-12 text-center">
+          <CreditCard className="mx-auto h-8 w-8 text-slate-600" />
+          <p className="mt-3 text-sm text-slate-400">暂无可购买套餐</p>
+          <p className="mt-1 text-xs text-slate-600">管理员配置并上架后会显示在这里。</p>
+        </div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-3">
+          {data.plans.map((plan) => (
+            <Card
+              key={plan.id}
+              className={cn(
+                "relative overflow-hidden bg-[#0a0f1a]/70",
+                data.subscription?.planId === plan.id
+                  ? "border-cyan-500/35"
+                  : "border-white/[0.07]"
+              )}
+            >
+              <CardContent className="flex h-full flex-col p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-base font-semibold text-white">{plan.name}</p>
+                    <p className="mt-1 min-h-10 text-xs leading-5 text-slate-500">
+                      {plan.description || "—"}
+                    </p>
+                  </div>
+                  {data.subscription?.planId === plan.id && (
+                    <Badge className="border-cyan-500/20 bg-cyan-500/10 text-cyan-300">
+                      当前
+                    </Badge>
+                  )}
+                </div>
+                <div className="mt-5 flex items-end gap-2">
+                  <span className="text-3xl font-semibold text-white">
+                    {formatMoney(plan.priceFen)}
+                  </span>
+                  <span className="pb-1 text-xs text-slate-500">
+                    / {plan.durationDays} 天
+                  </span>
+                </div>
+                <div className="mt-5 space-y-3 text-sm">
+                  <div className="flex items-center gap-2 text-slate-300">
+                    <Check className="h-4 w-4 text-cyan-400" />
+                    每日请求 {formatLimit(plan.dailyRequestLimit, "次")}
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-300">
+                    <Check className="h-4 w-4 text-cyan-400" />
+                    每日索引 {formatBytes(plan.dailyIndexBytesLimit)}
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-300">
+                    <Users className="h-4 w-4 text-cyan-400" />
+                    {plan.subaccountLimit} 个子账号
+                  </div>
+                </div>
+                <div className="mt-6 grid grid-cols-2 gap-2">
+                  <Button
+                    variant="glass"
+                    size="sm"
+                    disabled={
+                      plan.priceFen <= 0 ||
+                      !data.providers.alipay ||
+                      busy === `${plan.id}:alipay`
+                    }
+                    onClick={() => startCheckout(plan, "alipay")}
+                  >
+                    {busy === `${plan.id}:alipay` && (
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                    )}
+                    支付宝
+                  </Button>
+                  <Button
+                    variant="glass"
+                    size="sm"
+                    disabled={
+                      plan.priceFen <= 0 ||
+                      !data.providers.wechat ||
+                      busy === `${plan.id}:wechat`
+                    }
+                    onClick={() => startCheckout(plan, "wechat")}
+                  >
+                    {busy === `${plan.id}:wechat` && (
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                    )}
+                    微信支付
+                  </Button>
+                </div>
+                {plan.priceFen <= 0 ? (
+                  <p className="mt-2 text-[10px] text-slate-600">
+                    免费或内部套餐需由管理员开通，不能创建支付订单。
+                  </p>
+                ) : (!data.providers.alipay || !data.providers.wechat) && (
+                  <p className="mt-2 text-[10px] text-slate-600">
+                    灰色渠道尚未配置商户参数。
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {checkout && (
+        <Card className="border-cyan-500/25 bg-[#0a0f1a]">
+          <CardContent className="flex flex-col items-center gap-4 p-6 text-center">
+            <div>
+              <p className="font-medium text-white">
+                {checkout.order.provider === "alipay" ? "支付宝" : "微信"}扫码支付
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {checkout.order.planSnapshot.name} · {formatMoney(checkout.order.amountFen)}
+              </p>
+            </div>
+            <div className="rounded-xl bg-white p-3">
+              <Image
+                src={checkout.qrCodeDataUrl}
+                width={224}
+                height={224}
+                unoptimized
+                alt="支付二维码"
+              />
+            </div>
+            <div className="flex items-center gap-2 text-xs text-slate-400">
+              {checkout.order.status === "pending" ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
+                  正在等待支付结果
+                </>
+              ) : (
+                <>
+                  <Clock3 className="h-4 w-4" />
+                  {orderStatusLabel(checkout.order.status)}
+                </>
+              )}
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setCheckout(null)}>
+              关闭
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {recentOrders.length > 0 && (
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-medium text-white">最近订单</h3>
+            <Button variant="ghost" size="sm" onClick={refresh} disabled={loading}>
+              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            </Button>
+          </div>
+          <div className="divide-y divide-white/[0.05] rounded-xl border border-white/[0.07]">
+            {recentOrders.map((order) => (
+              <div
+                key={order.orderNo}
+                className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-xs"
+              >
+                <span className="min-w-28 text-slate-300">
+                  {order.planSnapshot.name}
+                </span>
+                <span className="font-mono text-slate-500">
+                  {formatMoney(order.amountFen)}
+                </span>
+                <span className="text-slate-500">
+                  {order.provider === "alipay" ? "支付宝" : "微信"}
+                </span>
+                <span
+                  className={cn(
+                    "ml-auto",
+                    order.status === "paid"
+                      ? "text-emerald-400"
+                      : order.status === "pending"
+                        ? "text-amber-400"
+                        : "text-slate-600"
+                  )}
+                >
+                  {orderStatusLabel(order.status)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

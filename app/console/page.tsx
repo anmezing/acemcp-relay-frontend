@@ -9,7 +9,7 @@ import { buildCloudMcpConfigJson, buildCloudMcpConfigToml, buildMcpConfigJson, b
 import {
   Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github, Trash2,
   Key, FileText, User, Database, ScrollText, Building2, Users, Coins,
-  Gauge, Cpu, Settings, Terminal, Shield, ChevronDown
+  Gauge, Cpu, Settings, Terminal, Shield, ChevronDown, CreditCard, Package
 } from "lucide-react";
 
 // shadcn/ui components
@@ -43,12 +43,14 @@ import { OrgTab } from "@/components/OrgTab";
 import { OrgKeysCards } from "@/components/OrgKeysCards";
 import { AGENT_RULES_CLOUD, AGENT_RULES_REMOTE, CLOUD_TOOLS, REMOTE_TOOLS } from "@/lib/agent-rules";
 import { UserModelConfigTab } from "@/components/UserModelConfigTab";
+import { PlansTab } from "@/components/PlansTab";
+import { AdminPlansTab } from "@/components/admin/AdminPlansTab";
 import { LceBrand } from "@/components/LceBrand";
 
 type Tab =
-  | "keys" | "docs" | "profile" | "model-config" | "team"
+  | "keys" | "plans" | "docs" | "profile" | "model-config" | "team"
   | "index" | "logs"
-  | "org" | "users" | "call-stats" | "quota" | "admin-orgs" | "models"
+  | "org" | "users" | "call-stats" | "quota" | "admin-orgs" | "plans-admin" | "models"
   | "system-settings" | "system-logs";
 
 interface SidebarSection {
@@ -62,6 +64,7 @@ const ALL_SECTIONS: SidebarSection[] = [
     label: "我的",
     items: [
       { id: "keys", label: "密钥管理", icon: <Key className="w-4 h-4" /> },
+      { id: "plans", label: "套餐与订阅", icon: <CreditCard className="w-4 h-4" /> },
       { id: "team", label: "组织", icon: <Building2 className="w-4 h-4" /> },
       { id: "docs", label: "配置说明", icon: <FileText className="w-4 h-4" /> },
       { id: "model-config", label: "模型设置", icon: <Cpu className="w-4 h-4" /> },
@@ -84,6 +87,7 @@ const ALL_SECTIONS: SidebarSection[] = [
       { id: "call-stats", label: "调用统计", icon: <Coins className="w-4 h-4" /> },
       { id: "quota", label: "配额管理", icon: <Gauge className="w-4 h-4" /> },
       { id: "admin-orgs", label: "组织管理", icon: <Building2 className="w-4 h-4" /> },
+      { id: "plans-admin", label: "套餐管理", icon: <Package className="w-4 h-4" /> },
       { id: "models", label: "模型管理", icon: <Cpu className="w-4 h-4" /> },
     ],
   },
@@ -1662,6 +1666,12 @@ export default function ConsolePage() {
                     )}
                   </TabsContent>
 
+                  {/* 我的 - 套餐与订阅 */}
+                  <TabsContent value="plans" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
+                    <h2 className="text-lg font-medium text-white mb-6">套餐与订阅</h2>
+                    <PlansTab />
+                  </TabsContent>
+
                   {/* 我的 - 用户自定义 Rerank */}
                   <TabsContent value="model-config" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                     <h2 className="text-lg font-medium text-white mb-6">模型设置</h2>
@@ -1711,6 +1721,14 @@ export default function ConsolePage() {
                     <TabsContent value="admin-orgs" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                       <h2 className="text-lg font-medium text-white mb-6">组织管理</h2>
                       <AdminOrgsTab />
+                    </TabsContent>
+                  )}
+
+                  {/* 管理员 - 套餐管理 */}
+                  {isAdmin && (
+                    <TabsContent value="plans-admin" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
+                      <h2 className="text-lg font-medium text-white mb-6">套餐管理</h2>
+                      <AdminPlansTab />
                     </TabsContent>
                   )}
 

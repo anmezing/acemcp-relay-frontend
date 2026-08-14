@@ -11,6 +11,7 @@ import {
   onOrganizationCreated,
   onOrganizationDeleted,
 } from "@/lib/org-sync";
+import { getOrganizationMembershipLimit } from "@/lib/billing";
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
@@ -114,6 +115,10 @@ export const auth = betterAuth({
       // 邀请制：任何用户可创建组织成为 owner。角色只用 owner/member 两档。
       creatorRole: "owner",
       invitationExpiresIn: 60 * 60 * 48,
+      // 子账号按 owner 名下全部组织中的唯一用户计数；候选用户若已在其中
+      // 一个组织，不会因加入另一个组织重复占用套餐席位。
+      membershipLimit: async (user, targetOrganization) =>
+        getOrganizationMembershipLimit(targetOrganization.id, user.id),
       organizationHooks: {
         afterCreateOrganization: onOrganizationCreated,
         afterAddMember: onMemberAdded,

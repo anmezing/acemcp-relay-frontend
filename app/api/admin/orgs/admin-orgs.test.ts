@@ -57,6 +57,12 @@ describe("GET /api/admin/orgs", () => {
         member_count: 3,
         daily_request_limit: 1000,
         daily_index_bytes_limit: null,
+        effective_daily_request_limit: 1000,
+        effective_daily_index_bytes_limit: 4096,
+        daily_request_source: "admin_override",
+        daily_index_bytes_source: "subscription",
+        plan_name: "Team",
+        owner_tier: "free",
         created_at: new Date(),
       },
     ];
@@ -65,7 +71,12 @@ describe("GET /api/admin/orgs", () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.orgs).toHaveLength(1);
-    expect(data.orgs[0]).toMatchObject({ org_id: "o1", member_count: 3 });
+    expect(data.orgs[0]).toMatchObject({
+      org_id: "o1",
+      member_count: 3,
+      effective_daily_request_limit: 1000,
+      daily_index_bytes_source: "subscription",
+    });
   });
 });
 

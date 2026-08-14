@@ -16,6 +16,9 @@ interface UserRow {
   last_request_at: string | null;
   banned: boolean;
   tier: "free" | "pro";
+  base_tier: "free" | "pro";
+  subscription_plan_name: string | null;
+  subscription_expires_at: string | null;
   auth_providers: string[];
 }
 
@@ -177,6 +180,11 @@ export function AdminUsersTab() {
                   )}>
                   {u.tier === "pro" ? "Pro" : "Free"}
                 </span>
+                {u.subscription_plan_name && (
+                  <span className="rounded border border-emerald-500/20 bg-emerald-500/[0.08] px-1.5 py-0.5 text-[10px] text-emerald-400">
+                    已购 {u.subscription_plan_name}
+                  </span>
+                )}
                 {(providerLabels.length ? providerLabels : ["来源未知"]).map((provider) => (
                   <span
                     key={provider}
@@ -209,6 +217,12 @@ export function AdminUsersTab() {
                         {providerLabels.join("、") || "来源未知"}
                       </span>
                     </span>
+                    {u.subscription_plan_name && (
+                      <span>
+                        有效套餐：{u.subscription_plan_name}，至{" "}
+                        {fmtTime(u.subscription_expires_at)}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex flex-wrap gap-2 pt-1">
@@ -221,25 +235,25 @@ export function AdminUsersTab() {
                       className="text-xs">
                       重置密钥
                     </Button>
-                    {u.tier === "pro" ? (
+                    {u.base_tier === "pro" ? (
                       <Button variant="glass" size="sm" disabled={actionBusy}
                         onClick={() => {
-                          if (confirm("将该用户降为 Free？relay 侧约半分钟内生效。")) {
+                          if (confirm("将该用户的手工基础等级降为 Free？有效付费套餐在到期前仍继续生效。")) {
                             runAction(u.id, "set-tier", { tier: "free" });
                           }
                         }}
                         className="text-xs">
-                        降为 Free
+                        基础等级降为 Free
                       </Button>
                     ) : (
                       <Button variant="glass" size="sm" disabled={actionBusy}
                         onClick={() => {
-                          if (confirm("将该用户设为 Pro？relay 侧约半分钟内生效。")) {
+                          if (confirm("将该用户的手工基础等级设为 Pro？")) {
                             runAction(u.id, "set-tier", { tier: "pro" });
                           }
                         }}
                         className="text-xs text-cyan-400">
-                        设为 Pro
+                        基础等级设为 Pro
                       </Button>
                     )}
                     {u.banned ? (
