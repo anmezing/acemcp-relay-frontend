@@ -102,7 +102,9 @@ function LoginContent() {
   const oauthError = parseAuthError(params.get("error"));
   const callbackUrl = sanitizeCallbackUrl(params.get("callbackUrl"));
   const errorCallbackUrl = loginUrl(callbackUrl);
-  const [mode, setMode] = useState<CredentialMode>("login");
+  const requestedMode: CredentialMode =
+    params.get("mode") === "register" ? "register" : "login";
+  const [mode, setMode] = useState<CredentialMode>(requestedMode);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

@@ -33,8 +33,13 @@ export function LoginButton({ user }: LoginButtonProps) {
   }
 
   return (
-    <Button variant="gradient" asChild className="rounded-lg">
-      <Link href="/login">登录</Link>
-    </Button>
+    <div className="flex items-center gap-1 sm:gap-2">
+      <Button variant="ghost" asChild className="text-slate-400 hover:text-white">
+        <Link href="/login">登录</Link>
+      </Button>
+      <Button variant="gradient" asChild className="rounded-lg">
+        <Link href="/login?mode=register">注册</Link>
+      </Button>
+    </div>
   );
 }
