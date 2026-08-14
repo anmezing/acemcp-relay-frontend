@@ -13,6 +13,11 @@ import {
 } from "@/lib/org-sync";
 import { getOrganizationMembershipLimit } from "@/lib/billing";
 
+const trustedAuthProxies = (process.env.BETTER_AUTH_TRUSTED_PROXIES || "")
+  .split(",")
+  .map((proxy) => proxy.trim())
+  .filter(Boolean);
+
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
@@ -21,6 +26,14 @@ export const auth = betterAuth({
     minPasswordLength: 8,
     maxPasswordLength: 128,
     autoSignIn: true,
+  },
+  advanced: {
+    ipAddress: {
+      ipAddressHeaders: ["x-forwarded-for"],
+      ...(trustedAuthProxies.length > 0
+        ? { trustedProxies: trustedAuthProxies }
+        : {}),
+    },
   },
   database: new Pool({
     host: process.env.POSTGRES_HOST || "localhost",
