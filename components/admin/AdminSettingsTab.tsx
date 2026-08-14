@@ -39,7 +39,7 @@ export function AdminSettingsTab() {
 
   const toggle = useCallback(
     async (next: boolean) => {
-      if (!next && !confirm("确认关闭注册？新用户将无法通过 OAuth 创建账号（已有用户不受影响）。")) {
+      if (!next && !confirm("确认关闭注册？新用户将无法通过邮箱、LinuxDo 或 GitHub 创建账号（已有用户不受影响）。")) {
         return;
       }
       setBusy(true);
@@ -92,7 +92,7 @@ export function AdminSettingsTab() {
             <div className="flex-1 min-w-[200px]">
               <h3 className="text-white text-sm font-medium">开放注册</h3>
               <p className="text-slate-500 text-xs mt-1">
-                关闭后新用户无法通过 LinuxDo / GitHub 完成首次注册，已有账号登录不受影响。
+                关闭后新用户无法通过邮箱、LinuxDo 或 GitHub 完成首次注册，已有账号登录不受影响。
               </p>
             </div>
             <div className="flex items-center gap-2">

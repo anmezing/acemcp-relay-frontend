@@ -4,8 +4,9 @@ import { auth } from "@/lib/auth";
 
 export async function GET() {
   try {
+    const requestHeaders = await headers();
     const session = await auth.api.getSession({
-      headers: await headers(),
+      headers: requestHeaders,
     });
 
     if (!session?.user) {
@@ -13,6 +14,9 @@ export async function GET() {
     }
 
     const user = session.user;
+    const accounts = await auth.api.listUserAccounts({
+      headers: requestHeaders,
+    });
 
     return NextResponse.json({
       id: user.id,
@@ -23,6 +27,7 @@ export async function GET() {
       trustLevel: (user as { trustLevel?: number }).trustLevel,
       githubCreatedAt: (user as { githubCreatedAt?: string | Date | null }).githubCreatedAt,
       createdAt: user.createdAt,
+      authProviders: [...new Set(accounts.map((account) => account.providerId))],
     });
   } catch (error) {
     console.error("获取用户信息失败:", error);

@@ -7,7 +7,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { buildCloudMcpConfigJson, buildCloudMcpConfigToml, buildMcpConfigJson, buildMcpConfigToml } from "@/lib/mcp-config";
 import {
-  Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github, Trash2,
+  Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github, Trash2, Mail,
   Key, FileText, User, Database, ScrollText, Building2, Users, Coins,
   Gauge, Cpu, Settings, Terminal, Shield, ChevronDown, CreditCard, Package
 } from "lucide-react";
@@ -46,6 +46,7 @@ import { UserModelConfigTab } from "@/components/UserModelConfigTab";
 import { PlansTab } from "@/components/PlansTab";
 import { AdminPlansTab } from "@/components/admin/AdminPlansTab";
 import { LceBrand } from "@/components/LceBrand";
+import { authProviderLabel } from "@/lib/auth-provider";
 
 type Tab =
   | "keys" | "plans" | "docs" | "profile" | "model-config" | "team"
@@ -150,12 +151,7 @@ interface UserInfo {
   trustLevel: number;
   githubCreatedAt: string | null;
   createdAt: string;
-}
-
-type AuthProvider = "github" | "linuxdo";
-
-function detectProvider(user: UserInfo): AuthProvider {
-  return user.githubCreatedAt ? "github" : "linuxdo";
+  authProviders: string[];
 }
 
 function formatGithubAccountAge(createdAt: string): string {
@@ -1418,7 +1414,7 @@ export default function ConsolePage() {
 
                     {userInfo ? (
                       (() => {
-                        const provider = detectProvider(userInfo);
+                        const providers = userInfo.authProviders || [];
                         return (
                           <div className="space-y-6">
                             {/* Avatar and name */}
@@ -1430,10 +1426,14 @@ export default function ConsolePage() {
                                 </AvatarFallback>
                               </Avatar>
                               <div className="min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="text-white font-medium text-lg truncate">{userInfo.name}</p>
-                                  <ProviderBadge provider={provider} />
-                                </div>
+                                 <div className="flex items-center gap-2 flex-wrap">
+                                   <p className="text-white font-medium text-lg truncate">{userInfo.name}</p>
+                                   {providers.length > 0 ? providers.map((provider) => (
+                                     <ProviderBadge key={provider} provider={provider} />
+                                   )) : (
+                                     <ProviderBadge provider="unknown" />
+                                   )}
+                                 </div>
                                 {userInfo.username && (
                                   <p className="text-slate-500 text-sm">@{userInfo.username}</p>
                                 )}
@@ -1444,12 +1444,13 @@ export default function ConsolePage() {
                             <div className="grid grid-cols-2 gap-4">
                               <InfoItem label="邮箱" value={userInfo.email || "-"} copyable />
                               <InfoItem label="用户 ID" value={userInfo.id} copyable />
-                              {provider === "github" ? (
+                              {providers.includes("github") && (
                                 <InfoItem
                                   label="GitHub 账号年龄"
                                   value={userInfo.githubCreatedAt ? formatGithubAccountAge(userInfo.githubCreatedAt) : "-"}
                                 />
-                              ) : (
+                              )}
+                              {providers.includes("linuxdo") && (
                                 <InfoItem label="信任等级" value={`Level ${userInfo.trustLevel || 0}`} />
                               )}
                               <InfoItem
@@ -1961,7 +1962,7 @@ export default function ConsolePage() {
   );
 }
 
-function ProviderBadge({ provider }: { provider: AuthProvider }) {
+function ProviderBadge({ provider }: { provider: string }) {
   if (provider === "github") {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.12] text-slate-200 text-[10px] font-medium">
@@ -1970,14 +1971,22 @@ function ProviderBadge({ provider }: { provider: AuthProvider }) {
       </span>
     );
   }
-  return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/[0.08] border border-amber-500/30 text-amber-300 text-[10px] font-medium">
-      <span className="w-3 h-3 rounded-full overflow-hidden border border-white/20 flex flex-col">
-        <span className="flex-[1] bg-[#2d2d2d]" />
-        <span className="flex-[1.5] bg-[#f5f5f5]" />
-        <span className="flex-[1] bg-[#f0a030]" />
+  if (provider === "linuxdo") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/[0.08] border border-amber-500/30 text-amber-300 text-[10px] font-medium">
+        <span className="w-3 h-3 rounded-full overflow-hidden border border-white/20 flex flex-col">
+          <span className="flex-[1] bg-[#2d2d2d]" />
+          <span className="flex-[1.5] bg-[#f5f5f5]" />
+          <span className="flex-[1] bg-[#f0a030]" />
+        </span>
+        LinuxDo
       </span>
-      LinuxDo
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/[0.08] border border-cyan-500/25 text-cyan-300 text-[10px] font-medium">
+      <Mail className="w-3 h-3" />
+      {provider === "unknown" ? "未知来源" : authProviderLabel(provider)}
     </span>
   );
 }

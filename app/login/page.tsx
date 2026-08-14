@@ -3,11 +3,33 @@
 import { authClient } from "@/lib/auth-client";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, ArrowLeft, Github, AlertCircle } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  Github,
+  Loader2,
+  LockKeyhole,
+  LogIn,
+  Mail,
+  UserPlus,
+  UserRound,
+} from "lucide-react";
 import { loginUrl, sanitizeCallbackUrl } from "@/lib/auth-redirect";
 import { LceBrand } from "@/components/LceBrand";
+import {
+  credentialAuthErrorMessage,
+  type CredentialMode,
+  validateCredentialFields,
+} from "@/lib/credential-auth";
+import { cn } from "@/lib/utils";
+
+const INPUT_CLASS =
+  "h-11 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-500/45 focus:bg-white/[0.045] disabled:cursor-not-allowed disabled:opacity-60";
 
 function parseAuthError(raw: string | null): string | null {
   if (!raw) return null;
@@ -24,11 +46,136 @@ function parseAuthError(raw: string | null): string | null {
   return "登录失败，请稍后重试";
 }
 
+interface PasswordFieldProps {
+  id: string;
+  label: string;
+  value: string;
+  autoComplete: string;
+  placeholder: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}
+
+function PasswordField({
+  id,
+  label,
+  value,
+  autoComplete,
+  placeholder,
+  disabled,
+  onChange,
+}: PasswordFieldProps) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <label htmlFor={id} className="block space-y-1.5">
+      <span className="text-xs text-slate-400">{label}</span>
+      <span className="relative block">
+        <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
+        <input
+          id={id}
+          type={visible ? "text" : "password"}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          autoComplete={autoComplete}
+          placeholder={placeholder}
+          disabled={disabled}
+          required
+          className={cn(INPUT_CLASS, "pl-9 pr-10")}
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((current) => !current)}
+          disabled={disabled}
+          aria-label={visible ? "隐藏密码" : "显示密码"}
+          title={visible ? "隐藏密码" : "显示密码"}
+          className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-white/[0.05] hover:text-slate-300 disabled:pointer-events-none"
+        >
+          {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      </span>
+    </label>
+  );
+}
+
 function LoginContent() {
   const params = useSearchParams();
-  const errorMessage = parseAuthError(params.get("error"));
+  const oauthError = parseAuthError(params.get("error"));
   const callbackUrl = sanitizeCallbackUrl(params.get("callbackUrl"));
   const errorCallbackUrl = loginUrl(callbackUrl);
+  const [mode, setMode] = useState<CredentialMode>("login");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [registrationEnabled, setRegistrationEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/registration", { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const payload = (await response.json()) as { enabled?: boolean };
+        if (!controller.signal.aborted && typeof payload.enabled === "boolean") {
+          setRegistrationEnabled(payload.enabled);
+          if (!payload.enabled) setMode("login");
+        }
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, []);
+
+  const selectMode = (next: CredentialMode) => {
+    if (next === "register" && registrationEnabled === false) return;
+    setMode(next);
+    setFormError("");
+    setPassword("");
+    setConfirmPassword("");
+  };
+
+  const handleCredentialSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const validationError = validateCredentialFields({
+      mode,
+      name,
+      email,
+      password,
+      confirmPassword,
+    });
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+
+    setBusy(true);
+    setFormError("");
+    try {
+      const result = mode === "register"
+        ? await authClient.signUp.email({
+            name: name.trim(),
+            email: email.trim(),
+            password,
+            callbackURL: callbackUrl,
+          })
+        : await authClient.signIn.email({
+            email: email.trim(),
+            password,
+            callbackURL: callbackUrl,
+            rememberMe: true,
+          });
+
+      if (result.error) {
+        setFormError(credentialAuthErrorMessage(result.error, mode));
+        return;
+      }
+      window.location.assign(callbackUrl);
+    } catch {
+      setFormError(credentialAuthErrorMessage(null, mode));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleLinuxDoLogin = () => {
     authClient.signIn.oauth2({
@@ -46,105 +193,204 @@ function LoginContent() {
     });
   };
 
+  const errorMessage = formError || oauthError;
+
   return (
-    <div className="relative min-h-screen bg-[#0a0f1a] flex items-center justify-center overflow-hidden animate-page-fade-in">
-      {/* Aurora background effects */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {/* Aurora blob 1 - Main cyan */}
-        <div className="absolute top-1/3 left-1/4 w-[350px] h-[250px] bg-cyan-500/40 blur-[100px] rounded-full animate-aurora-1" />
-        {/* Aurora blob 2 - Emerald accent */}
-        <div className="absolute top-1/4 right-1/3 w-[280px] h-[200px] bg-emerald-500/30 blur-[90px] rounded-full animate-aurora-2" />
-        {/* Aurora blob 3 - Blue/Indigo */}
-        <div className="absolute bottom-1/3 left-1/3 w-[320px] h-[180px] bg-blue-500/35 blur-[85px] rounded-full animate-aurora-3" />
-        {/* Aurora blob 4 - Purple wave */}
-        <div className="absolute bottom-1/4 right-1/4 w-[260px] h-[160px] bg-indigo-500/25 blur-[80px] rounded-full animate-aurora-4" />
-      </div>
+    <div className="relative min-h-dvh overflow-x-hidden overflow-y-auto bg-[#0a0f1a] px-4 py-6 animate-page-fade-in sm:py-10">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.012)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.012)_1px,transparent_1px)] bg-[size:64px_64px]" />
 
-      {/* Ambient glow behind card */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[400px] bg-gradient-radial from-cyan-500/10 via-blue-500/5 to-transparent rounded-full blur-3xl animate-glow-pulse" />
-
-      {/* Noise texture */}
-      <div className="absolute inset-0 opacity-[0.015] pointer-events-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIj48ZmlsdGVyIGlkPSJhIiB4PSIwIiB5PSIwIj48ZmVUdXJidWxlbmNlIGJhc2VGcmVxdWVuY3k9Ii43NSIgc3RpdGNoVGlsZXM9InN0aXRjaCIgdHlwZT0iZnJhY3RhbE5vaXNlIi8+PC9maWx0ZXI+PHJlY3Qgd2lkdGg9IjMwMCIgaGVpZ2h0PSIzMDAiIGZpbHRlcj0idXJsKCNhKSIgb3BhY2l0eT0iMSIvPjwvc3ZnPg==')]" />
-
-      {/* Subtle grid */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.01)_1px,transparent_1px)] bg-[size:64px_64px] opacity-50" />
-
-      {/* Login card */}
-      <div className="relative w-full max-w-sm mx-4 animate-card-entrance">
-        {/* Card glow effect */}
-        <div className="absolute -inset-px rounded-2xl bg-gradient-to-b from-white/10 to-transparent opacity-50" />
-
-        <div className="relative bg-[#0d1424]/90 backdrop-blur-xl border border-white/[0.06] rounded-2xl p-8">
-          {/* Header */}
-          <div className="text-center mb-8">
+      <div className="relative mx-auto flex min-h-[calc(100dvh-3rem)] w-full max-w-sm flex-col justify-center sm:min-h-[calc(100dvh-5rem)]">
+        <div className="relative border border-white/[0.07] bg-[#0d1424]/95 p-6 backdrop-blur-xl sm:p-8">
+          <div className="mb-6 text-center">
             <Link href="/" className="inline-block mb-3" aria-label="LCE 首页">
               <LceBrand
-                iconSize={64}
+                iconSize={56}
                 className="flex-col gap-2"
                 textClassName="text-2xl"
                 priority
               />
             </Link>
-            <p className="text-slate-500 text-sm font-light opacity-0 animate-float-up animate-delay-200">
-              登录以访问转发控制台
+            <p className="text-sm font-light text-slate-500">
+              {mode === "register" ? "创建账户并获取 API Key" : "登录以访问控制台"}
             </p>
           </div>
+
+          <div
+            role="tablist"
+            aria-label="账户操作"
+            className="mb-5 grid h-10 grid-cols-2 rounded-lg border border-white/[0.07] bg-black/15 p-1"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "login"}
+              onClick={() => selectMode("login")}
+              className={cn(
+                "rounded-md text-sm transition-colors",
+                mode === "login"
+                  ? "bg-white/[0.08] text-white"
+                  : "text-slate-500 hover:text-slate-300"
+              )}
+            >
+              登录
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "register"}
+              disabled={registrationEnabled === false}
+              title={registrationEnabled === false ? "管理员已关闭新用户注册" : undefined}
+              onClick={() => selectMode("register")}
+              className={cn(
+                "rounded-md text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+                mode === "register"
+                  ? "bg-white/[0.08] text-white"
+                  : "text-slate-500 hover:text-slate-300"
+              )}
+            >
+              注册
+            </button>
+          </div>
+
+          {registrationEnabled === false && (
+            <p className="mb-4 text-center text-xs text-amber-300/80">
+              当前未开放新用户注册，已有账号仍可登录
+            </p>
+          )}
 
           {errorMessage && (
             <div
               role="alert"
-              className="mb-5 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-200"
+              className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-xs text-red-200"
             >
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-300" />
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-300" />
               <span className="font-light leading-relaxed">{errorMessage}</span>
             </div>
           )}
 
-          {/* SSO Buttons */}
-          <div className="flex flex-col gap-3">
+          <form onSubmit={handleCredentialSubmit} className="space-y-3.5">
+            {mode === "register" && (
+              <label htmlFor="credential-name" className="block space-y-1.5">
+                <span className="text-xs text-slate-400">昵称</span>
+                <span className="relative block">
+                  <UserRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
+                  <input
+                    id="credential-name"
+                    type="text"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    autoComplete="name"
+                    placeholder="你的昵称"
+                    disabled={busy}
+                    required
+                    maxLength={80}
+                    className={cn(INPUT_CLASS, "pl-9")}
+                  />
+                </span>
+              </label>
+            )}
+
+            <label htmlFor="credential-email" className="block space-y-1.5">
+              <span className="text-xs text-slate-400">邮箱</span>
+              <span className="relative block">
+                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
+                <input
+                  id="credential-email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  autoComplete="email"
+                  inputMode="email"
+                  placeholder="name@example.com"
+                  disabled={busy}
+                  required
+                  className={cn(INPUT_CLASS, "pl-9")}
+                />
+              </span>
+            </label>
+
+            <PasswordField
+              id="credential-password"
+              label="密码"
+              value={password}
+              autoComplete={mode === "register" ? "new-password" : "current-password"}
+              placeholder={mode === "register" ? "至少 8 位" : "输入密码"}
+              disabled={busy}
+              onChange={setPassword}
+            />
+
+            {mode === "register" && (
+              <PasswordField
+                id="credential-password-confirm"
+                label="确认密码"
+                value={confirmPassword}
+                autoComplete="new-password"
+                placeholder="再次输入密码"
+                disabled={busy}
+                onChange={setConfirmPassword}
+              />
+            )}
+
+            <Button
+              type="submit"
+              size="lg"
+              disabled={busy || (mode === "register" && registrationEnabled === false)}
+              className="w-full justify-center rounded-lg bg-cyan-500/90 text-slate-950 hover:bg-cyan-400"
+            >
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : mode === "register" ? (
+                <UserPlus className="h-4 w-4" />
+              ) : (
+                <LogIn className="h-4 w-4" />
+              )}
+              {busy ? "请稍候" : mode === "register" ? "创建账户" : "登录"}
+            </Button>
+          </form>
+
+          <div className="my-5 flex items-center gap-3" aria-hidden="true">
+            <span className="h-px flex-1 bg-white/[0.07]" />
+            <span className="text-[11px] text-slate-600">或使用第三方账号</span>
+            <span className="h-px flex-1 bg-white/[0.07]" />
+          </div>
+
+          <div className="flex flex-col gap-2.5">
             <Button
               onClick={handleLinuxDoLogin}
               variant="glass"
               size="lg"
-              className="w-full justify-center py-3.5 rounded-xl opacity-0 animate-float-up animate-delay-300 group"
+              className="w-full justify-center rounded-lg group"
             >
-              {/* LinuxDo icon */}
-              <div className="w-5 h-5 rounded-full overflow-hidden border border-white/20 flex flex-col">
-                <div className="flex-[1] bg-[#2d2d2d]" />
-                <div className="flex-[1.5] bg-[#f5f5f5]" />
-                <div className="flex-[1] bg-[#f0a030]" />
-              </div>
-              <span className="font-light">使用 LinuxDo 登录</span>
-              <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 transition-all duration-200 group-hover:translate-x-0.5" />
+              <span className="flex h-5 w-5 flex-col overflow-hidden rounded-full border border-white/20">
+                <span className="flex-[1] bg-[#2d2d2d]" />
+                <span className="flex-[1.5] bg-[#f5f5f5]" />
+                <span className="flex-[1] bg-[#f0a030]" />
+              </span>
+              <span className="font-light">使用 LinuxDo {mode === "register" ? "注册" : "登录"}</span>
+              <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-cyan-400" />
             </Button>
 
             <Button
               onClick={handleGithubLogin}
               variant="glass"
               size="lg"
-              className="w-full justify-center py-3.5 rounded-xl opacity-0 animate-float-up animate-delay-400 group"
+              className="w-full justify-center rounded-lg group"
             >
-              <Github className="w-5 h-5 text-slate-200" />
-              <span className="font-light">使用 GitHub 登录</span>
-              <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 transition-all duration-200 group-hover:translate-x-0.5" />
+              <Github className="h-5 w-5 text-slate-200" />
+              <span className="font-light">使用 GitHub {mode === "register" ? "注册" : "登录"}</span>
+              <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-cyan-400" />
             </Button>
           </div>
-
-          {/* Hint text */}
-          <p className="text-center text-slate-600 text-xs mt-4 opacity-0 animate-float-up animate-delay-500">
-            首次登录将自动创建账户
-          </p>
         </div>
 
-        {/* Back link */}
-        <div className="relative z-10 text-center mt-8 opacity-0 animate-float-up animate-delay-500">
+        <div className="relative z-10 mt-6 text-center">
           <Button
             variant="ghost"
             asChild
-            className="rounded-full bg-white/[0.02] hover:bg-white/[0.05] border border-white/[0.06] hover:border-white/[0.12] text-slate-500 hover:text-slate-300 font-light group"
+            className="rounded-full border border-white/[0.06] bg-white/[0.02] font-light text-slate-500 hover:border-white/[0.12] hover:bg-white/[0.05] hover:text-slate-300 group"
           >
             <Link href="/">
-              <ArrowLeft className="w-4 h-4 transition-transform duration-300 group-hover:-translate-x-1" />
+              <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
               <span>返回首页</span>
             </Link>
           </Button>
