@@ -45,6 +45,8 @@ import { AGENT_RULES_CLOUD, AGENT_RULES_REMOTE, CLOUD_TOOLS, REMOTE_TOOLS } from
 import { UserModelConfigTab } from "@/components/UserModelConfigTab";
 import { PlansTab } from "@/components/PlansTab";
 import { AdminPlansTab } from "@/components/admin/AdminPlansTab";
+import { AdminMenuTab } from "@/components/admin/AdminMenuTab";
+import { DEFAULT_MENU_VISIBILITY, ConsoleMenuId } from "@/lib/menu-config";
 import { LceBrand } from "@/components/LceBrand";
 import { authProviderLabel } from "@/lib/auth-provider";
 
@@ -52,7 +54,7 @@ type Tab =
   | "keys" | "plans" | "docs" | "profile" | "model-config" | "team"
   | "index" | "logs"
   | "org" | "users" | "call-stats" | "quota" | "admin-orgs" | "plans-admin" | "models"
-  | "system-settings" | "system-logs";
+  | "system-settings" | "system-logs" | "menu-admin";
 
 interface SidebarSection {
   label: string;
@@ -96,6 +98,7 @@ const ALL_SECTIONS: SidebarSection[] = [
     label: "系统",
     admin: true,
     items: [
+      { id: "menu-admin", label: "菜单管理", icon: <Settings className="w-4 h-4" /> },
       { id: "system-settings", label: "系统设置", icon: <Settings className="w-4 h-4" /> },
       { id: "system-logs", label: "系统日志", icon: <Terminal className="w-4 h-4" /> },
     ],
@@ -365,6 +368,7 @@ export default function ConsolePage() {
   const [logDetail, setLogDetail] = useState<LogDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [menuVisibility, setMenuVisibility] = useState<Record<ConsoleMenuId, boolean>>(DEFAULT_MENU_VISIBILITY);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearLoading, setClearLoading] = useState(false);
   const [clearResult, setClearResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -578,9 +582,21 @@ export default function ConsolePage() {
     } catch {}
   }, []);
 
+  const fetchMenuVisibility = useCallback(async () => {
+    try {
+      const res = await fetch("/api/menu-config");
+      if (!res.ok) return;
+      const data = await res.json();
+      setMenuVisibility((data.visibility ?? DEFAULT_MENU_VISIBILITY) as Record<ConsoleMenuId, boolean>);
+    } catch {}
+  }, []);
+
   const sections = useMemo(
-    () => (isAdmin ? ALL_SECTIONS : ALL_SECTIONS.filter((s) => !s.admin)),
-    [isAdmin]
+    () => (isAdmin ? ALL_SECTIONS : ALL_SECTIONS.filter((s) => !s.admin)).map((section) => ({
+      ...section,
+      items: section.items.filter((item) => item.id === "menu-admin" || menuVisibility[item.id as ConsoleMenuId] !== false),
+    })).filter((section) => section.items.length > 0),
+    [isAdmin, menuVisibility]
   );
   const mobileItems = useMemo(
     () => sections.flatMap((section) => section.items),
@@ -591,9 +607,10 @@ export default function ConsolePage() {
   // admin tab（如权限校验失败/回收），内容区会空白。渲染期直接归一到 "keys"，
   // 不用 effect setState（避免级联渲染，也满足 set-state-in-effect 规则）。
   const effectiveTab: Tab = useMemo(() => {
-    if (isAdmin) return activeTab;
-    return mobileItems.some((item) => item.id === activeTab) ? activeTab : "keys";
-  }, [isAdmin, activeTab, mobileItems]);
+    return mobileItems.some((item) => item.id === activeTab)
+      ? activeTab
+      : (mobileItems[0]?.id ?? "keys");
+  }, [activeTab, mobileItems]);
 
   const activeMobileItem = mobileItems.find((item) => item.id === effectiveTab) ?? mobileItems[0];
 
@@ -735,10 +752,11 @@ export default function ConsolePage() {
       void fetchKeyInfo();
       void fetchTenantStats();
       void fetchIsAdmin();
+      void fetchMenuVisibility();
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [isPending, session, router, fetchUserInfo, fetchKeyInfo, fetchTenantStats, fetchIsAdmin]);
+  }, [isPending, session, router, fetchUserInfo, fetchKeyInfo, fetchTenantStats, fetchIsAdmin, fetchMenuVisibility]);
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -892,25 +910,31 @@ export default function ConsolePage() {
           <Link href="/" className="whitespace-nowrap" aria-label="LCE 首页">
             <LceBrand iconSize={32} textClassName="text-lg sm:text-xl" priority />
           </Link>
-          <nav className="order-3 grid w-full grid-cols-3 sm:order-none sm:flex sm:w-auto sm:items-center sm:gap-1">
+          <nav className="order-3 flex w-full justify-center sm:order-none sm:w-auto sm:items-center sm:gap-1">
+            {menuVisibility["top-console"] !== false && (
             <Link
               href="/console"
               className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-white border-b-2 border-cyan-400"
             >
               控制台
             </Link>
+            )}
+            {menuVisibility["top-leaderboard"] !== false && (
             <Link
               href="/leaderboard"
               className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
             >
               排行榜
             </Link>
+            )}
+            {menuVisibility["top-status"] !== false && (
             <Link
               href="/status"
               className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
             >
               状态监控
             </Link>
+            )}
           </nav>
           <Button
             variant="ghost"
@@ -1742,6 +1766,12 @@ export default function ConsolePage() {
                   )}
 
                   {/* 管理员 - 系统设置 */}
+                  {isAdmin && (
+                    <TabsContent value="menu-admin" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
+                      <h2 className="text-lg font-medium text-white mb-6">菜单管理</h2>
+                      <AdminMenuTab />
+                    </TabsContent>
+                  )}
                   {isAdmin && (
                     <TabsContent value="system-settings" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                       <h2 className="text-lg font-medium text-white mb-6">系统设置</h2>
