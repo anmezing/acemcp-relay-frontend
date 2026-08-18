@@ -8,6 +8,9 @@ import { cn } from "@/lib/utils";
 
 export function AdminSettingsTab() {
   const [registrationEnabled, setRegistrationEnabled] = useState<boolean | null>(null);
+  const [registrationLimit, setRegistrationLimit] = useState<number | null>(null);
+  const [registeredUsers, setRegisteredUsers] = useState(0);
+  const [limitDraft, setLimitDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -22,6 +25,9 @@ export function AdminSettingsTab() {
       const data = await res.json();
       if (signal?.aborted) return;
       setRegistrationEnabled(data.registrationEnabled);
+      setRegistrationLimit(data.registrationLimit);
+      setRegisteredUsers(data.registeredUsers ?? 0);
+      setLimitDraft(data.registrationLimit == null ? "" : String(data.registrationLimit));
       setError("");
     } catch {
       if (signal?.aborted) return;
@@ -61,6 +67,17 @@ export function AdminSettingsTab() {
     },
     []
   );
+
+  const saveLimit = useCallback(async () => {
+    const value = limitDraft.trim() === "" ? null : Number(limitDraft);
+    if (value !== null && (!Number.isInteger(value) || value < 1)) { setNotice("请输入正整数，留空表示不限"); return; }
+    setBusy(true);
+    try {
+      const res = await fetch("/api/admin/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ registrationLimit: value }) });
+      if (!res.ok) throw new Error();
+      setRegistrationLimit(value); setNotice("注册人数上限已保存");
+    } catch { setNotice("保存失败，请重试"); } finally { setBusy(false); }
+  }, [limitDraft]);
 
   if (registrationEnabled === null && !error) {
     return <Skeleton className="h-32 bg-white/[0.06] rounded-xl" />;
@@ -109,6 +126,16 @@ export function AdminSettingsTab() {
                 {registrationEnabled ? "关闭注册" : "开放注册"}
               </Button>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-[220px]"><h3 className="text-white text-sm font-medium">注册人数上限</h3><p className="text-slate-500 text-xs mt-1">当前 {registeredUsers} 人；达到上限后新用户注册会被服务端拒绝。</p></div>
+            <input aria-label="注册人数上限" value={limitDraft} onChange={(event) => setLimitDraft(event.target.value)} placeholder="不限" inputMode="numeric" className="w-24 rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-sm text-white" />
+            <Button variant="glass" size="sm" disabled={busy} onClick={saveLimit} className="text-xs">保存上限</Button>
           </div>
         </CardContent>
       </Card>

@@ -53,6 +53,9 @@ export function credentialAuthErrorMessage(
   if (raw.includes("REGISTRATION_DISABLED")) {
     return "当前未开放新用户注册";
   }
+  if (raw.includes("REGISTRATION_LIMIT_REACHED")) {
+    return "注册名额已满，暂不开放新用户注册";
+  }
   if (raw.includes("USER_ALREADY_EXISTS")) {
     return "该邮箱已注册，请直接登录或使用原登录方式";
   }

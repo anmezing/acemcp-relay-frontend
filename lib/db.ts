@@ -716,6 +716,26 @@ export async function isRegistrationDisabled(): Promise<boolean> {
   return (await getSystemSetting("registration_enabled")) === "false";
 }
 
+export async function getRegistrationLimit(): Promise<number | null> {
+  const raw = await getSystemSetting("registration_max_users");
+  if (!raw || raw.trim() === "0") return null;
+  const value = Number(raw);
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
+export async function countRegisteredUsers(): Promise<number> {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(`SELECT COUNT(*)::int AS count FROM "user"`);
+    return Number(result.rows[0]?.count ?? 0);
+  } finally { client.release(); }
+}
+
+export async function isRegistrationAtCapacity(): Promise<boolean> {
+  const limit = await getRegistrationLimit();
+  return limit !== null && (await countRegisteredUsers()) >= limit;
+}
+
 export function maskApiKey(apiKey: string): string {
   if (!apiKey || apiKey.length < 12) return "ace_************************";
   const prefix = apiKey.slice(0, 8);

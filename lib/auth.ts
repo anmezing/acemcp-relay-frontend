@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { genericOAuth, organization } from "better-auth/plugins";
 import { Pool } from "pg";
-import { initDB, isRegistrationDisabled } from "@/lib/db";
+import { initDB, isRegistrationAtCapacity, isRegistrationDisabled } from "@/lib/db";
 import {
   onMemberAdded,
   onMemberLeft,
@@ -82,6 +82,9 @@ export const auth = betterAuth({
             throw new APIError("BAD_REQUEST", {
               message: "REGISTRATION_DISABLED",
             });
+          }
+          if (await isRegistrationAtCapacity()) {
+            throw new APIError("BAD_REQUEST", { message: "REGISTRATION_LIMIT_REACHED" });
           }
           const created = (user as { githubCreatedAt?: Date | string | null })
             .githubCreatedAt;
