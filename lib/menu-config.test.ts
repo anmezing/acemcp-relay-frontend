@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CONSOLE_MENU_CATALOG, normalizeMenuVisibility } from "./menu-config";
+import { CONSOLE_MENU_CATALOG, normalizeMenuVisibility, USER_MENU_IDS } from "./menu-config";
 
 describe("menu visibility", () => {
   it("defaults every catalog menu to visible", () => {
@@ -13,5 +13,11 @@ describe("menu visibility", () => {
     expect(result.plans).toBe(false);
     expect(result.keys).toBe(true);
     expect(result).not.toHaveProperty("injected");
+  });
+
+  it("only exposes ordinary-user menus to the administrator editor", () => {
+    expect(USER_MENU_IDS).toContain("plans");
+    expect(USER_MENU_IDS).not.toContain("users");
+    expect(USER_MENU_IDS).not.toContain("system-settings");
   });
 });

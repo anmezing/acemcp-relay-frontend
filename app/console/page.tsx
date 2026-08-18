@@ -594,7 +594,7 @@ export default function ConsolePage() {
   const sections = useMemo(
     () => (isAdmin ? ALL_SECTIONS : ALL_SECTIONS.filter((s) => !s.admin)).map((section) => ({
       ...section,
-      items: section.items.filter((item) => item.id === "menu-admin" || menuVisibility[item.id as ConsoleMenuId] !== false),
+      items: isAdmin ? section.items : section.items.filter((item) => menuVisibility[item.id as ConsoleMenuId] !== false),
     })).filter((section) => section.items.length > 0),
     [isAdmin, menuVisibility]
   );
@@ -911,7 +911,7 @@ export default function ConsolePage() {
             <LceBrand iconSize={32} textClassName="text-lg sm:text-xl" priority />
           </Link>
           <nav className="order-3 flex w-full justify-center sm:order-none sm:w-auto sm:items-center sm:gap-1">
-            {menuVisibility["top-console"] !== false && (
+            {(isAdmin || menuVisibility["top-console"] !== false) && (
             <Link
               href="/console"
               className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-white border-b-2 border-cyan-400"
@@ -919,7 +919,7 @@ export default function ConsolePage() {
               控制台
             </Link>
             )}
-            {menuVisibility["top-leaderboard"] !== false && (
+            {(isAdmin || menuVisibility["top-leaderboard"] !== false) && (
             <Link
               href="/leaderboard"
               className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
@@ -927,7 +927,7 @@ export default function ConsolePage() {
               排行榜
             </Link>
             )}
-            {menuVisibility["top-status"] !== false && (
+            {(isAdmin || menuVisibility["top-status"] !== false) && (
             <Link
               href="/status"
               className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"

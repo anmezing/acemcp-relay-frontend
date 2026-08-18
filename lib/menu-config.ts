@@ -11,6 +11,10 @@ export const CONSOLE_MENU_CATALOG = [
   { id: "models", label: "模型管理", group: "管理" }, { id: "system-settings", label: "系统设置", group: "系统" },
   { id: "system-logs", label: "系统日志", group: "系统" },
 ] as const;
+export const USER_MENU_IDS: ConsoleMenuId[] = [
+  "top-console", "top-leaderboard", "top-status",
+  "keys", "plans", "team", "docs", "model-config", "profile", "index", "logs",
+];
 export type ConsoleMenuId = typeof CONSOLE_MENU_CATALOG[number]["id"];
 export const DEFAULT_MENU_VISIBILITY = Object.fromEntries(CONSOLE_MENU_CATALOG.map((item) => [item.id, true])) as Record<ConsoleMenuId, boolean>;
 export function normalizeMenuVisibility(value: unknown): Record<ConsoleMenuId, boolean> {
