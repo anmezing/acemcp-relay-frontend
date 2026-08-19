@@ -34,12 +34,14 @@ beforeEach(() => {
       baseUrl: "https://api.voyageai.com/v1/embeddings",
       dimensions: 1024,
       apiKeyConfigured: true,
+      apiKeyCount: 1,
     },
     rerank: {
       provider: "siliconflow-compatible",
       model: "BAAI/bge-reranker-v2-m3",
       baseUrl: "https://api.siliconflow.cn/v1/rerank",
       apiKeyConfigured: true,
+      apiKeyCount: 1,
     },
   });
   fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true }), {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, RefreshCw, Save } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 
 import {
   AlertDialog,
@@ -43,8 +43,8 @@ interface ModelForm {
 }
 
 interface ModelView {
-  embeddings: Omit<ModelForm["embeddings"], "apiKey"> & { apiKeyConfigured: boolean };
-  rerank: Omit<ModelForm["rerank"], "apiKey"> & { apiKeyConfigured: boolean };
+  embeddings: Omit<ModelForm["embeddings"], "apiKey"> & { apiKeyConfigured: boolean; apiKeyCount: number };
+  rerank: Omit<ModelForm["rerank"], "apiKey"> & { apiKeyConfigured: boolean; apiKeyCount: number };
 }
 
 const inputClass =
@@ -71,6 +71,10 @@ function uniqueModels(...groups: readonly string[][]): string[] {
   return [...new Set(groups.flat().map((model) => model.trim()).filter(Boolean))];
 }
 
+function parseKeyInput(value: string): string[] {
+  return [...new Set(value.split(/\r?\n/).map((key) => key.trim()).filter(Boolean))];
+}
+
 function Field({ label, children, hint }: {
   label: string;
   children: React.ReactNode;
@@ -82,6 +86,58 @@ function Field({ label, children, hint }: {
       {children}
       {hint && <span className="mt-1 block text-[10px] leading-relaxed text-slate-600">{hint}</span>}
     </label>
+  );
+}
+
+function KeyPoolInput({ value, onChange, placeholder }: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  const keys = value === "" ? [""] : value.split(/\r?\n/);
+  const update = (index: number, next: string) => {
+    const values = [...keys];
+    values[index] = next;
+    onChange(values.join("\n"));
+  };
+  return (
+    <div className="min-w-0 flex-1 space-y-2">
+      {keys.map((key, index) => (
+        <div key={index} className="flex gap-2">
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={key}
+            placeholder={index === 0 ? placeholder : "Voyage API Key"}
+            onChange={(event) => update(index, event.target.value)}
+            className={inputClass}
+          />
+          {keys.length > 1 && (
+            <Button
+              type="button"
+              variant="glass"
+              size="icon"
+              title="移除这个 Key"
+              onClick={() => onChange(keys.filter((_, keyIndex) => keyIndex !== index).join("\n"))}
+              className="h-[31px] w-[31px] shrink-0 text-slate-500 hover:text-red-400"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="glass"
+        size="sm"
+        title="添加 Voyage API Key"
+        onClick={() => onChange(`${value}${value ? "\n" : ""}`)}
+        className="h-7 px-2 text-[11px] text-cyan-400"
+      >
+        <Plus className="h-3.5 w-3.5" />
+        添加 Key
+      </Button>
+    </div>
   );
 }
 
@@ -171,7 +227,7 @@ export function AdminModelsTab() {
           kind,
           provider: target.provider,
           baseUrl: target.baseUrl,
-          apiKey: target.apiKey,
+          apiKey: parseKeyInput(target.apiKey)[0] ?? "",
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -205,7 +261,21 @@ export function AdminModelsTab() {
       const response = await fetch("/api/admin/model-config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ config: form, confirmEmbeddingReset }),
+        body: JSON.stringify({
+          config: {
+            embeddings: {
+              ...form.embeddings,
+              apiKey: parseKeyInput(form.embeddings.apiKey)[0] ?? "",
+              apiKeys: parseKeyInput(form.embeddings.apiKey),
+            },
+            rerank: {
+              ...form.rerank,
+              apiKey: parseKeyInput(form.rerank.apiKey)[0] ?? "",
+              apiKeys: parseKeyInput(form.rerank.apiKey),
+            },
+          },
+          confirmEmbeddingReset,
+        }),
       });
       const data = await response.json().catch(() => ({}));
       if (response.status === 409 && data.requiresEmbeddingReset) {
@@ -229,8 +299,14 @@ export function AdminModelsTab() {
 
   const validationError = useMemo(() => {
     if (!form) return "";
+    const embeddingKeys = parseKeyInput(form.embeddings.apiKey);
+    const rerankKeys = parseKeyInput(form.rerank.apiKey);
     if (!form.embeddings.baseUrl.trim()) return "请填写 Embedding Base URL";
-    if (!form.embeddings.apiKey.trim() && !canReuseEmbeddingKey) return "请填写 Embedding API Key";
+    if (embeddingKeys.length === 0 && !canReuseEmbeddingKey) return "请填写 Embedding API Key";
+    if (embeddingKeys.length > 100) return "Embedding Key 池最多支持 100 个 Key";
+    if (form.embeddings.provider !== "voyage" && embeddingKeys.length > 1) {
+      return "只有 Voyage Embedding 支持多 Key";
+    }
     if (!form.embeddings.model.trim()) return form.embeddings.provider === "openai-compatible"
       ? "请先获取并选择 Embedding 模型"
       : "请选择 Embedding 模型";
@@ -248,7 +324,11 @@ export function AdminModelsTab() {
       return "Voyage 供应商输出维度必须与索引维度一致（当前为 1024）";
     }
     if (!form.rerank.baseUrl.trim()) return "请填写 Rerank Base URL";
-    if (!form.rerank.apiKey.trim() && !canReuseRerankKey) return "请填写 Rerank API Key";
+    if (rerankKeys.length === 0 && !canReuseRerankKey) return "请填写 Rerank API Key";
+    if (rerankKeys.length > 100) return "Rerank Key 池最多支持 100 个 Key";
+    if (form.rerank.provider !== "voyage" && rerankKeys.length > 1) {
+      return "只有 Voyage Rerank 支持多 Key";
+    }
     if (!form.rerank.model.trim()) return form.rerank.provider === "siliconflow-compatible"
       ? "请先获取并选择 Rerank 模型"
       : "请选择或填写 Rerank 模型";
@@ -328,24 +408,33 @@ export function AdminModelsTab() {
                   )}
                 />
               </Field>
-              <Field label="3. API Key">
+              <Field
+                label={form.embeddings.provider === "voyage" ? "3. API Key 池" : "3. API Key"}
+                hint={form.embeddings.provider === "voyage"
+                  ? `每行一个 Key，自动轮询和故障切换；已保存 ${view.embeddings.apiKeyCount} 个，留空沿用，填写后整体替换`
+                  : undefined}
+              >
                 <div className="flex gap-2">
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    placeholder={canReuseEmbeddingKey ? "已保存，留空沿用" : "必填"}
+                  {form.embeddings.provider === "voyage" ? <KeyPoolInput
+                    placeholder={canReuseEmbeddingKey ? `已保存 ${view.embeddings.apiKeyCount} 个，留空沿用` : "每行一个 Voyage API Key"}
                     value={form.embeddings.apiKey}
-                    onChange={(event) => {
+                    onChange={(value) => {
                       setEmbeddingModels([]);
                       updateEmbeddings({
-                        apiKey: event.target.value,
+                        apiKey: value,
                         model: form.embeddings.provider === "voyage"
                           ? form.embeddings.model
                           : "",
                       });
                     }}
+                  /> : <input
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder={canReuseEmbeddingKey ? "已保存，留空沿用" : "必填"}
+                    value={form.embeddings.apiKey}
+                    onChange={(event) => updateEmbeddings({ apiKey: event.target.value, model: "" })}
                     className={inputClass}
-                  />
+                  />}
                   {form.embeddings.provider === "openai-compatible" && (
                     <Button
                       type="button"
@@ -469,24 +558,36 @@ export function AdminModelsTab() {
                   )}
                 />
               </Field>
-              <Field label="3. API Key">
+              <Field
+                label={form.rerank.provider === "voyage" ? "3. API Key 池" : "3. API Key"}
+                hint={form.rerank.provider === "voyage"
+                  ? `每行一个 Key，自动轮询和故障切换；已保存 ${view.rerank.apiKeyCount} 个，留空沿用，填写后整体替换`
+                  : undefined}
+              >
                 <div className="flex gap-2">
-                  <input
+                  {form.rerank.provider === "voyage" ? <KeyPoolInput
+                    placeholder={canReuseRerankKey ? `已保存 ${view.rerank.apiKeyCount} 个，留空沿用` : "每行一个 Voyage API Key"}
+                    value={form.rerank.apiKey}
+                    onChange={(value) => {
+                      setRerankModels([]);
+                      updateRerank({
+                        apiKey: value,
+                        model: form.rerank.provider === "siliconflow-compatible"
+                          ? ""
+                          : form.rerank.model,
+                      });
+                    }}
+                  /> : <input
                     type="password"
                     autoComplete="new-password"
                     placeholder={canReuseRerankKey ? "已保存，留空沿用" : "必填"}
                     value={form.rerank.apiKey}
                     onChange={(event) => {
                       setRerankModels([]);
-                      updateRerank({
-                        apiKey: event.target.value,
-                        model: form.rerank.provider === "siliconflow-compatible"
-                          ? ""
-                          : form.rerank.model,
-                      });
+                      updateRerank({ apiKey: event.target.value, model: "" });
                     }}
                     className={inputClass}
-                  />
+                  />}
                   {rerankPreset.dynamicModels && (
                     <Button
                       type="button"

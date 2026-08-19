@@ -15,12 +15,14 @@ export interface PlatformModelConfigView {
     queryPrefix?: string;
     documentPrefix?: string;
     apiKeyConfigured: boolean;
+    apiKeyCount: number;
   };
   rerank: {
     provider: "siliconflow-compatible" | "voyage" | "custom";
     model: string;
     baseUrl: string;
     apiKeyConfigured: boolean;
+    apiKeyCount: number;
   };
 }
 
@@ -95,12 +97,18 @@ function parseView(value: unknown): PlatformModelConfigView {
         ? embeddingValue.documentPrefix
         : undefined,
       apiKeyConfigured: embeddingValue.apiKeyConfigured === true,
+      apiKeyCount: typeof embeddingValue.apiKeyCount === "number" && Number.isSafeInteger(embeddingValue.apiKeyCount)
+        ? embeddingValue.apiKeyCount
+        : 0,
     },
     rerank: {
       provider: rerankValue.provider,
       model: requiredString(rerankValue.model, "rerank.model"),
       baseUrl: requiredString(rerankValue.baseUrl, "rerank.baseUrl"),
       apiKeyConfigured: rerankValue.apiKeyConfigured === true,
+      apiKeyCount: typeof rerankValue.apiKeyCount === "number" && Number.isSafeInteger(rerankValue.apiKeyCount)
+        ? rerankValue.apiKeyCount
+        : 0,
     },
   };
 }
