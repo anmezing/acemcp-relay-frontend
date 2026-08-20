@@ -71,7 +71,7 @@ export async function ensureOrgApiKey(
          $1, $2, $3,
          COALESCE((
            SELECT tier FROM api_keys
-           WHERE user_id = $2
+           WHERE user_id = $2::VARCHAR(255)
            ORDER BY (org_id IS NULL) DESC, created_at
            LIMIT 1
          ), 'free'),

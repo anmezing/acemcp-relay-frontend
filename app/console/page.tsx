@@ -1028,12 +1028,12 @@ export default function ConsolePage() {
                         {section.label}
                         {section.admin && <Shield className="w-3 h-3 inline ml-1 -mt-0.5 text-amber-500/60" />}
                       </p>
-                      <TabsList className="flex flex-col gap-0.5 bg-transparent h-auto p-0">
+                      <TabsList className="flex w-full flex-col gap-0.5 bg-transparent h-auto p-0">
                         {section.items.map((item) => (
                           <TabsTrigger
                             key={item.id}
                             value={item.id}
-                            className="justify-start gap-2.5 px-3 py-2 text-sm rounded-lg data-[state=active]:bg-white/[0.06] data-[state=active]:text-white data-[state=inactive]:text-slate-500 data-[state=inactive]:hover:text-slate-300 border border-transparent data-[state=active]:border-white/[0.08] transition-colors"
+                            className="w-full justify-start gap-2.5 px-3 py-2 text-left text-sm rounded-lg data-[state=active]:bg-white/[0.06] data-[state=active]:text-white data-[state=inactive]:text-slate-500 data-[state=inactive]:hover:text-slate-300 border border-transparent data-[state=active]:border-white/[0.08] transition-colors"
                           >
                             {item.icon}
                             {item.label}

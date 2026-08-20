@@ -62,6 +62,7 @@ describe("ensureOrgApiKey", () => {
     expect(statements.at(-1)).toBe("COMMIT");
     const insert = mocks.query.mock.calls.find(([sql]) => String(sql).includes("INSERT"));
     expect(insert?.[1]).toEqual(["new-hash", "u1", "lce_new", "o1", "member"]);
+    expect(String(insert?.[0])).toContain("WHERE user_id = $2::VARCHAR(255)");
   });
 
   it("已存在且角色一致时复用，不插入不更新（重复安全）", async () => {
