@@ -15,7 +15,7 @@ vi.mock("@/lib/db", () => ({
   initDB: vi.fn(async () => undefined),
   deleteOrgMemberQuotaCache: mocks.deleteOrgMemberQuotaCache,
   deleteOrgQuotaCache: mocks.deleteOrgQuotaCache,
-  generateApiKey: () => ({ id: "new-hash", apiKey: "ace_new" }),
+  generateApiKey: () => ({ id: "new-hash", apiKey: "lce_new" }),
   lockUserCredentialsTx: vi.fn(async (client: { query: typeof mocks.query }, userId: string) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('acemcp:user-credentials'), hashtext($1))", [userId]);
   }),
@@ -48,24 +48,24 @@ describe("ensureOrgApiKey", () => {
     mocks.query.mockImplementation(async (sql: string) => {
       if (sql.includes("SELECT * FROM api_keys")) return { rows: [] };
       if (sql.includes("INSERT INTO api_keys")) {
-        return { rows: [{ id: "new-hash", api_key: "ace_new", org_id: "o1", org_role: "member" }] };
+        return { rows: [{ id: "new-hash", api_key: "lce_new", org_id: "o1", org_role: "member" }] };
       }
       return { rows: [] };
     });
 
     const row = await ensureOrgApiKey("u1", "o1", "member");
-    expect(row.api_key).toBe("ace_new");
+    expect(row.api_key).toBe("lce_new");
 
     const statements = mocks.query.mock.calls.map(([sql]) => String(sql));
     expect(statements[0]).toBe("BEGIN");
     expect(statements[1]).toContain("acemcp:user-credentials");
     expect(statements.at(-1)).toBe("COMMIT");
     const insert = mocks.query.mock.calls.find(([sql]) => String(sql).includes("INSERT"));
-    expect(insert?.[1]).toEqual(["new-hash", "u1", "ace_new", "o1", "member"]);
+    expect(insert?.[1]).toEqual(["new-hash", "u1", "lce_new", "o1", "member"]);
   });
 
   it("已存在且角色一致时复用，不插入不更新（重复安全）", async () => {
-    const existing = { id: "k1", api_key: "ace_exist", org_role: "member" };
+    const existing = { id: "k1", api_key: "lce_exist", org_role: "member" };
     mocks.query.mockImplementation(async (sql: string) => {
       if (sql.includes("SELECT * FROM api_keys")) return { rows: [existing] };
       return { rows: [] };
@@ -81,10 +81,10 @@ describe("ensureOrgApiKey", () => {
   it("已存在但角色漂移时纠正 org_role（不一致自愈）", async () => {
     mocks.query.mockImplementation(async (sql: string) => {
       if (sql.includes("SELECT * FROM api_keys")) {
-        return { rows: [{ id: "k1", api_key: "ace_exist", org_role: "member" }] };
+        return { rows: [{ id: "k1", api_key: "lce_exist", org_role: "member" }] };
       }
       if (sql.includes("UPDATE api_keys")) {
-        return { rows: [{ id: "k1", api_key: "ace_exist", org_role: "owner" }] };
+        return { rows: [{ id: "k1", api_key: "lce_exist", org_role: "owner" }] };
       }
       return { rows: [] };
     });
@@ -114,10 +114,10 @@ describe("reconcileUserOrgApiKeys", () => {
         return { rows: [{ org_id: "o1", role: "admin, owner" }] };
       }
       if (sql.includes("SELECT * FROM api_keys")) {
-        return { rows: [{ id: "k1", api_key: "ace_existing", org_role: "member" }] };
+        return { rows: [{ id: "k1", api_key: "lce_existing", org_role: "member" }] };
       }
       if (sql.includes("UPDATE api_keys")) {
-        return { rows: [{ id: "k1", api_key: "ace_existing", org_role: "owner" }] };
+        return { rows: [{ id: "k1", api_key: "lce_existing", org_role: "owner" }] };
       }
       return { rows: [] };
     });

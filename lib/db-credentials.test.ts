@@ -37,7 +37,7 @@ describe("API credential transactions", () => {
 
   it("serializes reset under the credential lock and commits the replacement atomically", async () => {
     const oldRecord = { id: "old-id" };
-    const newRecord = { id: "new-id", api_key: "ace_new" };
+    const newRecord = { id: "new-id", api_key: "lce_new" };
     mocks.query.mockImplementation(async (sql: string) => {
       if (sql.includes("SELECT id FROM api_keys")) return { rows: [oldRecord] };
       if (sql.includes("UPDATE api_keys")) return { rows: [newRecord] };
@@ -54,7 +54,7 @@ describe("API credential transactions", () => {
   });
 
   it("makes concurrent create idempotent under the credential lock", async () => {
-    const existing = { id: "existing-id", api_key: "ace_existing" };
+    const existing = { id: "existing-id", api_key: "lce_existing" };
     mocks.query.mockImplementation(async (sql: string) => {
       if (sql.includes("SELECT * FROM api_keys")) return { rows: [existing] };
       return { rows: [] };
@@ -92,7 +92,7 @@ describe("API credential transactions", () => {
     );
     expect(insertCall).toBeDefined();
     const [, [id, , apiKey]] = insertCall as [string, [string, string, string]];
-    expect(apiKey).toMatch(/^ace_[0-9a-f]{40}$/);
+    expect(apiKey).toMatch(/^lce_[0-9a-f]{40}$/);
     expect(id).toMatch(/^[0-9a-f]{64}$/);
     expect(id).toBe(createHash("sha256").update(apiKey).digest("hex"));
   });
@@ -110,7 +110,7 @@ describe("API credential transactions", () => {
     );
     expect(updateCall).toBeDefined();
     const [, [, id, apiKey]] = updateCall as [string, [string, string, string]];
-    expect(apiKey).toMatch(/^ace_[0-9a-f]{40}$/);
+    expect(apiKey).toMatch(/^lce_[0-9a-f]{40}$/);
     expect(id).toMatch(/^[0-9a-f]{64}$/);
     expect(id).toBe(createHash("sha256").update(apiKey).digest("hex"));
   });

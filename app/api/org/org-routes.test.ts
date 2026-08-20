@@ -64,7 +64,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   loginAs("owner-1");
   ensureOrgApiKeyMock.mockResolvedValue(
-    { api_key: "ace_org" } as Awaited<ReturnType<typeof ensureOrgApiKey>>
+    { api_key: "lce_org" } as Awaited<ReturnType<typeof ensureOrgApiKey>>
   );
 });
 
@@ -167,11 +167,11 @@ describe("POST /api/mcp-config（谁能调：登录用户；orgId 须为该组�
 
   it("缺省（无 orgId）返回个人密钥", async () => {
     createApiKeyMock.mockResolvedValue(
-      { api_key: "ace_personal" } as Awaited<ReturnType<typeof createApiKey>>
+      { api_key: "lce_personal" } as Awaited<ReturnType<typeof createApiKey>>
     );
     const res = await mcpConfigPost(configRequest({}));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ apiKey: "ace_personal" });
+    expect(await res.json()).toEqual({ apiKey: "lce_personal" });
     expect(ensureOrgApiKeyMock).not.toHaveBeenCalled();
   });
 
@@ -187,7 +187,7 @@ describe("POST /api/mcp-config（谁能调：登录用户；orgId 须为该组�
     getMemberRoleMock.mockResolvedValue("member");
     const res = await mcpConfigPost(configRequest({ orgId: "o1" }));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ apiKey: "ace_org" });
+    expect(await res.json()).toEqual({ apiKey: "lce_org" });
     expect(ensureOrgApiKeyMock).toHaveBeenCalledWith("owner-1", "o1", "member");
   });
 });
@@ -203,7 +203,7 @@ describe("GET /api/keys（谁能调：登录用户，只看自己的）", () => 
   it("返回个人 + 组织密钥列表（掩码，不泄露完整 key）", async () => {
     listUserApiKeysMock.mockResolvedValue([
       {
-        api_key: "ace_personal_secret",
+        api_key: "lce_personal_secret",
         tier: "free",
         org_id: null,
         org_role: null,
@@ -211,7 +211,7 @@ describe("GET /api/keys（谁能调：登录用户，只看自己的）", () => 
         created_at: new Date("2026-01-01"),
       },
       {
-        api_key: "ace_orgkey_secret",
+        api_key: "lce_orgkey_secret",
         tier: "pro",
         org_id: "o1",
         org_role: "owner",

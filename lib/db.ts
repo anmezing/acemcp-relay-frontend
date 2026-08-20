@@ -565,7 +565,7 @@ async function initializeDB() {
 }
 
 export function generateApiKey(): { id: string; apiKey: string } {
-  const apiKey = `ace_${crypto.randomBytes(20).toString("hex")}`;
+  const apiKey = `lce_${crypto.randomBytes(20).toString("hex")}`;
   // SHA-256（64 位 hex）。relay 侧认证已双读 md5/sha256，存量 MD5 key 继续可用。
   const id = crypto.createHash("sha256").update(apiKey).digest("hex");
   return { id, apiKey };
@@ -737,7 +737,7 @@ export async function isRegistrationAtCapacity(): Promise<boolean> {
 }
 
 export function maskApiKey(apiKey: string): string {
-  if (!apiKey || apiKey.length < 12) return "ace_************************";
+  if (!apiKey || apiKey.length < 12) return "lce_************************";
   const prefix = apiKey.slice(0, 8);
   const maskLength = apiKey.length - 8;
   return `${prefix}${"*".repeat(maskLength)}`;
