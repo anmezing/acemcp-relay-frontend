@@ -1,7 +1,7 @@
 FROM node:22-slim AS build
 RUN corepack enable && corepack prepare pnpm@11.21.0 --activate
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY . .
 RUN BETTER_AUTH_SECRET=build-only-7zF4xQ9mK2vN8pR6sT1wY5cH \
