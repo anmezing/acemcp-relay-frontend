@@ -46,7 +46,7 @@ import { UserModelConfigTab } from "@/components/UserModelConfigTab";
 import { PlansTab } from "@/components/PlansTab";
 import { AdminPlansTab } from "@/components/admin/AdminPlansTab";
 import { AdminMenuTab } from "@/components/admin/AdminMenuTab";
-import { DEFAULT_MENU_VISIBILITY, ConsoleMenuId } from "@/lib/menu-config";
+import { DEFAULT_MENU_VISIBILITY, normalizeMenuVisibility, ConsoleMenuId } from "@/lib/menu-config";
 import { LceBrand } from "@/components/LceBrand";
 import { authProviderLabel } from "@/lib/auth-provider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -62,6 +62,12 @@ interface SidebarSection {
   id: "personal" | "data" | "admin" | "system";
   admin?: boolean;
   items: { id: Tab; icon: React.ReactNode }[];
+}
+
+interface NavigationAccess {
+  userId: string;
+  isAdmin: boolean;
+  menuVisibility: Record<ConsoleMenuId, boolean>;
 }
 
 const ALL_SECTIONS: SidebarSection[] = [
@@ -371,8 +377,7 @@ export default function ConsolePage() {
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [logDetail, setLogDetail] = useState<LogDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [menuVisibility, setMenuVisibility] = useState<Record<ConsoleMenuId, boolean>>(DEFAULT_MENU_VISIBILITY);
+  const [navigationAccess, setNavigationAccess] = useState<NavigationAccess | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearLoading, setClearLoading] = useState(false);
   const [clearResult, setClearResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -576,33 +581,44 @@ export default function ConsolePage() {
     }
   }, [rootPendingDelete, rootsOrg, fetchRoots, fetchTenantStats, t]);
 
-  const fetchIsAdmin = useCallback(async () => {
-    try {
-      const res = await fetch("/api/admin/check");
-      if (res.ok) {
+  const fetchNavigationAccess = useCallback(async (userId: string, signal?: AbortSignal) => {
+    const [adminResult, menuResult] = await Promise.allSettled([
+      fetch("/api/admin/check", { signal }).then(async (res) => {
+        if (!res.ok) return false;
         const data = await res.json();
-        setIsAdmin(data.isAdmin);
-      }
-    } catch {}
+        return data.isAdmin === true;
+      }),
+      fetch("/api/menu-config", { signal }).then(async (res) => {
+        if (!res.ok) return DEFAULT_MENU_VISIBILITY;
+        const data = await res.json();
+        return normalizeMenuVisibility(data.visibility);
+      }),
+    ]);
+    if (signal?.aborted) return;
+    setNavigationAccess({
+      userId,
+      isAdmin: adminResult.status === "fulfilled" ? adminResult.value : false,
+      menuVisibility: menuResult.status === "fulfilled" ? menuResult.value : DEFAULT_MENU_VISIBILITY,
+    });
   }, []);
 
-  const fetchMenuVisibility = useCallback(async () => {
-    try {
-      const res = await fetch("/api/menu-config");
-      if (!res.ok) return;
-      const data = await res.json();
-      setMenuVisibility((data.visibility ?? DEFAULT_MENU_VISIBILITY) as Record<ConsoleMenuId, boolean>);
-    } catch {}
-  }, []);
+  const currentNavigationAccess = navigationAccess?.userId === session?.user.id
+    ? navigationAccess
+    : null;
+  const navigationReady = currentNavigationAccess !== null;
+  const isAdmin = currentNavigationAccess?.isAdmin ?? false;
+  const menuVisibility = currentNavigationAccess?.menuVisibility ?? DEFAULT_MENU_VISIBILITY;
 
   const sections = useMemo(
-    () => (isAdmin ? ALL_SECTIONS : ALL_SECTIONS.filter((s) => !s.admin)).map((section) => ({
-      ...section,
-      label: tNavigation(`sections.${section.id}`),
-      items: (isAdmin ? section.items : section.items.filter((item) => menuVisibility[item.id as ConsoleMenuId] !== false))
-        .map((item) => ({ ...item, label: tNavigation(`menus.${item.id}`) })),
-    })).filter((section) => section.items.length > 0),
-    [isAdmin, menuVisibility, tNavigation]
+    () => navigationReady
+      ? (isAdmin ? ALL_SECTIONS : ALL_SECTIONS.filter((s) => !s.admin)).map((section) => ({
+        ...section,
+        label: tNavigation(`sections.${section.id}`),
+        items: (isAdmin ? section.items : section.items.filter((item) => menuVisibility[item.id as ConsoleMenuId] !== false))
+          .map((item) => ({ ...item, label: tNavigation(`menus.${item.id}`) })),
+      })).filter((section) => section.items.length > 0)
+      : [],
+    [navigationReady, isAdmin, menuVisibility, tNavigation]
   );
   const mobileItems = useMemo(
     () => sections.flatMap((section) => section.items),
@@ -612,11 +628,12 @@ export default function ConsolePage() {
   // isAdmin 为 false 时 admin tab 的 TabsContent 不渲染：若 activeTab 落在
   // admin tab（如权限校验失败/回收），内容区会空白。渲染期直接归一到 "keys"，
   // 不用 effect setState（避免级联渲染，也满足 set-state-in-effect 规则）。
-  const effectiveTab: Tab = useMemo(() => {
+  const effectiveTab: Tab | undefined = useMemo(() => {
+    if (!navigationReady) return undefined;
     return mobileItems.some((item) => item.id === activeTab)
       ? activeTab
       : (mobileItems[0]?.id ?? "keys");
-  }, [activeTab, mobileItems]);
+  }, [navigationReady, activeTab, mobileItems]);
 
   const activeMobileItem = mobileItems.find((item) => item.id === effectiveTab) ?? mobileItems[0];
 
@@ -753,16 +770,19 @@ export default function ConsolePage() {
     }
     if (!session) return;
 
+    const controller = new AbortController();
     const timeoutId = window.setTimeout(() => {
       void fetchUserInfo();
       void fetchKeyInfo();
       void fetchTenantStats();
-      void fetchIsAdmin();
-      void fetchMenuVisibility();
+      void fetchNavigationAccess(session.user.id, controller.signal);
     }, 0);
 
-    return () => window.clearTimeout(timeoutId);
-  }, [isPending, session, router, fetchUserInfo, fetchKeyInfo, fetchTenantStats, fetchIsAdmin, fetchMenuVisibility]);
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [isPending, session, router, fetchUserInfo, fetchKeyInfo, fetchTenantStats, fetchNavigationAccess]);
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -917,6 +937,14 @@ export default function ConsolePage() {
             <LceBrand iconSize={32} textClassName="text-lg sm:text-xl" priority />
           </Link>
           <nav className="order-3 flex w-full justify-center sm:order-none sm:w-auto sm:items-center sm:gap-1">
+            {!navigationReady ? (
+              <div aria-hidden="true" className="flex h-8 items-center gap-3 px-2">
+                <Skeleton className="h-3.5 w-12 bg-white/[0.06]" />
+                <Skeleton className="h-3.5 w-12 bg-white/[0.06]" />
+                <Skeleton className="h-3.5 w-12 bg-white/[0.06]" />
+              </div>
+            ) : (
+              <>
             {(isAdmin || menuVisibility["top-console"] !== false) && (
             <Link
               href="/console"
@@ -941,6 +969,8 @@ export default function ConsolePage() {
               {t("status")}
             </Link>
             )}
+              </>
+            )}
           </nav>
           <div className="flex items-center gap-1.5">
             <LanguageSwitcher />
@@ -961,8 +991,14 @@ export default function ConsolePage() {
       {/* Main content */}
       <div className="relative flex-1 md:overflow-hidden">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-8 md:h-full flex flex-col">
-          <Tabs value={effectiveTab} onValueChange={(v) => setActiveTab(v as Tab)} className="flex-1 flex flex-col min-h-0">
+          <Tabs value={effectiveTab ?? ""} onValueChange={(v) => setActiveTab(v as Tab)} className="flex-1 flex flex-col min-h-0">
             <div className="relative mb-4 flex-shrink-0 md:hidden">
+              {!navigationReady ? (
+                <div aria-hidden="true" className="flex h-11 w-full items-center rounded-lg border border-white/[0.08] bg-[#0d1424] px-3">
+                  <Skeleton className="h-4 w-32 bg-white/[0.06]" />
+                </div>
+              ) : (
+                <>
               {mobileMenuOpen && (
                 <button
                   type="button"
@@ -1016,12 +1052,32 @@ export default function ConsolePage() {
                   ))}
                 </div>
               )}
+                </>
+              )}
             </div>
 
             <div className="flex gap-4 flex-1 min-h-0">
               {/* Sidebar - desktop only */}
               <aside className="hidden md:block flex-shrink-0 w-48 overflow-y-auto pr-1 scrollbar-thin">
                 <nav className="flex flex-col gap-4">
+                  {!navigationReady ? (
+                    <div aria-hidden="true" className="space-y-4">
+                      {[5, 2].map((rows, groupIndex) => (
+                        <div key={groupIndex} className="rounded-xl border border-white/[0.04] bg-white/[0.012] p-1.5">
+                          <Skeleton className="mx-2.5 my-1 h-2.5 w-10 bg-white/[0.05]" />
+                          <div className="space-y-0.5 pt-1">
+                            {Array.from({ length: rows }, (_, rowIndex) => (
+                              <div key={rowIndex} className="flex h-9 items-center gap-2.5 px-3">
+                                <Skeleton className="h-4 w-4 shrink-0 bg-white/[0.05]" />
+                                <Skeleton className="h-3.5 w-20 bg-white/[0.05]" />
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <>
                   {sections.map((section) => (
                     <div key={section.label} className="rounded-xl border border-white/[0.04] bg-white/[0.012] p-1.5">
                       <p className="px-2.5 pb-1 pt-1 text-[10px] font-medium uppercase tracking-widest text-slate-500">
@@ -1042,12 +1098,20 @@ export default function ConsolePage() {
                       </TabsList>
                     </div>
                   ))}
+                    </>
+                  )}
                 </nav>
               </aside>
 
               {/* Content area */}
               <main className="flex-1 min-w-0 min-h-0">
                 <div className="bg-[#0d1424]/60 md:backdrop-blur-xl border border-white/[0.06] rounded-xl sm:rounded-2xl p-4 sm:p-6 md:h-full flex flex-col">
+                  {!navigationReady && (
+                    <div aria-hidden="true" className="space-y-5">
+                      <Skeleton className="h-5 w-28 bg-white/[0.06]" />
+                      <Skeleton className="h-28 w-full bg-white/[0.04]" />
+                    </div>
+                  )}
                   {/* 密钥管理 */}
                   <TabsContent value="keys" className="animate-tab-fade-in m-0 flex-1">
                     <h2 className="text-lg font-medium text-white mb-6">{t("apiKeys")}</h2>
