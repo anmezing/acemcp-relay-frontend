@@ -68,7 +68,7 @@ const ALL_SECTIONS: SidebarSection[] = [
     items: [
       { id: "keys", label: "密钥管理", icon: <Key className="w-4 h-4" /> },
       { id: "plans", label: "套餐与订阅", icon: <CreditCard className="w-4 h-4" /> },
-      { id: "team", label: "组织", icon: <Building2 className="w-4 h-4" /> },
+      { id: "team", label: "我的组织", icon: <Building2 className="w-4 h-4" /> },
       { id: "docs", label: "配置说明", icon: <FileText className="w-4 h-4" /> },
       { id: "model-config", label: "模型设置", icon: <Cpu className="w-4 h-4" /> },
       { id: "profile", label: "用户信息", icon: <User className="w-4 h-4" /> },
