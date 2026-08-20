@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 interface QuotaRow {
   user_id: string;
@@ -26,23 +27,8 @@ type UserQuotaSource =
   | "base_tier"
   | "platform_default";
 
-function sourceLabel(source: UserQuotaSource, quota: QuotaRow): string {
-  switch (source) {
-    case "admin_override":
-      return "管理员覆盖";
-    case "subscription":
-      return quota.subscription_plan_name
-        ? `套餐 ${quota.subscription_plan_name}`
-        : "有效套餐";
-    case "base_tier":
-      return `基础 ${quota.base_tier === "pro" ? "Pro" : "Free"}`;
-    default:
-      return "平台 Free 默认";
-  }
-}
-
-function formatBytes(value: number): string {
-  if (value === 0) return "不限";
+function formatBytes(value: number, unlimited: string): string {
+  if (value === 0) return unlimited;
   const units = ["B", "KiB", "MiB", "GiB", "TiB"];
   let amount = value;
   let unit = 0;
@@ -54,6 +40,7 @@ function formatBytes(value: number): string {
 }
 
 export function AdminQuotaTab() {
+  const t = useTranslations("AdminQuotas");
   const [quotas, setQuotas] = useState<QuotaRow[] | null>(null);
   const [defaultLimit, setDefaultLimit] = useState(0);
   const [defaultIndexBytesLimit, setDefaultIndexBytesLimit] = useState(0);
@@ -85,9 +72,9 @@ export function AdminQuotaTab() {
       setError("");
     } catch {
       if (signal?.aborted) return;
-      setError("配额列表加载失败");
+      setError(t("failedToLoadQuotas"));
     }
-  }, []);
+  }, [t]);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -114,7 +101,7 @@ export function AdminQuotaTab() {
       const requestLimit = parseDraft(requestDrafts[userId] ?? "");
       const indexBytesLimit = parseDraft(indexDrafts[userId] ?? "");
       if (requestLimit === undefined || indexBytesLimit === undefined) {
-        setNotice("两个配额都必须是 ≥0 的整数（0 = 不限，留空 = 默认）");
+        setNotice(t("bothQuotasMustBeIntegers00"));
         return;
       }
       setBusy(userId);
@@ -127,14 +114,14 @@ export function AdminQuotaTab() {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         await load();
-        setNotice("已保存，立即生效");
+        setNotice(t("savedAndAppliedImmediately"));
       } catch {
-        setNotice("保存失败，请重试");
+        setNotice(t("failedToSaveTryAgain"));
       } finally {
         setBusy(null);
       }
     },
-    [requestDrafts, indexDrafts, load]
+    [requestDrafts, indexDrafts, load, t]
   );
 
   if (quotas === null && !error) {
@@ -153,7 +140,7 @@ export function AdminQuotaTab() {
         <p className="text-red-400 text-sm">{error}</p>
         <Button variant="glass" size="sm" onClick={refresh} disabled={loading} className="text-xs">
           <RefreshCw className={cn("w-4 h-4 mr-1", loading && "animate-spin")} />
-          重试
+          {t("retry")}
         </Button>
       </div>
     );
@@ -163,15 +150,15 @@ export function AdminQuotaTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-slate-500 text-xs">
-          最终额度按管理员覆盖、有效套餐、基础档位依次生效。Free：
+          {t("effectiveQuotasUseAdminOverridesActivePlans")}
           <span className="text-slate-300 font-mono ml-1">
-            请求 {defaultLimit > 0 ? defaultLimit.toLocaleString() : "不限"}，索引{" "}
-            {formatBytes(defaultIndexBytesLimit)}
+            {t("requests")} {defaultLimit > 0 ? defaultLimit.toLocaleString() : t("unlimited")}, {t("index")} {" "}
+            {formatBytes(defaultIndexBytesLimit, t("unlimited"))}
           </span>
-          ；Pro：
+          {t("pro")}
           <span className="text-slate-300 font-mono ml-1">
-            请求 {proLimit > 0 ? proLimit.toLocaleString() : "不限"}，索引{" "}
-            {formatBytes(proIndexBytesLimit)}
+            {t("requests")} {proLimit > 0 ? proLimit.toLocaleString() : t("unlimited")}, {t("index")} {" "}
+            {formatBytes(proIndexBytesLimit, t("unlimited"))}
           </span>
         </p>
         <Button variant="ghost" size="sm" onClick={refresh} disabled={loading}
@@ -183,7 +170,7 @@ export function AdminQuotaTab() {
       {error && <p className="text-xs text-red-400">{error}</p>}
 
       {notice && (
-        <p className={cn("text-xs", notice.startsWith("已保存") ? "text-emerald-400" : "text-red-400")}>
+        <p className={cn("text-xs", /已保存|saved/i.test(notice) ? "text-emerald-400" : "text-red-400")}>
           {notice}
         </p>
       )}
@@ -199,52 +186,56 @@ export function AdminQuotaTab() {
                 {q.email || q.user_id}
               </span>
               <span className={cn("text-xs font-mono whitespace-nowrap", over ? "text-red-400" : "text-slate-500")}>
-                今日 {q.today_count.toLocaleString()}
+                {t("today")} {q.today_count.toLocaleString()}
                 {effective > 0 && ` / ${effective.toLocaleString()}`}
               </span>
               {(q.daily_limit !== null || q.daily_index_bytes_limit !== null) && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded border bg-cyan-500/10 text-cyan-400 border-cyan-500/20">
-                  自定义
+                  {t("custom")}
                 </span>
               )}
               <div className="min-w-[170px] text-[10px] text-slate-500">
                 <p>
-                  请求 {effective === 0 ? "不限" : effective.toLocaleString()} / 日
+                  {t("requests2")} {effective === 0 ? t("unlimited") : effective.toLocaleString()} / {t("day")}
                   <span className="text-slate-600">
-                    {`（${sourceLabel(q.daily_limit_source, q)}）`}
+                    {` (${q.daily_limit_source === "subscription" && !q.subscription_plan_name
+                      ? t("quotaSource.activePlan")
+                      : t(`quotaSource.${q.daily_limit_source}`, { plan: q.subscription_plan_name || "", tier: q.base_tier === "pro" ? "Pro" : "Free" })})`}
                   </span>
                 </p>
                 <p>
-                  索引 {formatBytes(q.effective_daily_index_bytes_limit)} / 日
+                  {t("index2")} {formatBytes(q.effective_daily_index_bytes_limit, t("unlimited"))} / {t("day")}
                   <span className="text-slate-600">
-                    {`（${sourceLabel(q.daily_index_bytes_limit_source, q)}）`}
+                    {` (${q.daily_index_bytes_limit_source === "subscription" && !q.subscription_plan_name
+                      ? t("quotaSource.activePlan")
+                      : t(`quotaSource.${q.daily_index_bytes_limit_source}`, { plan: q.subscription_plan_name || "", tier: q.base_tier === "pro" ? "Pro" : "Free" })})`}
                   </span>
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2 ml-auto">
                 <label className="flex items-center gap-1 text-[10px] text-slate-500">
-                  请求
+                  {t("req")}
                   <input
                     value={requestDrafts[q.user_id] ?? (q.daily_limit === null ? "" : String(q.daily_limit))}
                     onChange={(e) => setRequestDrafts((d) => ({ ...d, [q.user_id]: e.target.value }))}
-                    placeholder="默认"
+                    placeholder={t("default")}
                     inputMode="numeric"
                     className="w-20 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/40 text-right font-mono"
                   />
                 </label>
                 <label className="flex items-center gap-1 text-[10px] text-slate-500">
-                  索引B
+                  {t("indexB")}
                 <input
                   value={indexDrafts[q.user_id] ?? (q.daily_index_bytes_limit === null ? "" : String(q.daily_index_bytes_limit))}
                   onChange={(e) => setIndexDrafts((d) => ({ ...d, [q.user_id]: e.target.value }))}
-                  placeholder="默认"
+                  placeholder={t("default")}
                   inputMode="numeric"
                   className="w-28 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/40 text-right font-mono"
                 />
                 </label>
                 <Button variant="glass" size="sm" disabled={busy === q.user_id}
                   onClick={() => save(q.user_id)} className="h-7 px-2.5 text-xs">
-                  保存
+                  {t("save")}
                 </Button>
               </div>
             </div>
@@ -253,7 +244,7 @@ export function AdminQuotaTab() {
       </div>
 
       <p className="text-slate-600 text-[10px]">
-        两个输入框均为每日上限：留空 = 按套餐或平台默认；0 = 不限；正整数 = 管理员覆盖。保存后立即清除 Relay 配额缓存。
+        {t("bothFieldsAreDailyLimitsBlankPlan")}
       </p>
     </div>
   );

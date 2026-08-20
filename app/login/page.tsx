@@ -23,27 +23,30 @@ import { loginUrl, sanitizeCallbackUrl } from "@/lib/auth-redirect";
 import { LceBrand } from "@/components/LceBrand";
 import {
   credentialAuthErrorMessage,
+  type CredentialMessage,
   type CredentialMode,
   validateCredentialFields,
 } from "@/lib/credential-auth";
 import { cn } from "@/lib/utils";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { useTranslations } from "next-intl";
 
 const INPUT_CLASS =
   "h-11 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-500/45 focus:bg-white/[0.045] disabled:cursor-not-allowed disabled:opacity-60";
 
-function parseAuthError(raw: string | null): string | null {
+function parseAuthError(raw: string | null): CredentialMessage | null {
   if (!raw) return null;
   if (raw.startsWith("GITHUB_ACCOUNT_TOO_YOUNG:")) {
     const [, required, actual] = raw.split(":");
     if (actual === "unknown") {
-      return "登录失败：无法确认该 GitHub 账号的注册时间";
+      return { key: "githubAccountAgeUnknown" };
     }
-    return `登录失败：GitHub 账号需至少注册 ${required} 天（当前账号仅 ${actual} 天）`;
+    return { key: "githubAccountTooYoung", values: { required, actual } };
   }
   if (raw.includes("REGISTRATION_DISABLED")) {
-    return "当前未开放新用户注册，已有账号可正常登录";
+    return { key: "registrationClosedExistingUsers" };
   }
-  return "登录失败，请稍后重试";
+  return { key: "loginFailed" };
 }
 
 interface PasswordFieldProps {
@@ -65,6 +68,7 @@ function PasswordField({
   disabled,
   onChange,
 }: PasswordFieldProps) {
+  const t = useTranslations("Login");
   const [visible, setVisible] = useState(false);
   return (
     <label htmlFor={id} className="block space-y-1.5">
@@ -86,8 +90,8 @@ function PasswordField({
           type="button"
           onClick={() => setVisible((current) => !current)}
           disabled={disabled}
-          aria-label={visible ? "隐藏密码" : "显示密码"}
-          title={visible ? "隐藏密码" : "显示密码"}
+          aria-label={visible ? t("hidePassword") : t("showPassword")}
+          title={visible ? t("hidePassword") : t("showPassword")}
           className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-slate-600 transition-colors hover:bg-white/[0.05] hover:text-slate-300 disabled:pointer-events-none"
         >
           {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -98,8 +102,12 @@ function PasswordField({
 }
 
 function LoginContent() {
+  const t = useTranslations("Login");
   const params = useSearchParams();
-  const oauthError = parseAuthError(params.get("error"));
+  const oauthErrorMessage = parseAuthError(params.get("error"));
+  const oauthError = oauthErrorMessage
+    ? t(oauthErrorMessage.key, oauthErrorMessage.values)
+    : null;
   const callbackUrl = sanitizeCallbackUrl(params.get("callbackUrl"));
   const errorCallbackUrl = loginUrl(callbackUrl);
   const requestedMode: CredentialMode =
@@ -146,7 +154,7 @@ function LoginContent() {
       confirmPassword,
     });
     if (validationError) {
-      setFormError(validationError);
+      setFormError(t(validationError.key, validationError.values));
       return;
     }
 
@@ -168,12 +176,14 @@ function LoginContent() {
           });
 
       if (result.error) {
-        setFormError(credentialAuthErrorMessage(result.error, mode));
+        const message = credentialAuthErrorMessage(result.error, mode);
+        setFormError(t(message.key, message.values));
         return;
       }
       window.location.assign(callbackUrl);
     } catch {
-      setFormError(credentialAuthErrorMessage(null, mode));
+      const message = credentialAuthErrorMessage(null, mode);
+      setFormError(t(message.key, message.values));
     } finally {
       setBusy(false);
     }
@@ -200,11 +210,12 @@ function LoginContent() {
   return (
     <div className="relative min-h-dvh overflow-x-hidden overflow-y-auto bg-[#0a0f1a] px-4 py-6 animate-page-fade-in sm:py-10">
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.012)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.012)_1px,transparent_1px)] bg-[size:64px_64px]" />
+      <LanguageSwitcher className="absolute right-4 top-4 z-20" />
 
       <div className="relative mx-auto flex min-h-[calc(100dvh-3rem)] w-full max-w-sm flex-col justify-center sm:min-h-[calc(100dvh-5rem)]">
         <div className="relative border border-white/[0.07] bg-[#0d1424]/95 p-6 backdrop-blur-xl sm:p-8">
           <div className="mb-6 text-center">
-            <Link href="/" className="inline-block mb-3" aria-label="LCE 首页">
+            <Link href="/" className="inline-block mb-3" aria-label="LCE">
               <LceBrand
                 iconSize={56}
                 className="flex-col gap-2"
@@ -213,13 +224,13 @@ function LoginContent() {
               />
             </Link>
             <p className="text-sm font-light text-slate-500">
-              {mode === "register" ? "创建账户并获取 API Key" : "登录以访问控制台"}
+              {mode === "register" ? t("createAnAccountAndGetAnApi") : t("logInToOpenTheConsole")}
             </p>
           </div>
 
           <div
             role="tablist"
-            aria-label="账户操作"
+            aria-label={t("accountAction")}
             className="mb-5 grid h-10 grid-cols-2 rounded-lg border border-white/[0.07] bg-black/15 p-1"
           >
             <button
@@ -234,14 +245,14 @@ function LoginContent() {
                   : "text-slate-500 hover:text-slate-300"
               )}
             >
-              登录
+              {t("logIn")}
             </button>
             <button
               type="button"
               role="tab"
               aria-selected={mode === "register"}
               disabled={registrationEnabled === false}
-              title={registrationEnabled === false ? "管理员已关闭新用户注册" : undefined}
+              title={registrationEnabled === false ? t("registrationHasBeenDisabledByAnAdministrator") : undefined}
               onClick={() => selectMode("register")}
               className={cn(
                 "rounded-md text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40",
@@ -250,13 +261,13 @@ function LoginContent() {
                   : "text-slate-500 hover:text-slate-300"
               )}
             >
-              注册
+              {t("signUp")}
             </button>
           </div>
 
           {registrationEnabled === false && (
             <p className="mb-4 text-center text-xs text-amber-300/80">
-              当前未开放新用户注册，已有账号仍可登录
+              {t("registrationIsClosedExistingUsersCanStill")}
             </p>
           )}
 
@@ -273,7 +284,7 @@ function LoginContent() {
           <form onSubmit={handleCredentialSubmit} className="space-y-3.5">
             {mode === "register" && (
               <label htmlFor="credential-name" className="block space-y-1.5">
-                <span className="text-xs text-slate-400">昵称</span>
+                <span className="text-xs text-slate-400">{t("displayName")}</span>
                 <span className="relative block">
                   <UserRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
                   <input
@@ -282,7 +293,7 @@ function LoginContent() {
                     value={name}
                     onChange={(event) => setName(event.target.value)}
                     autoComplete="name"
-                    placeholder="你的昵称"
+                    placeholder={t("yourDisplayName")}
                     disabled={busy}
                     required
                     maxLength={80}
@@ -293,7 +304,7 @@ function LoginContent() {
             )}
 
             <label htmlFor="credential-email" className="block space-y-1.5">
-              <span className="text-xs text-slate-400">邮箱</span>
+              <span className="text-xs text-slate-400">{t("email")}</span>
               <span className="relative block">
                 <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
                 <input
@@ -313,10 +324,10 @@ function LoginContent() {
 
             <PasswordField
               id="credential-password"
-              label="密码"
+              label={t("password")}
               value={password}
               autoComplete={mode === "register" ? "new-password" : "current-password"}
-              placeholder={mode === "register" ? "至少 8 位" : "输入密码"}
+              placeholder={mode === "register" ? t("atLeast8Characters") : t("enterYourPassword")}
               disabled={busy}
               onChange={setPassword}
             />
@@ -324,10 +335,10 @@ function LoginContent() {
             {mode === "register" && (
               <PasswordField
                 id="credential-password-confirm"
-                label="确认密码"
+                label={t("confirmPassword")}
                 value={confirmPassword}
                 autoComplete="new-password"
-                placeholder="再次输入密码"
+                placeholder={t("enterYourPasswordAgain")}
                 disabled={busy}
                 onChange={setConfirmPassword}
               />
@@ -346,13 +357,13 @@ function LoginContent() {
               ) : (
                 <LogIn className="h-4 w-4" />
               )}
-              {busy ? "请稍候" : mode === "register" ? "创建账户" : "登录"}
+              {busy ? t("pleaseWait") : mode === "register" ? t("createAccount") : t("logIn")}
             </Button>
           </form>
 
           <div className="my-5 flex items-center gap-3" aria-hidden="true">
             <span className="h-px flex-1 bg-white/[0.07]" />
-            <span className="text-[11px] text-slate-600">或使用第三方账号</span>
+            <span className="text-[11px] text-slate-600">{t("orContinueWith")}</span>
             <span className="h-px flex-1 bg-white/[0.07]" />
           </div>
 
@@ -368,7 +379,7 @@ function LoginContent() {
                 <span className="flex-[1.5] bg-[#f5f5f5]" />
                 <span className="flex-[1] bg-[#f0a030]" />
               </span>
-              <span className="font-light">使用 LinuxDo {mode === "register" ? "注册" : "登录"}</span>
+              <span className="font-light">{mode === "register" ? t("signUpWithLinuxdo") : t("logInWithLinuxdo")}</span>
               <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-cyan-400" />
             </Button>
 
@@ -379,7 +390,7 @@ function LoginContent() {
               className="w-full justify-center rounded-lg group"
             >
               <Github className="h-5 w-5 text-slate-200" />
-              <span className="font-light">使用 GitHub {mode === "register" ? "注册" : "登录"}</span>
+              <span className="font-light">{mode === "register" ? t("signUpWithGithub") : t("logInWithGithub")}</span>
               <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-cyan-400" />
             </Button>
           </div>
@@ -393,7 +404,7 @@ function LoginContent() {
           >
             <Link href="/">
               <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
-              <span>返回首页</span>
+              <span>{t("backToHome")}</span>
             </Link>
           </Button>
         </div>

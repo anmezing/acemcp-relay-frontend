@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 interface BillingPlan {
   id: string;
@@ -52,8 +53,8 @@ const EMPTY_DRAFT: PlanDraft = {
   active: true,
 };
 
-function formatBytes(value: number): string {
-  if (value === 0) return "不限";
+function formatBytes(value: number, unlimited: string): string {
+  if (value === 0) return unlimited;
   const units = ["B", "KiB", "MiB", "GiB", "TiB"];
   let current = value;
   let index = 0;
@@ -64,30 +65,32 @@ function formatBytes(value: number): string {
   return `${current.toFixed(current >= 10 || Number.isInteger(current) ? 0 : 1)} ${units[index]}`;
 }
 
-function parseInteger(value: string, label: string): number {
-  if (!/^\d+$/.test(value.trim())) throw new Error(`${label}必须是非负整数`);
+function parseInteger(value: string, invalidMessage: string, rangeMessage: string): number {
+  if (!/^\d+$/.test(value.trim())) throw new Error(invalidMessage);
   const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed)) throw new Error(`${label}超出安全范围`);
+  if (!Number.isSafeInteger(parsed)) throw new Error(rangeMessage);
   return parsed;
 }
 
-function yuanToFen(value: string): number {
+function yuanToFen(value: string, formatMessage: string, rangeMessage: string): number {
   const match = value.trim().match(/^(\d+)(?:\.(\d{1,2}))?$/);
-  if (!match) throw new Error("价格格式应为 0.00");
+  if (!match) throw new Error(formatMessage);
   const result =
     BigInt(match[1]) * BigInt(100) +
     BigInt((match[2] || "").padEnd(2, "0"));
   if (result > BigInt(Number.MAX_SAFE_INTEGER)) {
-    throw new Error("价格超出安全范围");
+    throw new Error(rangeMessage);
   }
   return Number(result);
 }
 
 export function AdminPlansTab() {
+  const t = useTranslations("AdminPlans");
   const [plans, setPlans] = useState<BillingPlan[] | null>(null);
   const [draft, setDraft] = useState<PlanDraft>(EMPTY_DRAFT);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [noticeOk, setNoticeOk] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -97,13 +100,13 @@ export function AdminPlansTab() {
       error?: string;
     };
     if (!response.ok || !payload.plans) {
-      throw new Error(payload.error || "套餐列表加载失败");
+      throw new Error(payload.error || t("failedToLoadPlans"));
     }
     if (!signal?.aborted) {
       setPlans(payload.plans);
       setError("");
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -111,11 +114,11 @@ export function AdminPlansTab() {
       .then(() => load(controller.signal))
       .catch((reason) => {
         if (!controller.signal.aborted) {
-          setError(reason instanceof Error ? reason.message : "套餐列表加载失败");
+          setError(reason instanceof Error ? reason.message : t("failedToLoadPlans"));
         }
       });
     return () => controller.abort();
-  }, [load]);
+  }, [load, t]);
 
   const edit = (plan: BillingPlan) => {
     setDraft({
@@ -145,19 +148,20 @@ export function AdminPlansTab() {
         name: draft.name.trim(),
         description: draft.description.trim(),
         tier: draft.tier,
-        priceFen: yuanToFen(draft.priceYuan),
-        durationDays: parseInteger(draft.durationDays, "有效天数"),
-        dailyRequestLimit: parseInteger(draft.dailyRequestLimit, "每日请求量"),
+        priceFen: yuanToFen(draft.priceYuan, t("priceFormat"), t("priceOutOfRange")),
+        durationDays: parseInteger(draft.durationDays, t("mustBeNonNegativeInteger", { label: t("durationDays") }), t("outOfRange", { label: t("durationDays") })),
+        dailyRequestLimit: parseInteger(draft.dailyRequestLimit, t("mustBeNonNegativeInteger", { label: t("dailyRequests") }), t("outOfRange", { label: t("dailyRequests") })),
         dailyIndexBytesLimit: parseInteger(
           draft.dailyIndexBytesLimit,
-          "每日索引字节"
+          t("mustBeNonNegativeInteger", { label: t("dailyIndexBytes") }),
+          t("outOfRange", { label: t("dailyIndexBytes") })
         ),
-        subaccountLimit: parseInteger(draft.subaccountLimit, "子账号数"),
-        sortOrder: parseInteger(draft.sortOrder, "排序"),
+        subaccountLimit: parseInteger(draft.subaccountLimit, t("mustBeNonNegativeInteger", { label: t("subaccounts") }), t("outOfRange", { label: t("subaccounts") })),
+        sortOrder: parseInteger(draft.sortOrder, t("mustBeNonNegativeInteger", { label: t("sortOrder") }), t("outOfRange", { label: t("sortOrder") })),
         active: draft.active,
       };
       if (!body.code || !body.name || body.durationDays <= 0) {
-        throw new Error("请完整填写套餐标识、名称和有效天数");
+        throw new Error(t("completeRequiredFields"));
       }
       const response = await fetch("/api/admin/plans", {
         method: "POST",
@@ -167,19 +171,21 @@ export function AdminPlansTab() {
       const payload = (await response.json().catch(() => ({}))) as {
         error?: string;
       };
-      if (!response.ok) throw new Error(payload.error || "保存失败");
+      if (!response.ok) throw new Error(payload.error || t("failedToSave"));
       await load();
       setDraft(EMPTY_DRAFT);
-      setNotice("套餐已保存，新订单将使用这份配置");
+      setNotice(t("planSaved"));
+      setNoticeOk(true);
     } catch (reason) {
-      setNotice(reason instanceof Error ? reason.message : "保存失败");
+      setNotice(reason instanceof Error ? reason.message : t("failedToSave"));
+      setNoticeOk(false);
     } finally {
       setBusy(false);
     }
   };
 
   const remove = async (plan: BillingPlan) => {
-    if (!window.confirm(`确定删除套餐“${plan.name}”？已有订单的套餐只能停用。`)) {
+    if (!window.confirm(t("confirmDeletePlan", { name: plan.name }))) {
       return;
     }
     setNotice("");
@@ -191,11 +197,13 @@ export function AdminPlansTab() {
       const payload = (await response.json().catch(() => ({}))) as {
         error?: string;
       };
-      if (!response.ok) throw new Error(payload.error || "删除失败");
+      if (!response.ok) throw new Error(payload.error || t("failedToDelete"));
       await load();
-      setNotice("套餐已删除");
+      setNotice(t("planDeleted"));
+      setNoticeOk(true);
     } catch (reason) {
-      setNotice(reason instanceof Error ? reason.message : "删除失败");
+      setNotice(reason instanceof Error ? reason.message : t("failedToDelete"));
+      setNoticeOk(false);
     }
   };
 
@@ -216,21 +224,21 @@ export function AdminPlansTab() {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-medium text-white">
-                {draft.id ? "编辑套餐" : "新增套餐"}
+                {draft.id ? t("editPlan") : t("newPlan")}
               </h3>
               <p className="mt-1 text-xs text-slate-500">
-                0 表示不限。历史订单保存购买快照，修改套餐不会倒改已购权益。
+                {t("snapshotDescription")}
               </p>
             </div>
             {draft.id && (
               <Button variant="ghost" size="sm" onClick={() => setDraft(EMPTY_DRAFT)}>
                 <Plus className="mr-1 h-4 w-4" />
-                新增
+                {t("new")}
               </Button>
             )}
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <Field label="套餐标识">
+            <Field label={t("planCode")}>
               <input
                 value={draft.code}
                 onChange={(event) =>
@@ -240,17 +248,17 @@ export function AdminPlansTab() {
                 className="field-input"
               />
             </Field>
-            <Field label="套餐名称">
+            <Field label={t("planName")}>
               <input
                 value={draft.name}
                 onChange={(event) =>
                   setDraft((current) => ({ ...current, name: event.target.value }))
                 }
-                placeholder="Pro 月付"
+                placeholder={t("planNamePlaceholder")}
                 className="field-input"
               />
             </Field>
-            <Field label="等级">
+            <Field label={t("tier")}>
               <select
                 value={draft.tier}
                 onChange={(event) =>
@@ -265,7 +273,7 @@ export function AdminPlansTab() {
                 <option value="pro">Pro</option>
               </select>
             </Field>
-            <Field label="价格（元）">
+            <Field label={t("priceYuan")}>
               <input
                 value={draft.priceYuan}
                 onChange={(event) =>
@@ -279,7 +287,7 @@ export function AdminPlansTab() {
                 className="field-input"
               />
             </Field>
-            <Field label="有效天数">
+            <Field label={t("durationDays")}>
               <input
                 value={draft.durationDays}
                 onChange={(event) =>
@@ -292,7 +300,7 @@ export function AdminPlansTab() {
                 className="field-input"
               />
             </Field>
-            <Field label="每日请求量">
+            <Field label={t("dailyRequests")}>
               <input
                 value={draft.dailyRequestLimit}
                 onChange={(event) =>
@@ -305,7 +313,7 @@ export function AdminPlansTab() {
                 className="field-input"
               />
             </Field>
-            <Field label="每日索引字节">
+            <Field label={t("dailyIndexBytes")}>
               <input
                 value={draft.dailyIndexBytesLimit}
                 onChange={(event) =>
@@ -318,7 +326,7 @@ export function AdminPlansTab() {
                 className="field-input"
               />
             </Field>
-            <Field label="子账号数">
+            <Field label={t("subaccounts")}>
               <input
                 value={draft.subaccountLimit}
                 onChange={(event) =>
@@ -331,7 +339,7 @@ export function AdminPlansTab() {
                 className="field-input"
               />
             </Field>
-            <Field label="排序">
+            <Field label={t("sortOrder")}>
               <input
                 value={draft.sortOrder}
                 onChange={(event) =>
@@ -344,7 +352,7 @@ export function AdminPlansTab() {
                 className="field-input"
               />
             </Field>
-            <Field label="状态">
+            <Field label={t("status")}>
               <label className="flex h-9 items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-xs text-slate-300">
                 <input
                   type="checkbox"
@@ -356,11 +364,11 @@ export function AdminPlansTab() {
                     }))
                   }
                 />
-                在购买页上架
+                {t("listedOnPurchasePage")}
               </label>
             </Field>
             <div className="md:col-span-2">
-              <Field label="说明">
+              <Field label={t("description")}>
                 <input
                   value={draft.description}
                   onChange={(event) =>
@@ -369,7 +377,7 @@ export function AdminPlansTab() {
                       description: event.target.value,
                     }))
                   }
-                  placeholder="适合个人开发者"
+                  placeholder={t("descriptionPlaceholder")}
                   className="field-input"
                 />
               </Field>
@@ -377,13 +385,13 @@ export function AdminPlansTab() {
           </div>
           <div className="mt-4 flex items-center gap-3">
             <Button variant="glass" size="sm" disabled={busy} onClick={save}>
-              {busy ? "保存中..." : "保存套餐"}
+              {busy ? t("saving") : t("savePlan")}
             </Button>
             {notice && (
               <p
                 className={cn(
                   "text-xs",
-                  notice.includes("已") ? "text-emerald-400" : "text-red-400"
+                  noticeOk ? "text-emerald-400" : "text-red-400"
                 )}
               >
                 {notice}
@@ -394,7 +402,7 @@ export function AdminPlansTab() {
       </Card>
 
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-white">已配置套餐</h3>
+        <h3 className="text-sm font-medium text-white">{t("configuredPlans")}</h3>
         <Button variant="ghost" size="sm" onClick={() => void load()}>
           <RefreshCw className="h-4 w-4" />
         </Button>
@@ -402,7 +410,7 @@ export function AdminPlansTab() {
       {error && <p className="text-xs text-red-400">{error}</p>}
       {plans?.length === 0 ? (
         <p className="rounded-xl border border-dashed border-white/[0.1] py-10 text-center text-sm text-slate-500">
-          暂无套餐。上方创建后，用户购买页才会显示。
+          {t("noPlans")}
         </p>
       ) : (
         <div className="space-y-2">
@@ -423,18 +431,18 @@ export function AdminPlansTab() {
                     : "border-white/[0.08] text-slate-600"
                 }
               >
-                {plan.active ? "已上架" : "已停用"}
+                {plan.active ? t("active") : t("inactive")}
               </Badge>
               <span className="font-mono text-slate-300">
-                ¥{(plan.priceFen / 100).toFixed(2)} / {plan.durationDays}天
+                ¥{(plan.priceFen / 100).toFixed(2)} / {t("days", { count: plan.durationDays })}
               </span>
               <span className="text-slate-500">
-                请求 {plan.dailyRequestLimit === 0 ? "不限" : plan.dailyRequestLimit.toLocaleString()}
+                {t("requests")} {plan.dailyRequestLimit === 0 ? t("unlimited") : plan.dailyRequestLimit.toLocaleString()}
               </span>
               <span className="text-slate-500">
-                索引 {formatBytes(plan.dailyIndexBytesLimit)}
+                {t("index")} {formatBytes(plan.dailyIndexBytesLimit, t("unlimited"))}
               </span>
-              <span className="text-slate-500">子账号 {plan.subaccountLimit}</span>
+              <span className="text-slate-500">{t("subaccounts")} {plan.subaccountLimit}</span>
               <div className="ml-auto flex gap-1">
                 <Button variant="ghost" size="sm" onClick={() => edit(plan)}>
                   <Pencil className="h-4 w-4" />

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useLocale, useTranslations } from "next-intl";
 
 interface BillingPlan {
   id: string;
@@ -56,14 +57,14 @@ interface CheckoutState {
   qrCodeDataUrl: string;
 }
 
-function formatLimit(value: number, unit: string): string {
+function formatLimit(value: number, unit: string, unlimited: string): string {
   return value === 0
-    ? "不限"
+    ? unlimited
     : `${value.toLocaleString()}${unit ? ` ${unit}` : ""}`;
 }
 
-function formatBytes(value: number): string {
-  if (value === 0) return "不限";
+function formatBytes(value: number, unlimited: string): string {
+  if (value === 0) return unlimited;
   const units = ["B", "KiB", "MiB", "GiB", "TiB"];
   let current = value;
   let index = 0;
@@ -79,14 +80,9 @@ function formatMoney(fen: number): string {
   return `¥${(fen / 100).toFixed(2)}`;
 }
 
-function orderStatusLabel(status: BillingOrder["status"]): string {
-  if (status === "paid") return "已支付";
-  if (status === "pending") return "待支付";
-  if (status === "closed") return "已关闭";
-  return "失败";
-}
-
 export function PlansTab() {
+  const locale = useLocale();
+  const t = useTranslations("Billing");
   const [data, setData] = useState<BillingOverview | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -100,12 +96,12 @@ export function PlansTab() {
       | BillingOverview
       | { error?: string };
     if (!response.ok) {
-      throw new Error("error" in payload ? payload.error : "套餐信息加载失败");
+      throw new Error("error" in payload ? payload.error : t("failedToLoadPlans"));
     }
     if (signal?.aborted) return;
     setData(payload as BillingOverview);
     setError("");
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -113,11 +109,11 @@ export function PlansTab() {
       .then(() => load(controller.signal))
       .catch((reason) => {
         if (!controller.signal.aborted) {
-          setError(reason instanceof Error ? reason.message : "套餐信息加载失败");
+          setError(reason instanceof Error ? reason.message : t("failedToLoadPlans"));
         }
       });
     return () => controller.abort();
-  }, [load]);
+  }, [load, t]);
 
   useEffect(() => {
     if (!checkout || checkout.order.status !== "pending") return;
@@ -134,7 +130,7 @@ export function PlansTab() {
         if (stopped || !response.ok || !payload.order) return;
         if (payload.order.status === "paid") {
           setCheckout(null);
-          setNotice("支付成功，套餐权益已生效");
+          setNotice(t("paymentCompletedPlanBenefitsAreActive"));
           await load();
         } else if (
           payload.order.status === "closed" ||
@@ -153,18 +149,18 @@ export function PlansTab() {
       stopped = true;
       window.clearInterval(timer);
     };
-  }, [checkout, load]);
+  }, [checkout, load, t]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       await load();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "套餐信息加载失败");
+      setError(reason instanceof Error ? reason.message : t("failedToLoadPlans"));
     } finally {
       setLoading(false);
     }
-  }, [load]);
+  }, [load, t]);
 
   const startCheckout = useCallback(
     async (plan: BillingPlan, provider: "alipay" | "wechat") => {
@@ -182,19 +178,19 @@ export function PlansTab() {
           qrCodeDataUrl?: string;
         };
         if (!response.ok || !payload.order || !payload.qrCodeDataUrl) {
-          throw new Error(payload.error || "创建支付订单失败");
+          throw new Error(payload.error || t("failedToCreatePaymentOrder"));
         }
         setCheckout({
           order: payload.order,
           qrCodeDataUrl: payload.qrCodeDataUrl,
         });
       } catch (reason) {
-        setNotice(reason instanceof Error ? reason.message : "创建支付订单失败");
+        setNotice(reason instanceof Error ? reason.message : t("failedToCreatePaymentOrder"));
       } finally {
         setBusy("");
       }
     },
-    []
+    [t]
   );
 
   const recentOrders = useMemo(() => data?.orders.slice(0, 5) ?? [], [data]);
@@ -217,7 +213,7 @@ export function PlansTab() {
       <div className="flex flex-col items-center gap-3 py-12">
         <p className="text-sm text-red-400">{error}</p>
         <Button variant="glass" size="sm" onClick={refresh}>
-          重试
+          {t("retry")}
         </Button>
       </div>
     );
@@ -230,39 +226,39 @@ export function PlansTab() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
-                <p className="text-sm text-slate-400">当前套餐</p>
+                <p className="text-sm text-slate-400">{t("currentPlan")}</p>
                 <Badge variant="outline" className="border-cyan-500/25 text-cyan-300">
                   {data.subscription?.tier === "pro" ? "Pro" : "Free"}
                 </Badge>
               </div>
               <p className="mt-2 text-xl font-semibold text-white">
-                {data.subscription?.planName || "免费套餐"}
+                {data.subscription?.planName || t("freePlan")}
               </p>
               <p className="mt-1 text-xs text-slate-500">
                 {data.subscription
-                  ? `有效期至 ${new Date(data.subscription.expiresAt).toLocaleString("zh-CN")}`
-                  : "当前没有有效付费订阅"}
+                  ? t("validUntil", {p0: new Date(data.subscription.expiresAt).toLocaleString(locale)})
+                  : t("noActivePaidSubscription")}
               </p>
             </div>
             <div className="grid min-w-[280px] grid-cols-3 gap-3 text-xs">
               <div>
-                <p className="text-slate-500">请求/天</p>
+                <p className="text-slate-500">{t("requestsDay")}</p>
                 <p className="mt-1 font-mono text-slate-200">
                   {data.subscription
-                    ? formatLimit(data.subscription.dailyRequestLimit, "")
-                    : "按平台默认"}
+                    ? formatLimit(data.subscription.dailyRequestLimit, "", t("unlimited"))
+                    : t("platformDefault")}
                 </p>
               </div>
               <div>
-                <p className="text-slate-500">索引/天</p>
+                <p className="text-slate-500">{t("indexDay")}</p>
                 <p className="mt-1 font-mono text-slate-200">
                   {data.subscription
-                    ? formatBytes(data.subscription.dailyIndexBytesLimit)
-                    : "按平台默认"}
+                    ? formatBytes(data.subscription.dailyIndexBytesLimit, t("unlimited"))
+                    : t("platformDefault")}
                 </p>
               </div>
               <div>
-                <p className="text-slate-500">子账号</p>
+                <p className="text-slate-500">{t("subaccounts")}</p>
                 <p className="mt-1 font-mono text-slate-200">
                   {data.seats.used} / {data.seats.limit}
                 </p>
@@ -276,7 +272,7 @@ export function PlansTab() {
         <p
           className={cn(
             "text-sm",
-            notice.includes("成功") ? "text-emerald-400" : "text-red-400"
+            /成功|completed/i.test(notice) ? "text-emerald-400" : "text-red-400"
           )}
         >
           {notice}
@@ -286,8 +282,8 @@ export function PlansTab() {
       {data.plans.length === 0 ? (
         <div className="rounded-xl border border-dashed border-white/[0.1] px-6 py-12 text-center">
           <CreditCard className="mx-auto h-8 w-8 text-slate-600" />
-          <p className="mt-3 text-sm text-slate-400">暂无可购买套餐</p>
-          <p className="mt-1 text-xs text-slate-600">管理员配置并上架后会显示在这里。</p>
+          <p className="mt-3 text-sm text-slate-400">{t("noPlansAvailable")}</p>
+          <p className="mt-1 text-xs text-slate-600">{t("plansAppearHereAfterAnAdministratorPublishes")}</p>
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-3">
@@ -311,7 +307,7 @@ export function PlansTab() {
                   </div>
                   {data.subscription?.planId === plan.id && (
                     <Badge className="border-cyan-500/20 bg-cyan-500/10 text-cyan-300">
-                      当前
+                      {t("current")}
                     </Badge>
                   )}
                 </div>
@@ -320,21 +316,21 @@ export function PlansTab() {
                     {formatMoney(plan.priceFen)}
                   </span>
                   <span className="pb-1 text-xs text-slate-500">
-                    / {plan.durationDays} 天
+                    / {plan.durationDays} {t("days")}
                   </span>
                 </div>
                 <div className="mt-5 space-y-3 text-sm">
                   <div className="flex items-center gap-2 text-slate-300">
                     <Check className="h-4 w-4 text-cyan-400" />
-                    每日请求 {formatLimit(plan.dailyRequestLimit, "次")}
+                    {t("dailyRequests")} {formatLimit(plan.dailyRequestLimit, t("requests"), t("unlimited"))}
                   </div>
                   <div className="flex items-center gap-2 text-slate-300">
                     <Check className="h-4 w-4 text-cyan-400" />
-                    每日索引 {formatBytes(plan.dailyIndexBytesLimit)}
+                    {t("dailyIndex")} {formatBytes(plan.dailyIndexBytesLimit, t("unlimited"))}
                   </div>
                   <div className="flex items-center gap-2 text-slate-300">
                     <Users className="h-4 w-4 text-cyan-400" />
-                    {plan.subaccountLimit} 个子账号
+                    {plan.subaccountLimit} {t("subaccounts2")}
                   </div>
                 </div>
                 <div className="mt-6 grid grid-cols-2 gap-2">
@@ -351,7 +347,7 @@ export function PlansTab() {
                     {busy === `${plan.id}:alipay` && (
                       <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                     )}
-                    支付宝
+                    {t("alipay")}
                   </Button>
                   <Button
                     variant="glass"
@@ -366,16 +362,16 @@ export function PlansTab() {
                     {busy === `${plan.id}:wechat` && (
                       <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                     )}
-                    微信支付
+                    {t("wechatPay")}
                   </Button>
                 </div>
                 {plan.priceFen <= 0 ? (
                   <p className="mt-2 text-[10px] text-slate-600">
-                    免费或内部套餐需由管理员开通，不能创建支付订单。
+                    {t("freeAndInternalPlansMustBeAssigned")}
                   </p>
                 ) : (!data.providers.alipay || !data.providers.wechat) && (
                   <p className="mt-2 text-[10px] text-slate-600">
-                    灰色渠道尚未配置商户参数。
+                    {t("disabledPaymentMethodsHaveNotBeenConfigured")}
                   </p>
                 )}
               </CardContent>
@@ -389,7 +385,7 @@ export function PlansTab() {
           <CardContent className="flex flex-col items-center gap-4 p-6 text-center">
             <div>
               <p className="font-medium text-white">
-                {checkout.order.provider === "alipay" ? "支付宝" : "微信"}扫码支付
+                {checkout.order.provider === "alipay" ? t("alipay") : t("wechat")} {t("qrPayment")}
               </p>
               <p className="mt-1 text-xs text-slate-500">
                 {checkout.order.planSnapshot.name} · {formatMoney(checkout.order.amountFen)}
@@ -401,24 +397,24 @@ export function PlansTab() {
                 width={224}
                 height={224}
                 unoptimized
-                alt="支付二维码"
+                alt={t("paymentQrCode")}
               />
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-400">
               {checkout.order.status === "pending" ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin text-cyan-400" />
-                  正在等待支付结果
+                  {t("waitingForPayment")}
                 </>
               ) : (
                 <>
                   <Clock3 className="h-4 w-4" />
-                  {orderStatusLabel(checkout.order.status)}
+                  {t(`orderStatus.${checkout.order.status}`)}
                 </>
               )}
             </div>
             <Button variant="ghost" size="sm" onClick={() => setCheckout(null)}>
-              关闭
+              {t("close")}
             </Button>
           </CardContent>
         </Card>
@@ -427,7 +423,7 @@ export function PlansTab() {
       {recentOrders.length > 0 && (
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-medium text-white">最近订单</h3>
+            <h3 className="text-sm font-medium text-white">{t("recentOrders")}</h3>
             <Button variant="ghost" size="sm" onClick={refresh} disabled={loading}>
               <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
             </Button>
@@ -445,7 +441,7 @@ export function PlansTab() {
                   {formatMoney(order.amountFen)}
                 </span>
                 <span className="text-slate-500">
-                  {order.provider === "alipay" ? "支付宝" : "微信"}
+                  {order.provider === "alipay" ? t("alipay") : t("wechat")}
                 </span>
                 <span
                   className={cn(
@@ -457,7 +453,7 @@ export function PlansTab() {
                         : "text-slate-600"
                   )}
                 >
-                  {orderStatusLabel(order.status)}
+                  {t(`orderStatus.${order.status}`)}
                 </span>
               </div>
             ))}

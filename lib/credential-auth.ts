@@ -17,25 +17,48 @@ export interface CredentialFields {
   confirmPassword: string;
 }
 
-export function validateCredentialFields(fields: CredentialFields): string | null {
+export interface CredentialMessage {
+  key:
+    | "enterDisplayName"
+    | "enterEmail"
+    | "enterPassword"
+    | "passwordMinimum"
+    | "passwordMaximum"
+    | "passwordsDoNotMatch"
+    | "registrationClosed"
+    | "registrationCapacityReached"
+    | "emailAlreadyRegistered"
+    | "incorrectEmailOrPassword"
+    | "invalidEmail"
+    | "githubAccountAgeUnknown"
+    | "githubAccountTooYoung"
+    | "registrationClosedExistingUsers"
+    | "signUpFailed"
+    | "loginFailed";
+  values?: Record<string, string | number>;
+}
+
+export function validateCredentialFields(
+  fields: CredentialFields
+): CredentialMessage | null {
   if (fields.mode === "register" && !fields.name.trim()) {
-    return "请输入昵称";
+    return { key: "enterDisplayName" };
   }
   if (!fields.email.trim()) {
-    return "请输入邮箱";
+    return { key: "enterEmail" };
   }
   if (!fields.password) {
-    return "请输入密码";
+    return { key: "enterPassword" };
   }
   if (fields.mode === "register") {
     if (fields.password.length < MIN_PASSWORD_LENGTH) {
-      return `密码至少需要 ${MIN_PASSWORD_LENGTH} 位`;
+      return { key: "passwordMinimum", values: { count: MIN_PASSWORD_LENGTH } };
     }
     if (fields.password.length > MAX_PASSWORD_LENGTH) {
-      return `密码不能超过 ${MAX_PASSWORD_LENGTH} 位`;
+      return { key: "passwordMaximum", values: { count: MAX_PASSWORD_LENGTH } };
     }
     if (fields.password !== fields.confirmPassword) {
-      return "两次输入的密码不一致";
+      return { key: "passwordsDoNotMatch" };
     }
   }
   return null;
@@ -44,32 +67,34 @@ export function validateCredentialFields(fields: CredentialFields): string | nul
 export function credentialAuthErrorMessage(
   error: CredentialAuthError | null | undefined,
   mode: CredentialMode
-): string {
+): CredentialMessage {
   const raw = [error?.code, error?.message, error?.statusText]
     .filter(Boolean)
     .join(" ")
     .toUpperCase();
 
   if (raw.includes("REGISTRATION_DISABLED")) {
-    return "当前未开放新用户注册";
+    return { key: "registrationClosed" };
   }
   if (raw.includes("REGISTRATION_LIMIT_REACHED")) {
-    return "注册名额已满，暂不开放新用户注册";
+    return { key: "registrationCapacityReached" };
   }
   if (raw.includes("USER_ALREADY_EXISTS")) {
-    return "该邮箱已注册，请直接登录或使用原登录方式";
+    return { key: "emailAlreadyRegistered" };
   }
   if (raw.includes("INVALID_EMAIL_OR_PASSWORD")) {
-    return "邮箱或密码错误";
+    return { key: "incorrectEmailOrPassword" };
   }
   if (raw.includes("INVALID_EMAIL")) {
-    return "邮箱格式不正确";
+    return { key: "invalidEmail" };
   }
   if (raw.includes("PASSWORD_TOO_SHORT")) {
-    return `密码至少需要 ${MIN_PASSWORD_LENGTH} 位`;
+    return { key: "passwordMinimum", values: { count: MIN_PASSWORD_LENGTH } };
   }
   if (raw.includes("PASSWORD_TOO_LONG")) {
-    return `密码不能超过 ${MAX_PASSWORD_LENGTH} 位`;
+    return { key: "passwordMaximum", values: { count: MAX_PASSWORD_LENGTH } };
   }
-  return mode === "register" ? "注册失败，请稍后重试" : "登录失败，请稍后重试";
+  return mode === "register"
+    ? { key: "signUpFailed" }
+    : { key: "loginFailed" };
 }

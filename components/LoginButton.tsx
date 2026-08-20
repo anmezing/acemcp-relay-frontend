@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useTranslations } from "next-intl";
 
 interface LoginButtonProps {
   user?: {
@@ -13,6 +14,8 @@ interface LoginButtonProps {
 }
 
 export function LoginButton({ user }: LoginButtonProps) {
+  const t = useTranslations("Common");
+
   if (user) {
     return (
       <div className="flex items-center gap-3">
@@ -26,7 +29,7 @@ export function LoginButton({ user }: LoginButtonProps) {
           {user.name}
         </span>
         <Button variant="link" asChild className="text-cyan-400 hover:text-cyan-300 px-4">
-          <Link href="/console">控制台</Link>
+          <Link href="/console">{t("console")}</Link>
         </Button>
       </div>
     );
@@ -35,10 +38,10 @@ export function LoginButton({ user }: LoginButtonProps) {
   return (
     <div className="flex items-center gap-1 sm:gap-2">
       <Button variant="ghost" asChild className="text-slate-400 hover:text-white">
-        <Link href="/login">登录</Link>
+        <Link href="/login">{t("logIn")}</Link>
       </Button>
       <Button variant="gradient" asChild className="rounded-lg">
-        <Link href="/login?mode=register">注册</Link>
+        <Link href="/login?mode=register">{t("signUp")}</Link>
       </Button>
     </div>
   );

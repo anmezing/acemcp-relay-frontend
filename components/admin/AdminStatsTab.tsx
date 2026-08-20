@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 interface CallStats {
   totals: { today: number; last30d: number; total: number };
@@ -46,6 +47,7 @@ function Bar({
 }
 
 export function AdminStatsTab() {
+  const t = useTranslations("AdminStats");
   const [stats, setStats] = useState<CallStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -62,9 +64,9 @@ export function AdminStatsTab() {
       setError("");
     } catch {
       if (signal?.aborted) return;
-      setError("加载失败，请重试");
+      setError(t("failedToLoadTryAgain"));
     }
-  }, []);
+  }, [t]);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -99,7 +101,7 @@ export function AdminStatsTab() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-slate-500 text-xs">
-          按请求量统计（服务端不统计 token，embedding/rerank 用量在 LCE 侧）
+          {t("requestBasedStatisticsTokenAndEmbeddingRerank")}
         </p>
         <Button variant="ghost" size="sm" onClick={refresh} disabled={loading}
           className="text-slate-400 hover:text-white">
@@ -113,9 +115,9 @@ export function AdminStatsTab() {
         <>
           <div className="grid grid-cols-3 gap-3">
             {[
-              { label: "今日请求", value: stats.totals.today, accent: "text-cyan-400" },
-              { label: "近 30 天", value: stats.totals.last30d, accent: "text-slate-200" },
-              { label: "累计", value: stats.totals.total, accent: "text-slate-200" },
+              { label: t("today"), value: stats.totals.today, accent: "text-cyan-400" },
+              { label: t("last30Days"), value: stats.totals.last30d, accent: "text-slate-200" },
+              { label: t("allTime"), value: stats.totals.total, accent: "text-slate-200" },
             ].map((s) => (
               <Card key={s.label} className="bg-[#0a0f1a]/60 border-white/[0.06]">
                 <CardContent className="p-3 sm:p-4">
@@ -129,9 +131,9 @@ export function AdminStatsTab() {
           </div>
 
           <div>
-            <h3 className="text-white text-sm font-medium mb-3">近 14 天请求量</h3>
+            <h3 className="text-white text-sm font-medium mb-3">{t("requestsOver14Days")}</h3>
             <div className="space-y-1.5">
-              {stats.daily.length === 0 && <p className="text-slate-600 text-xs">暂无数据</p>}
+              {stats.daily.length === 0 && <p className="text-slate-600 text-xs">{t("noData")}</p>}
               {stats.daily.map((d) => (
                 <Bar key={d.date} value={d.count} max={dailyMax} label={d.date.slice(5)} count={d.count} />
               ))}
@@ -139,7 +141,7 @@ export function AdminStatsTab() {
           </div>
 
           <div>
-            <h3 className="text-white text-sm font-medium mb-3">近 30 天端点分布</h3>
+            <h3 className="text-white text-sm font-medium mb-3">{t("endpointsOver30Days")}</h3>
             <div className="space-y-1.5">
               {stats.byPath.map((p) => (
                 <Bar key={p.path} value={p.count} max={pathMax} label={p.path} count={p.count}
@@ -151,7 +153,7 @@ export function AdminStatsTab() {
           </div>
 
           <div>
-            <h3 className="text-white text-sm font-medium mb-3">近 30 天用户排行</h3>
+            <h3 className="text-white text-sm font-medium mb-3">{t("usersOver30Days")}</h3>
             <div className="space-y-1.5">
               {stats.topUsers.map((u, i) => (
                 <div key={u.user_id}

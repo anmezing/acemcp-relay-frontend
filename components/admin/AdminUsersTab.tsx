@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronRight, RefreshCw, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authProviderLabels } from "@/lib/auth-provider";
+import type { AppLocale } from "@/i18n/config";
+import { useLocale, useTranslations } from "next-intl";
 
 interface UserRow {
   id: string;
@@ -22,11 +24,13 @@ interface UserRow {
   auth_providers: string[];
 }
 
-function fmtTime(value: string | null) {
-  return value ? new Date(value).toLocaleString("zh-CN") : "—";
+function fmtTime(value: string | null, locale: AppLocale) {
+  return value ? new Date(value).toLocaleString(locale) : "—";
 }
 
 export function AdminUsersTab() {
+  const locale = useLocale() as AppLocale;
+  const t = useTranslations("AdminUsers");
   const [users, setUsers] = useState<UserRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -48,9 +52,9 @@ export function AdminUsersTab() {
       setError("");
     } catch {
       if (signal?.aborted) return;
-      setError("用户列表加载失败");
+      setError(t("failedToLoadUsers"));
     }
-  }, []);
+  }, [t]);
 
   const fetchUsers = useCallback(() => {
     setLoading(true);
@@ -80,14 +84,14 @@ export function AdminUsersTab() {
           throw new Error(data?.error || `HTTP ${res.status}`);
         }
         await fetchUsers();
-        setNotice("操作成功");
+        setNotice(t("operationCompleted"));
       } catch (error) {
-        setNotice(`操作失败: ${error instanceof Error ? error.message : String(error)}`);
+        setNotice(t("operationFailed", {p0: error instanceof Error ? error.message : String(error)}));
       } finally {
         setActionBusy(false);
       }
     },
-    [fetchUsers]
+    [fetchUsers, t]
   );
 
   const filtered = (users || []).filter((u) => {
@@ -118,7 +122,7 @@ export function AdminUsersTab() {
         <p className="text-red-400 text-sm">{error}</p>
         <Button variant="glass" size="sm" onClick={fetchUsers} disabled={loading} className="text-xs">
           <RefreshCw className={cn("w-4 h-4 mr-1", loading && "animate-spin")} />
-          重试
+          {t("retry")}
         </Button>
       </div>
     );
@@ -132,7 +136,7 @@ export function AdminUsersTab() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索邮箱 / 用户名 / ID / 登录方式"
+            placeholder={t("searchEmailNameIdLoginMethod")}
             className="w-full bg-[#0a0f1a]/60 border border-white/[0.08] rounded-lg pl-9 pr-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/40"
           />
         </div>
@@ -143,12 +147,12 @@ export function AdminUsersTab() {
       </div>
 
       {notice && (
-        <p className={cn("text-xs", notice.startsWith("操作成功") ? "text-emerald-400" : "text-red-400")}>
+        <p className={cn("text-xs", /操作成功|completed/i.test(notice) ? "text-emerald-400" : "text-red-400")}>
           {notice}
         </p>
       )}
 
-      <p className="text-slate-600 text-xs">{filtered.length} 个用户</p>
+      <p className="text-slate-600 text-xs">{t("users", {p0: filtered.length})}</p>
 
       <div className="space-y-2">
         {filtered.map((u) => {
@@ -182,10 +186,10 @@ export function AdminUsersTab() {
                 </span>
                 {u.subscription_plan_name && (
                   <span className="rounded border border-emerald-500/20 bg-emerald-500/[0.08] px-1.5 py-0.5 text-[10px] text-emerald-400">
-                    已购 {u.subscription_plan_name}
+                    {t("purchased")} {u.subscription_plan_name}
                   </span>
                 )}
-                {(providerLabels.length ? providerLabels : ["来源未知"]).map((provider) => (
+                {(providerLabels.length ? providerLabels : [t("unknownSource")]).map((provider) => (
                   <span
                     key={provider}
                     className="rounded border border-white/[0.08] bg-white/[0.04] px-1.5 py-0.5 text-[10px] text-slate-400"
@@ -195,14 +199,14 @@ export function AdminUsersTab() {
                 ))}
                 {u.banned && (
                   <span className="text-[10px] px-1.5 py-0.5 rounded border bg-red-500/10 text-red-400 border-red-500/20">
-                    已封禁
+                    {t("banned")}
                   </span>
                 )}
                 <span className="text-slate-500 text-xs ml-auto whitespace-nowrap">
-                  {u.request_count.toLocaleString()} 次请求
+                  {u.request_count.toLocaleString(locale)} {t("requests")}
                 </span>
                 <span className="text-slate-600 text-[10px] whitespace-nowrap hidden md:inline">
-                  最近 {fmtTime(u.last_request_at)}
+                  {t("last")} {fmtTime(u.last_request_at, locale)}
                 </span>
               </button>
 
@@ -210,17 +214,17 @@ export function AdminUsersTab() {
                 <div className="border-t border-white/[0.06] px-3 sm:px-4 py-3 space-y-4">
                   <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
                     <span>ID: <span className="font-mono text-slate-400">{u.id}</span></span>
-                    <span>注册于 {fmtTime(u.created_at)}</span>
+                    <span>{t("registered")} {fmtTime(u.created_at, locale)}</span>
                     <span>
-                      登录方式：
+                      {t("loginMethods")}
                       <span className="text-slate-300">
-                        {providerLabels.join("、") || "来源未知"}
+                        {providerLabels.join(", ") || t("unknownSource")}
                       </span>
                     </span>
                     {u.subscription_plan_name && (
                       <span>
-                        有效套餐：{u.subscription_plan_name}，至{" "}
-                        {fmtTime(u.subscription_expires_at)}
+                        {t("activePlan")}{u.subscription_plan_name}{t("until")} {" "}
+                        {fmtTime(u.subscription_expires_at, locale)}
                       </span>
                     )}
                   </div>
@@ -228,50 +232,50 @@ export function AdminUsersTab() {
                   <div className="flex flex-wrap gap-2 pt-1">
                     <Button variant="glass" size="sm" disabled={actionBusy}
                       onClick={() => {
-                        if (confirm("重置该用户的 API Key？其所有客户端将立即掉线，需重新登录。")) {
+                        if (confirm(t("resetThisUserSApiKeyAll"))) {
                           runAction(u.id, "reset-key");
                         }
                       }}
                       className="text-xs">
-                      重置密钥
+                      {t("resetKey")}
                     </Button>
                     {u.base_tier === "pro" ? (
                       <Button variant="glass" size="sm" disabled={actionBusy}
                         onClick={() => {
-                          if (confirm("将该用户的手工基础等级降为 Free？有效付费套餐在到期前仍继续生效。")) {
+                          if (confirm(t("setThisUserSManualBaseTier"))) {
                             runAction(u.id, "set-tier", { tier: "free" });
                           }
                         }}
                         className="text-xs">
-                        基础等级降为 Free
+                        {t("setBaseTierToFree")}
                       </Button>
                     ) : (
                       <Button variant="glass" size="sm" disabled={actionBusy}
                         onClick={() => {
-                          if (confirm("将该用户的手工基础等级设为 Pro？")) {
+                          if (confirm(t("setThisUserSManualBaseTier2"))) {
                             runAction(u.id, "set-tier", { tier: "pro" });
                           }
                         }}
                         className="text-xs text-cyan-400">
-                        基础等级设为 Pro
+                        {t("setBaseTierToPro")}
                       </Button>
                     )}
                     {u.banned ? (
                       <Button variant="glass" size="sm" disabled={actionBusy}
                         onClick={() => runAction(u.id, "unban")}
                         className="text-xs text-emerald-400">
-                        解封
+                        {t("unban")}
                       </Button>
                     ) : (
                       <Button variant="glass" size="sm" disabled={actionBusy}
                         onClick={() => {
-                          const reason = prompt("封禁原因（可留空）：");
-                          if (reason !== null && confirm("确认封禁该账号？其所有请求将被拒绝。")) {
+                          const reason = prompt(t("banReasonOptional"));
+                          if (reason !== null && confirm(t("banThisAccountAllRequestsFromIt"))) {
                             runAction(u.id, "ban", reason ? { reason } : undefined);
                           }
                         }}
                         className="text-xs text-red-400">
-                        封禁
+                        {t("ban")}
                       </Button>
                     )}
                   </div>

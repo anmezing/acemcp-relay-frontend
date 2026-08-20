@@ -8,9 +8,12 @@ import { Trophy, Crown, Medal, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { LceBrand } from "@/components/LceBrand";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import type { AppLocale } from "@/i18n/config";
+import { useLocale, useTranslations } from "next-intl";
 
 // 获取最近三天的日期选项（使用 Asia/Shanghai 时区）
-function getDateOptions() {
+function getDateOptions(locale: AppLocale) {
   const options: { date: string; label: string }[] = [];
   const now = new Date();
 
@@ -22,7 +25,7 @@ function getDateOptions() {
       timeZone: "Asia/Shanghai",
     }).format(d);
     // 显示标签使用 M/D 格式（如 1/15）
-    const label = new Intl.DateTimeFormat("zh-CN", {
+    const label = new Intl.DateTimeFormat(locale, {
       timeZone: "Asia/Shanghai",
       month: "numeric",
       day: "numeric",
@@ -45,11 +48,13 @@ interface LeaderboardData {
 }
 
 export default function LeaderboardPage() {
+  const locale = useLocale() as AppLocale;
+  const t = useTranslations("Leaderboard");
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState(false);
-  const dateOptions = useMemo(() => getDateOptions(), []);
+  const dateOptions = useMemo(() => getDateOptions(locale), [locale]);
   const [selectedDate, setSelectedDate] = useState(() => dateOptions[0].date);
 
   useEffect(() => {
@@ -103,7 +108,7 @@ export default function LeaderboardPage() {
   if (isPending) {
     return (
       <div className="min-h-screen bg-[#0a0f1a] flex items-center justify-center">
-        <div className="animate-pulse text-slate-400">加载中...</div>
+        <div className="animate-pulse text-slate-400">{t("loading")}</div>
       </div>
     );
   }
@@ -129,7 +134,7 @@ export default function LeaderboardPage() {
       {/* Header */}
       <header className="border-b border-white/[0.06] bg-[#0a0f1a]/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
-          <Link href="/" className="whitespace-nowrap" aria-label="LCE 首页">
+          <Link href="/" className="whitespace-nowrap" aria-label="LCE">
             <LceBrand iconSize={32} textClassName="text-lg sm:text-xl" priority />
           </Link>
           <nav className="order-3 grid w-full grid-cols-3 sm:order-none sm:flex sm:w-auto sm:items-center sm:gap-1">
@@ -137,31 +142,35 @@ export default function LeaderboardPage() {
               href="/console"
               className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
             >
-              控制台
+              {t("console")}
             </Link>
             <Link
               href="/leaderboard"
               className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-white border-b-2 border-cyan-400"
             >
-              排行榜
+              {t("leaderboard")}
             </Link>
             <Link
               href="/status"
               className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
             >
-              状态监控
+              {t("status")}
             </Link>
           </nav>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => fetchLeaderboard(selectedDate)}
-            disabled={loading}
-            className="text-slate-400 hover:text-white"
-            aria-label="刷新排行榜"
-          >
-            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <LanguageSwitcher />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => fetchLeaderboard(selectedDate)}
+              disabled={loading}
+              className="text-slate-400 hover:text-white"
+              aria-label={t("refreshLeaderboard")}
+              title={t("refreshLeaderboard")}
+            >
+              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -169,8 +178,8 @@ export default function LeaderboardPage() {
       <main className="max-w-2xl mx-auto px-6 py-8">
         <div className="text-center mb-8">
           <Trophy className="w-12 h-12 text-amber-400 mx-auto mb-4" />
-          <h1 className="text-2xl font-semibold text-white mb-2">每日排行榜</h1>
-          <p className="text-slate-400 text-sm mb-4">每半小时更新</p>
+          <h1 className="text-2xl font-semibold text-white mb-2">{t("dailyLeaderboard")}</h1>
+          <p className="text-slate-400 text-sm mb-4">{t("updatedEvery30Minutes")}</p>
 
           {/* 日期选择器 - Segment 风格 */}
           <div className="flex justify-center">
@@ -204,7 +213,7 @@ export default function LeaderboardPage() {
             ))
           ) : data?.entries.length === 0 ? (
             <div className="text-center py-12 text-slate-500">
-              暂无排行数据
+              {t("noRankingDataYet")}
             </div>
           ) : (
             data?.entries.map((entry) => (
@@ -228,13 +237,13 @@ export default function LeaderboardPage() {
                     {entry.userName}
                     {entry.isCurrentUser && (
                       <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-                        你
+                        {t("you")}
                       </span>
                     )}
                   </span>
                 </div>
                 <span className="text-slate-300 font-mono text-sm">
-                  {entry.requestCount.toLocaleString()} 次
+                  {entry.requestCount.toLocaleString(locale)} {t("requests")}
                 </span>
               </div>
             ))

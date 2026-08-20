@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLocale, useTranslations } from "next-intl";
 
 interface LogRow {
   id: string;
@@ -26,6 +27,8 @@ function statusColor(row: LogRow) {
 }
 
 export function AdminLogsTab() {
+  const locale = useLocale();
+  const t = useTranslations("AdminLogs");
   const [logs, setLogs] = useState<LogRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorsOnly, setErrorsOnly] = useState(false);
@@ -75,15 +78,15 @@ export function AdminLogsTab() {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        setNotice(`已清理 ${data.deleted} 条`);
+        setNotice(t("deletedRecords", {p0: data.deleted}));
         await load(1, errorsOnly);
       } catch {
-        setNotice("清理失败，请重试");
+        setNotice(t("cleanupFailedTryAgain"));
       } finally {
         setLoading(false);
       }
     },
-    [load, errorsOnly]
+    [load, errorsOnly, t]
   );
 
   useEffect(() => {
@@ -100,8 +103,8 @@ export function AdminLogsTab() {
       <div className="flex items-center gap-2">
         <div className="inline-flex rounded-lg bg-white/[0.04] border border-white/[0.06] p-0.5">
           {[
-            { label: "全部", value: false },
-            { label: "仅错误", value: true },
+            { label: t("all"), value: false },
+            { label: t("errorsOnly"), value: true },
           ].map((opt) => (
             <button key={opt.label}
               onClick={() => setErrorsOnly(opt.value)}
@@ -123,17 +126,17 @@ export function AdminLogsTab() {
 
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="glass" size="sm" disabled={loading}
-          onClick={() => runMaintenance("clear-logs", 30, "清理 30 天前的请求日志（含错误详情）？此操作不可撤销。")}
+          onClick={() => runMaintenance("clear-logs", 30, t("deleteRequestLogsOlderThan30Days"))}
           className="h-7 px-2.5 text-[11px] text-slate-400">
-          清理 30 天前日志
+          {t("deleteLogsOlderThan30Days")}
         </Button>
         <Button variant="glass" size="sm" disabled={loading}
-          onClick={() => runMaintenance("clear-logs", undefined, "清空全部请求日志（含错误详情）？统计与排行历史快照不受影响，此操作不可撤销。")}
+          onClick={() => runMaintenance("clear-logs", undefined, t("deleteAllRequestLogsIncludingErrorDetails"))}
           className="h-7 px-2.5 text-[11px] text-red-400">
-          清空全部日志
+          {t("deleteAllLogs")}
         </Button>
         {notice && (
-          <span className={cn("text-xs", notice.startsWith("已清理") ? "text-emerald-400" : "text-red-400")}>
+          <span className={cn("text-xs", /已清理|deleted/i.test(notice) ? "text-emerald-400" : "text-red-400")}>
             {notice}
           </span>
         )}
@@ -146,7 +149,7 @@ export function AdminLogsTab() {
           ))}
         </div>
       ) : logs.length === 0 ? (
-        <p className="text-slate-500 text-sm py-8 text-center">暂无日志</p>
+        <p className="text-slate-500 text-sm py-8 text-center">{t("noLogs")}</p>
       ) : (
         <div className="space-y-1.5">
           {logs.map((log) => (
@@ -168,7 +171,7 @@ export function AdminLogsTab() {
                 </span>
               )}
               <span className="text-slate-600 text-[10px] whitespace-nowrap">
-                {new Date(log.request_timestamp).toLocaleString("zh-CN")}
+                {new Date(log.request_timestamp).toLocaleString(locale)}
               </span>
             </div>
           ))}
@@ -178,12 +181,12 @@ export function AdminLogsTab() {
       <div className="flex items-center justify-center gap-3">
         <Button variant="glass" size="sm" disabled={loading || page <= 1}
           onClick={() => fetchLogs(page - 1, errorsOnly)} className="text-xs">
-          上一页
+          {t("previous")}
         </Button>
-        <span className="text-slate-500 text-xs">第 {page} 页</span>
+        <span className="text-slate-500 text-xs">{t("page", {p0: page})}</span>
         <Button variant="glass" size="sm" disabled={loading || !hasMore}
           onClick={() => fetchLogs(page + 1, errorsOnly)} className="text-xs">
-          下一页
+          {t("next")}
         </Button>
       </div>
     </div>

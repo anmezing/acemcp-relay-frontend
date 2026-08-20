@@ -2,16 +2,16 @@
 // docs/contracts/cloud-protocol.json 的 cloudToolSurface 契约钉住
 // （见 lib/agent-rules.contract.test.ts），改名/增删必须三仓库同步。
 export const CLOUD_TOOLS = [
-  { name: "codebase-retrieval", desc: "语义检索项目代码上下文" },
-  { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析" },
-  { name: "codebase_git_context", desc: "Git 状态、diff、提交历史、blame" },
-  { name: "codebase_review_changes", desc: "变更评审与检索计划" },
+  { name: "codebase-retrieval", desc: "语义检索项目代码上下文", descEn: "Semantic retrieval for project code context" },
+  { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析", descEn: "Symbol calls and dependency analysis" },
+  { name: "codebase_git_context", desc: "Git 状态、diff、提交历史、blame", descEn: "Git status, diffs, history, and blame" },
+  { name: "codebase_review_changes", desc: "变更评审与检索计划", descEn: "Change review and retrieval planning" },
 ] as const;
 
 export const REMOTE_TOOLS = [
-  { name: "codebase-retrieval", desc: "语义检索项目代码上下文" },
-  { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析" },
-  { name: "codebase_index", desc: "首次与增量建立项目代码索引" },
+  { name: "codebase-retrieval", desc: "语义检索项目代码上下文", descEn: "Semantic retrieval for project code context" },
+  { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析", descEn: "Symbol calls and dependency analysis" },
+  { name: "codebase_index", desc: "首次与增量建立项目代码索引", descEn: "Initial and incremental project indexing" },
 ] as const;
 
 export const AGENT_RULES_CLOUD = `## 代码检索（LCE）
@@ -29,3 +29,19 @@ export const AGENT_RULES_REMOTE = `## 代码检索（LCE）
 - 分析调用关系与修改影响用 \`codebase_symbol_graph\`。
 - 本地文件读取和 Git 状态/历史仍使用当前编码 Agent 自身工具；不要把 .env、密钥、二进制、依赖目录或构建产物提交到索引。
 - 仅当 LCE 工具不可用，或需要精确的正则 / 字面量匹配时，才退回本地全文搜索。`;
+
+export const AGENT_RULES_CLOUD_EN = `## Code Retrieval (LCE)
+
+- Always use \`codebase-retrieval\` first when finding, understanding, or locating code. Describe the feature, symbol, or logic in natural language instead of starting with grep or browsing files.
+- Use \`codebase_symbol_graph\` for symbol definitions, references, call chains, dependencies, and change impact.
+- Use \`codebase_git_context\` for Git status, diffs, commit history, blame, and branch context.
+- Use \`codebase_review_changes\` for review ranges, risks, retrieval plans, and test plans.
+- Fall back to local text search only when LCE is unavailable or exact regex/literal matching is required.`;
+
+export const AGENT_RULES_REMOTE_EN = `## Code Retrieval (LCE)
+
+- When first working with a project or after code changes, call \`codebase_index\`: submit the complete list of text files, upload only files requested by the server, and finish after every batch succeeds.
+- Always use \`codebase-retrieval\` first when finding, understanding, or locating code. Describe the feature, symbol, or logic in natural language instead of starting with grep or browsing files.
+- Use \`codebase_symbol_graph\` for call relationships and change impact.
+- Continue to use the coding agent's local tools for file reads and Git status/history. Never submit .env files, keys, binaries, dependency directories, or build output to the index.
+- Fall back to local text search only when LCE is unavailable or exact regex/literal matching is required.`;

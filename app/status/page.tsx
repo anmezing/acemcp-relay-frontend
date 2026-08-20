@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LceBrand } from "@/components/LceBrand";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { useLocale, useTranslations } from "next-intl";
 
 interface HealthCheck {
   id: number;
@@ -29,6 +31,8 @@ interface HistoryData {
 }
 
 export default function StatusPage() {
+  const locale = useLocale();
+  const t = useTranslations("Status");
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
   const [history, setHistory] = useState<HealthCheck[]>([]);
@@ -183,14 +187,14 @@ export default function StatusPage() {
   if (isPending) {
     return (
       <div className="min-h-screen bg-[#0a0f1a] flex items-center justify-center">
-        <div className="animate-pulse text-slate-400">加载中...</div>
+        <div className="animate-pulse text-slate-400">{t("loading")}</div>
       </div>
     );
   }
 
   if (!session) return null;
 
-  const overallStatus = latest?.status === "success" ? "正常" : latest?.status === "error" ? "异常" : "检测中";
+  const overallStatus = latest?.status === "success" ? t("operational") : latest?.status === "error" ? t("degraded") : t("checking");
   const statusColor = latest?.status === "success" ? "text-emerald-400" : latest?.status === "error" ? "text-red-400" : "text-slate-400";
   const statusBgColor = latest?.status === "success" ? "bg-emerald-500/15 border-emerald-500/30" : latest?.status === "error" ? "bg-red-500/15 border-red-500/30" : "bg-slate-500/15 border-slate-500/30";
   const availabilityPct = stats && stats.totalCount > 0 ? ((stats.successCount / stats.totalCount) * 100).toFixed(2) : "—";
@@ -216,7 +220,7 @@ export default function StatusPage() {
       {/* Header */}
       <header className="border-b border-white/[0.06] bg-[#0a0f1a]/80 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
-          <Link href="/" className="whitespace-nowrap" aria-label="LCE 首页">
+          <Link href="/" className="whitespace-nowrap" aria-label="LCE">
             <LceBrand iconSize={32} textClassName="text-lg sm:text-xl" priority />
           </Link>
           <nav className="order-3 grid w-full grid-cols-3 sm:order-none sm:flex sm:w-auto sm:items-center sm:gap-1">
@@ -224,31 +228,35 @@ export default function StatusPage() {
               href="/console"
               className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
             >
-              控制台
+              {t("console")}
             </Link>
             <Link
               href="/leaderboard"
               className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
             >
-              排行榜
+              {t("leaderboard")}
             </Link>
             <Link
               href="/status"
               className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-white border-b-2 border-cyan-400"
             >
-              状态监控
+              {t("status")}
             </Link>
           </nav>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => fetchData()}
-            disabled={loading}
-            className="text-slate-400 hover:text-white"
-            aria-label="刷新状态"
-          >
-            <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <LanguageSwitcher />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => fetchData()}
+              disabled={loading}
+              className="text-slate-400 hover:text-white"
+              aria-label={t("refreshStatus")}
+              title={t("refreshStatus")}
+            >
+              <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -301,7 +309,7 @@ export default function StatusPage() {
               <div className="rounded-xl border border-white/[0.06] bg-[#0d1424]/60 backdrop-blur-xl p-5">
                 <div className="flex items-center gap-2 text-slate-400 mb-3">
                   <Zap className="w-4 h-4" />
-                  <span className="text-sm">请求延迟</span>
+                  <span className="text-sm">{t("requestLatency")}</span>
                 </div>
                 <div className="text-3xl font-semibold text-white font-mono">
                   {latest?.codebaseRetrievalMs != null ? (
@@ -317,7 +325,7 @@ export default function StatusPage() {
               <div className="rounded-xl border border-white/[0.06] bg-[#0d1424]/60 backdrop-blur-xl p-5">
                 <div className="flex items-center gap-2 text-slate-400 mb-3">
                   <Radio className="w-4 h-4" />
-                  <span className="text-sm">端点 PING</span>
+                  <span className="text-sm">{t("endpointPing")}</span>
                 </div>
                 <div className="text-3xl font-semibold text-white font-mono">
                   {latest?.tcpPingMs != null ? (
@@ -335,7 +343,7 @@ export default function StatusPage() {
             {/* Status + Availability */}
             <div className="rounded-xl border border-white/[0.06] bg-[#0d1424]/60 backdrop-blur-xl p-6">
               <div className="flex items-center justify-between mb-5">
-                <span className="text-sm text-slate-400">上游状态</span>
+                <span className="text-sm text-slate-400">{t("upstreamStatus")}</span>
                 <span className={cn("text-sm font-medium", statusColor)}>
                   {overallStatus}
                 </span>
@@ -343,9 +351,9 @@ export default function StatusPage() {
               <div className="border-t border-white/[0.04] pt-4">
                 <div className="flex items-end justify-between">
                   <div>
-                    <div className="text-sm text-slate-400 mb-1">可用性 (7 天)</div>
+                    <div className="text-sm text-slate-400 mb-1">{t("availability7Days")}</div>
                     <div className="text-sm text-slate-500">
-                      {stats ? `${stats.successCount}/${stats.totalCount} 成功` : "—"}
+                      {stats ? `${stats.successCount}/${stats.totalCount} ${t("successful")}` : "—"}
                     </div>
                   </div>
                   <div className={cn("text-2xl font-semibold font-mono", availabilityColor)}>
@@ -359,12 +367,12 @@ export default function StatusPage() {
             <div className="rounded-xl border border-white/[0.06] bg-[#0d1424]/60 backdrop-blur-xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <span className="text-xs font-semibold tracking-normal sm:tracking-wider text-slate-400 uppercase whitespace-nowrap">
-                  History (60pts)
+                  {t("history60Checks")}
                 </span>
                 <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-slate-500 whitespace-nowrap ml-3">
                   <Clock className="w-3.5 h-3.5 shrink-0" />
                   <span className="uppercase font-medium">
-                    {probing ? "检测中..." : countdown != null ? `Next in ${countdown}s` : "Waiting..."}
+                    {probing ? t("checking2") : countdown != null ? t("nextInS", {p0: countdown}) : t("waiting")}
                   </span>
                   {probing && (
                     <RefreshCw className="w-3 h-3 animate-spin text-cyan-400 ml-1" />
@@ -437,10 +445,10 @@ export default function StatusPage() {
                                   ? "bg-emerald-500/15 text-emerald-400"
                                   : "bg-red-500/15 text-red-400"
                               )}>
-                                {isSuccess ? "正常" : "异常"}
+                                {isSuccess ? t("operational") : t("degraded")}
                               </span>
                               <span className="text-[11px] text-slate-500 font-mono">
-                                {new Date(check.createdAt).toLocaleString("zh-CN")}
+                                {new Date(check.createdAt).toLocaleString(locale)}
                               </span>
                             </div>
                             <div className="border-t border-white/[0.06] pt-2 space-y-1.5">
@@ -460,13 +468,13 @@ export default function StatusPage() {
                             <div className="border-t border-white/[0.06] mt-2 pt-2">
                               <span className="text-[11px] text-slate-500">
                                 {isSuccess
-                                  ? `验证通过${check.codebaseRetrievalMs != null ? ` (${check.codebaseRetrievalMs.toLocaleString()}ms)` : ""}`
-                                  : check.errorMessage || "验证失败"}
+                                  ? t("checkPassed", {p0: check.codebaseRetrievalMs != null ? ` (${check.codebaseRetrievalMs.toLocaleString()}ms)` : ""})
+                                  : check.errorMessage || t("checkFailed")}
                               </span>
                             </div>
                           </>
                         ) : (
-                          <div className="text-xs text-slate-500 text-center whitespace-nowrap">暂无数据</div>
+                          <div className="text-xs text-slate-500 text-center whitespace-nowrap">{t("noData")}</div>
                         )
                       )}
                     </div>
@@ -475,15 +483,15 @@ export default function StatusPage() {
               </div>
 
               <div className="flex items-center justify-between text-[10px] text-slate-600 uppercase tracking-wider">
-                <span>Past</span>
-                <span>Now</span>
+                <span>{t("past")}</span>
+                <span>{t("now")}</span>
               </div>
             </div>
 
             {/* Error message (if any) */}
             {latest?.status === "error" && latest.errorMessage && (
               <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
-                <div className="text-xs text-red-400 font-medium mb-1">最近错误</div>
+                <div className="text-xs text-red-400 font-medium mb-1">{t("latestError")}</div>
                 <div className="text-sm text-red-300/80 font-mono">
                   {latest.errorMessage}
                 </div>

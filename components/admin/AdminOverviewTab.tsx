@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 interface Overview {
   users: number;
@@ -30,6 +31,7 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
 }
 
 export function AdminOverviewTab() {
+  const t = useTranslations("AdminOverview");
   const [overview, setOverview] = useState<Overview | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -47,9 +49,9 @@ export function AdminOverviewTab() {
       setError("");
     } catch {
       if (signal?.aborted) return;
-      setError("加载失败，请重试");
+      setError(t("failedToLoadTryAgain"));
     }
-  }, []);
+  }, [t]);
 
   const fetchData = useCallback(() => {
     setLoading(true);
@@ -80,7 +82,7 @@ export function AdminOverviewTab() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <p className="text-slate-500 text-xs">近 24 小时与累计概况</p>
+        <p className="text-slate-500 text-xs">{t("last24HoursAndAllTimeTotals")}</p>
         <Button variant="ghost" size="sm" onClick={fetchData} disabled={loading}
           className="text-slate-400 hover:text-white">
           <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
@@ -91,13 +93,13 @@ export function AdminOverviewTab() {
 
       {overview && (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-          <StatCard label="注册用户" value={overview.users} />
-          <StatCard label="活跃用户 (24h)" value={overview.activeUsers24h} accent="text-cyan-400" />
-          <StatCard label="请求量 (24h)" value={overview.requests24h} accent="text-cyan-400" />
-          <StatCard label="累计请求" value={overview.totalRequests} />
-          <StatCard label="错误 (24h)" value={overview.errors24h}
+          <StatCard label={t("registeredUsers")} value={overview.users} />
+          <StatCard label={t("activeUsers24h")} value={overview.activeUsers24h} accent="text-cyan-400" />
+          <StatCard label={t("requests24h")} value={overview.requests24h} accent="text-cyan-400" />
+          <StatCard label={t("totalRequests")} value={overview.totalRequests} />
+          <StatCard label={t("errors24h")} value={overview.errors24h}
             accent={overview.errors24h > 0 ? "text-red-400" : "text-slate-200"} />
-          <StatCard label="封禁账号" value={overview.banned}
+          <StatCard label={t("bannedAccounts")} value={overview.banned}
             accent={overview.banned > 0 ? "text-red-400" : "text-slate-200"} />
         </div>
       )}

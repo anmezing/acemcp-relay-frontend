@@ -41,7 +41,7 @@ import { AdminSettingsTab } from "@/components/admin/AdminSettingsTab";
 import { AdminOrgsTab } from "@/components/admin/AdminOrgsTab";
 import { OrgTab } from "@/components/OrgTab";
 import { OrgKeysCards } from "@/components/OrgKeysCards";
-import { AGENT_RULES_CLOUD, AGENT_RULES_REMOTE, CLOUD_TOOLS, REMOTE_TOOLS } from "@/lib/agent-rules";
+import { AGENT_RULES_CLOUD, AGENT_RULES_CLOUD_EN, AGENT_RULES_REMOTE, AGENT_RULES_REMOTE_EN, CLOUD_TOOLS, REMOTE_TOOLS } from "@/lib/agent-rules";
 import { UserModelConfigTab } from "@/components/UserModelConfigTab";
 import { PlansTab } from "@/components/PlansTab";
 import { AdminPlansTab } from "@/components/admin/AdminPlansTab";
@@ -49,6 +49,8 @@ import { AdminMenuTab } from "@/components/admin/AdminMenuTab";
 import { DEFAULT_MENU_VISIBILITY, ConsoleMenuId } from "@/lib/menu-config";
 import { LceBrand } from "@/components/LceBrand";
 import { authProviderLabel } from "@/lib/auth-provider";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { useLocale, useTranslations } from "next-intl";
 
 type Tab =
   | "keys" | "plans" | "docs" | "profile" | "model-config" | "team"
@@ -57,50 +59,50 @@ type Tab =
   | "system-settings" | "system-logs" | "menu-admin";
 
 interface SidebarSection {
-  label: string;
+  id: "personal" | "data" | "admin" | "system";
   admin?: boolean;
-  items: { id: Tab; label: string; icon: React.ReactNode }[];
+  items: { id: Tab; icon: React.ReactNode }[];
 }
 
 const ALL_SECTIONS: SidebarSection[] = [
   {
-    label: "我的",
+    id: "personal",
     items: [
-      { id: "keys", label: "密钥管理", icon: <Key className="w-4 h-4" /> },
-      { id: "plans", label: "套餐与订阅", icon: <CreditCard className="w-4 h-4" /> },
-      { id: "team", label: "我的组织", icon: <Building2 className="w-4 h-4" /> },
-      { id: "docs", label: "配置说明", icon: <FileText className="w-4 h-4" /> },
-      { id: "model-config", label: "模型设置", icon: <Cpu className="w-4 h-4" /> },
-      { id: "profile", label: "用户信息", icon: <User className="w-4 h-4" /> },
+      { id: "keys", icon: <Key className="w-4 h-4" /> },
+      { id: "plans", icon: <CreditCard className="w-4 h-4" /> },
+      { id: "team", icon: <Building2 className="w-4 h-4" /> },
+      { id: "docs", icon: <FileText className="w-4 h-4" /> },
+      { id: "model-config", icon: <Cpu className="w-4 h-4" /> },
+      { id: "profile", icon: <User className="w-4 h-4" /> },
     ],
   },
   {
-    label: "数据",
+    id: "data",
     items: [
-      { id: "index", label: "索引管理", icon: <Database className="w-4 h-4" /> },
-      { id: "logs", label: "请求日志", icon: <ScrollText className="w-4 h-4" /> },
+      { id: "index", icon: <Database className="w-4 h-4" /> },
+      { id: "logs", icon: <ScrollText className="w-4 h-4" /> },
     ],
   },
   {
-    label: "管理",
+    id: "admin",
     admin: true,
     items: [
-      { id: "org", label: "组织概览", icon: <Building2 className="w-4 h-4" /> },
-      { id: "users", label: "用户管理", icon: <Users className="w-4 h-4" /> },
-      { id: "call-stats", label: "调用统计", icon: <Coins className="w-4 h-4" /> },
-      { id: "quota", label: "配额管理", icon: <Gauge className="w-4 h-4" /> },
-      { id: "admin-orgs", label: "组织管理", icon: <Building2 className="w-4 h-4" /> },
-      { id: "plans-admin", label: "套餐管理", icon: <Package className="w-4 h-4" /> },
-      { id: "models", label: "模型管理", icon: <Cpu className="w-4 h-4" /> },
+      { id: "org", icon: <Building2 className="w-4 h-4" /> },
+      { id: "users", icon: <Users className="w-4 h-4" /> },
+      { id: "call-stats", icon: <Coins className="w-4 h-4" /> },
+      { id: "quota", icon: <Gauge className="w-4 h-4" /> },
+      { id: "admin-orgs", icon: <Building2 className="w-4 h-4" /> },
+      { id: "plans-admin", icon: <Package className="w-4 h-4" /> },
+      { id: "models", icon: <Cpu className="w-4 h-4" /> },
     ],
   },
   {
-    label: "系统",
+    id: "system",
     admin: true,
     items: [
-      { id: "menu-admin", label: "菜单管理", icon: <Settings className="w-4 h-4" /> },
-      { id: "system-settings", label: "系统设置", icon: <Settings className="w-4 h-4" /> },
-      { id: "system-logs", label: "系统日志", icon: <Terminal className="w-4 h-4" /> },
+      { id: "menu-admin", icon: <Settings className="w-4 h-4" /> },
+      { id: "system-settings", icon: <Settings className="w-4 h-4" /> },
+      { id: "system-logs", icon: <Terminal className="w-4 h-4" /> },
     ],
   },
 ];
@@ -157,9 +159,8 @@ interface UserInfo {
   authProviders: string[];
 }
 
-function formatGithubAccountAge(createdAt: string): string {
-  const days = Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000);
-  return `${days} 天`;
+function githubAccountAgeDays(createdAt: string): number {
+  return Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000);
 }
 
 interface KeyInfo {
@@ -347,6 +348,9 @@ function useCopyFeedback(duration = 2000): {
 }
 
 export default function ConsolePage() {
+  const locale = useLocale();
+  const t = useTranslations("Console");
+  const tNavigation = useTranslations("Navigation");
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("keys");
@@ -407,7 +411,7 @@ export default function ConsolePage() {
     setLoading(true);
     try {
       const res = await fetch("/api/mcp-config", { method: "POST" });
-      if (!res.ok) throw new Error(`获取 MCP 配置失败（HTTP ${res.status}）`);
+      if (!res.ok) throw new Error(t("failedToGetMcpConfiguration", { status: res.status }));
       const data = await res.json();
       const key = data.apiKey as string;
       setFullKey(key);
@@ -428,7 +432,7 @@ export default function ConsolePage() {
     } catch (error) {
       console.error("一键复制配置失败:", error);
       setConfigError(
-        error instanceof Error ? error.message : "复制失败，请重试"
+        error instanceof Error ? error.message : t("copyFailedTryAgain")
       );
     } finally {
       setLoading(false);
@@ -476,11 +480,11 @@ export default function ConsolePage() {
         const message =
           data && typeof data === "object" && "error" in data && typeof data.error === "string"
             ? data.error
-            : `获取索引统计失败（HTTP ${res.status}）`;
+            : t("failedToLoadIndexStatisticsHttp", { status: res.status });
         throw new Error(message);
       }
       if (!isTenantStats(data)) {
-        throw new Error("索引统计响应格式异常");
+        throw new Error(t("invalidIndexStatisticsResponse"));
       }
 
       setTenantStats(data);
@@ -488,12 +492,12 @@ export default function ConsolePage() {
     } catch (error) {
       console.error("获取索引统计失败:", error);
       if (!background) {
-        setTenantStatsError(error instanceof Error ? error.message : "获取索引统计失败");
+        setTenantStatsError(error instanceof Error ? error.message : t("failedToLoadIndexStatistics"));
       }
     } finally {
       if (!background) setTenantStatsLoading(false);
     }
-  }, [rootsOrg]);
+  }, [rootsOrg, t]);
 
   const fetchRoots = useCallback(async (background = false) => {
     if (!background) {
@@ -511,7 +515,7 @@ export default function ConsolePage() {
         const message =
           data && typeof data === "object" && "error" in data && typeof data.error === "string"
             ? data.error
-            : `获取索引列表失败（HTTP ${res.status}）`;
+            : t("failedToLoadIndexListHttp", { status: res.status });
         throw new Error(message);
       }
       if (
@@ -519,7 +523,7 @@ export default function ConsolePage() {
         !Array.isArray((data as { roots: unknown }).roots) ||
         !(data as { roots: unknown[] }).roots.every(isRelayRoot)
       ) {
-        throw new Error("索引列表响应格式异常");
+        throw new Error(t("invalidIndexListResponse"));
       }
 
       setRoots((data as { roots: RelayRoot[] }).roots);
@@ -529,12 +533,12 @@ export default function ConsolePage() {
     } catch (error) {
       console.error("获取索引列表失败:", error);
       if (!background) {
-        setRootsError(error instanceof Error ? error.message : "获取索引列表失败");
+        setRootsError(error instanceof Error ? error.message : t("failedToLoadIndexList"));
       }
     } finally {
       if (!background) setRootsLoading(false);
     }
-  }, [rootsOrg]);
+  }, [rootsOrg, t]);
 
   const handleDeleteRoot = useCallback(async () => {
     if (!rootPendingDelete) return;
@@ -553,24 +557,24 @@ export default function ConsolePage() {
       if (res.ok) {
         setDeleteRootResult({
           success: true,
-          message: `已删除索引（清理 ${data.deleted_files ?? 0} 个文件），该项目下次使用时需重新索引`,
+          message: t("indexDeleted", { count: data.deleted_files ?? 0 }),
         });
         await Promise.all([fetchRoots(), fetchTenantStats(false, rootsOrg)]);
       } else if (res.status === 409) {
         setDeleteRootResult({
           success: false,
-          message: data.error || "该项目正在索引中，请等待完成后再删除",
+          message: data.error || t("projectIsBeingIndexed"),
         });
       } else {
-        setDeleteRootResult({ success: false, message: data.error || "删除失败" });
+        setDeleteRootResult({ success: false, message: data.error || t("deleteFailed") });
       }
     } catch {
-      setDeleteRootResult({ success: false, message: "网络错误" });
+      setDeleteRootResult({ success: false, message: t("networkError") });
     } finally {
       setDeleteRootLoading(false);
       setRootPendingDelete(null);
     }
-  }, [rootPendingDelete, rootsOrg, fetchRoots, fetchTenantStats]);
+  }, [rootPendingDelete, rootsOrg, fetchRoots, fetchTenantStats, t]);
 
   const fetchIsAdmin = useCallback(async () => {
     try {
@@ -594,9 +598,11 @@ export default function ConsolePage() {
   const sections = useMemo(
     () => (isAdmin ? ALL_SECTIONS : ALL_SECTIONS.filter((s) => !s.admin)).map((section) => ({
       ...section,
-      items: isAdmin ? section.items : section.items.filter((item) => menuVisibility[item.id as ConsoleMenuId] !== false),
+      label: tNavigation(`sections.${section.id}`),
+      items: (isAdmin ? section.items : section.items.filter((item) => menuVisibility[item.id as ConsoleMenuId] !== false))
+        .map((item) => ({ ...item, label: tNavigation(`menus.${item.id}`) })),
     })).filter((section) => section.items.length > 0),
-    [isAdmin, menuVisibility]
+    [isAdmin, menuVisibility, tNavigation]
   );
   const mobileItems = useMemo(
     () => sections.flatMap((section) => section.items),
@@ -868,14 +874,14 @@ export default function ConsolePage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setClearResult({ success: true, message: data.message || "索引和日志已清除" });
+        setClearResult({ success: true, message: data.message || t("indexesAndLogsCleared") });
         setLogsData(null);
         await fetchTenantStats(false, rootsOrg);
       } else {
-        setClearResult({ success: false, message: data.error || "清除失败" });
+        setClearResult({ success: false, message: data.error || t("clearFailed") });
       }
     } catch {
-      setClearResult({ success: false, message: "网络错误" });
+      setClearResult({ success: false, message: t("networkError") });
     } finally {
       setClearLoading(false);
       setShowClearConfirm(false);
@@ -907,7 +913,7 @@ export default function ConsolePage() {
       {/* Header */}
       <header className="relative border-b border-white/[0.06] flex-shrink-0 bg-[#0a0f1a]/80 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2">
-          <Link href="/" className="whitespace-nowrap" aria-label="LCE 首页">
+          <Link href="/" className="whitespace-nowrap" aria-label="LCE">
             <LceBrand iconSize={32} textClassName="text-lg sm:text-xl" priority />
           </Link>
           <nav className="order-3 flex w-full justify-center sm:order-none sm:w-auto sm:items-center sm:gap-1">
@@ -916,7 +922,7 @@ export default function ConsolePage() {
               href="/console"
               className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-white border-b-2 border-cyan-400"
             >
-              控制台
+              {t("console")}
             </Link>
             )}
             {(isAdmin || menuVisibility["top-leaderboard"] !== false) && (
@@ -924,7 +930,7 @@ export default function ConsolePage() {
               href="/leaderboard"
               className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
             >
-              排行榜
+              {t("leaderboard")}
             </Link>
             )}
             {(isAdmin || menuVisibility["top-status"] !== false) && (
@@ -932,19 +938,23 @@ export default function ConsolePage() {
               href="/status"
               className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
             >
-              状态监控
+              {t("status")}
             </Link>
             )}
           </nav>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowLogoutConfirm(true)}
-            className="text-slate-400 hover:text-red-400 hover:bg-red-500/10"
-            aria-label="退出登录"
-          >
-            <LogOut className="w-4 h-4" />
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <LanguageSwitcher />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowLogoutConfirm(true)}
+              className="text-slate-400 hover:text-red-400 hover:bg-red-500/10"
+              aria-label={t("logOut")}
+              title={t("logOut")}
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -956,7 +966,7 @@ export default function ConsolePage() {
               {mobileMenuOpen && (
                 <button
                   type="button"
-                  aria-label="关闭控制台菜单"
+                  aria-label={t("closeConsoleMenu")}
                   className="fixed inset-0 z-40 cursor-default bg-black/20"
                   onClick={() => setMobileMenuOpen(false)}
                 />
@@ -980,7 +990,7 @@ export default function ConsolePage() {
               {mobileMenuOpen && (
                 <div
                   role="menu"
-                  aria-label="控制台页面"
+                  aria-label={t("consolePages")}
                   className="absolute left-0 right-0 top-full z-50 mt-2 max-h-[min(60dvh,28rem)] overflow-y-auto rounded-lg border border-white/[0.1] bg-[#111827] p-1.5 shadow-2xl shadow-black/50"
                 >
                   {mobileItems.map((item) => (
@@ -1040,7 +1050,7 @@ export default function ConsolePage() {
                 <div className="bg-[#0d1424]/60 md:backdrop-blur-xl border border-white/[0.06] rounded-xl sm:rounded-2xl p-4 sm:p-6 md:h-full flex flex-col">
                   {/* 密钥管理 */}
                   <TabsContent value="keys" className="animate-tab-fade-in m-0 flex-1">
-                    <h2 className="text-lg font-medium text-white mb-6">密钥管理</h2>
+                    <h2 className="text-lg font-medium text-white mb-6">{t("apiKeys")}</h2>
 
                     {keyInfo === null ? (
                       <div className="text-center py-8">
@@ -1059,7 +1069,7 @@ export default function ConsolePage() {
                                 <p className="text-slate-500 text-xs mb-1">
                                   API Key
                                   <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded border bg-white/[0.04] text-slate-400 border-white/[0.1] text-[10px]">
-                                    个人
+                                    {t("personal")}
                                   </span>
                                 </p>
                                 <p className="text-white font-mono text-sm truncate">
@@ -1073,7 +1083,7 @@ export default function ConsolePage() {
                                   onClick={handleShowKey}
                                 >
                                   {showKey ? <EyeOff className="w-4 h-4 mr-1" /> : <Eye className="w-4 h-4 mr-1" />}
-                                  {showKey ? "隐藏" : "显示"}
+                                  {showKey ? t("hide") : t("show")}
                                 </Button>
                                 <Button
                                   variant="glass"
@@ -1081,17 +1091,17 @@ export default function ConsolePage() {
                                   onClick={handleCopy}
                                 >
                                   <Copy className="w-4 h-4 mr-1" />
-                                  {copied ? "已复制" : "复制"}
+                                  {copied ? t("copied") : t("copy")}
                                 </Button>
                               </div>
                             </div>
                             {keyInfo.createdAt && (
                               <p className="text-slate-600 text-xs mt-3">
-                                创建于 {new Date(keyInfo.createdAt).toLocaleString("zh-CN")}
+                                {t("created")} {new Date(keyInfo.createdAt).toLocaleString(locale)}
                               </p>
                             )}
                             <p className="text-slate-600 text-xs mt-1">
-                              当前套餐：
+                              {t("currentPlan")}
                               <span className={keyInfo.tier === "pro" ? "text-cyan-400" : "text-slate-400"}>
                                 {keyInfo.tier === "pro" ? "Pro" : "Free"}
                               </span>
@@ -1105,10 +1115,10 @@ export default function ConsolePage() {
                           onClick={() => setShowResetConfirm(true)}
                           disabled={loading}
                         >
-                          {loading ? "处理中..." : "重置密钥"}
+                          {loading ? t("processing") : t("resetKey")}
                         </Button>
                         <p className="text-slate-600 text-xs">
-                          重置后旧密钥将立即失效，请谨慎操作
+                          {t("theOldKeyWillStopWorkingImmediately")}
                         </p>
 
                         {/* 组织密钥列表 */}
@@ -1119,16 +1129,16 @@ export default function ConsolePage() {
                         {loading ? (
                           <div className="space-y-4">
                             <Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" />
-                            <p className="text-slate-400">正在生成密钥...</p>
+                            <p className="text-slate-400">{t("generatingKey")}</p>
                           </div>
                         ) : (
                           <>
-                            <p className="text-slate-500 mb-4">您还没有 API Key</p>
+                            <p className="text-slate-500 mb-4">{t("youDoNotHaveAnApiKey")}</p>
                             <Button
                               variant="gradient"
                               onClick={handleGenerateKey}
                             >
-                              生成密钥
+                              {t("generateKey")}
                             </Button>
                           </>
                         )}
@@ -1138,7 +1148,7 @@ export default function ConsolePage() {
 
                   {/* 配置说明 */}
                   <TabsContent value="docs" className="flex flex-col flex-1 min-h-0 animate-tab-fade-in md:overflow-y-auto scrollbar-thin md:pr-2 m-0">
-                    <h2 className="text-lg font-medium text-white mb-6">配置说明</h2>
+                    <h2 className="text-lg font-medium text-white mb-6">{t("setupGuide")}</h2>
 
                     <div className="space-y-6">
                       {/* Step 1: MCP Config */}
@@ -1148,18 +1158,18 @@ export default function ConsolePage() {
                             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
                               1
                             </span>
-                            <h3 className="text-white font-medium">添加 MCP 服务器</h3>
+                            <h3 className="text-white font-medium">{t("addMcpServer")}</h3>
                           </div>
 
                           {/* Mode toggle: cloud / remote */}
                           <div
                             role="tablist"
-                            aria-label="MCP 接入模式"
+                            aria-label={t("mcpConnectionMode")}
                             className="mb-3 grid grid-cols-2 rounded-lg border border-white/[0.08] bg-[#0a0f1a] p-1"
                           >
                             {[
-                              { value: "cloud" as const, label: "Cloud 模式（推荐）" },
-                              { value: "remote" as const, label: "远程 HTTP 模式" },
+                              { value: "cloud" as const, label: t("cloudModeRecommended") },
+                              { value: "remote" as const, label: t("remoteHttpMode") },
                             ].map((option) => (
                               <button
                                 key={option.value}
@@ -1185,18 +1195,18 @@ export default function ConsolePage() {
 
                           <p className="text-slate-400 text-sm mb-4 leading-relaxed">
                             {mcpConfigMode === "cloud"
-                              ? "复制配置到 IDE 即可使用，客户端由 npx 自动获取并保持最新（需要 Node.js 20+）。选择格式后点击「一键复制」生成密钥："
-                              : "Cursor、Claude Code 和 Codex 均可直接连接远程 MCP。选择格式后点击「一键复制」生成密钥："}
+                              ? t("copyTheConfigurationIntoYourIdeNpx")
+                              : t("cursorClaudeCodeAndCodexCanConnect")}
                           </p>
                           {mcpConfigMode === "cloud" && (
                             <div className="mb-4 rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] p-3 text-sm text-slate-400">
-                              <p className="text-slate-300">可选的全局安装方式：</p>
+                              <p className="text-slate-300">{t("optionalGlobalInstallation")}</p>
                               <code className="mt-2 block overflow-x-auto whitespace-pre font-mono text-xs text-cyan-300">
                                 npm install -g @anmezing/lce-cloud@latest
                               </code>
                               <p className="mt-2 text-xs text-slate-500">
-                                预装后可将配置中的 <code className="text-slate-300">npx</code> 改为{" "}
-                                <code className="text-slate-300">lce-cloud</code>；默认 npx 配置无需额外安装。
+                                {t("afterInstallationReplace")} <code className="text-slate-300">npx</code> {t("with")} {" "}
+                                <code className="text-slate-300">lce-cloud</code>{t("theDefaultNpxConfigurationNeedsNoInstallation")}
                               </p>
                             </div>
                           )}
@@ -1204,7 +1214,7 @@ export default function ConsolePage() {
                           {/* Format toggle: JSON / TOML */}
                           <div
                             role="tablist"
-                            aria-label="MCP 客户端配置格式"
+                            aria-label={t("mcpClientConfigurationFormat")}
                             className="mb-3 grid grid-cols-2 rounded-lg border border-white/[0.08] bg-[#0a0f1a] p-1"
                           >
                             {[
@@ -1245,7 +1255,7 @@ export default function ConsolePage() {
                               disabled={loading}
                               className="absolute top-2 right-2"
                             >
-                              {copiedConfig ? "已复制" : loading ? "生成中..." : "一键复制"}
+                              {copiedConfig ? t("copied") : loading ? t("generating") : t("copyConfig")}
                             </Button>
                           </div>
                           {configError && (
@@ -1261,16 +1271,16 @@ export default function ConsolePage() {
                             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
                               2
                             </span>
-                            <h3 className="text-white font-medium">可用工具</h3>
+                            <h3 className="text-white font-medium">{t("availableTools")}</h3>
                           </div>
                           <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-                            连接后，编码 Agent 会自动发现以下工具：
+                            {t("afterConnectingYourCodingAgentDiscoversThese")}
                           </p>
                           <div className="space-y-2">
                             {(mcpConfigMode === "cloud" ? CLOUD_TOOLS : REMOTE_TOOLS).map((tool) => (
                               <div key={tool.name} className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
                                 <code className="text-cyan-400 text-xs font-mono shrink-0">{tool.name}</code>
-                                <p className="text-slate-400 text-xs">{tool.desc}</p>
+                                <p className="text-slate-400 text-xs">{locale === "zh-CN" ? tool.desc : tool.descEn}</p>
                               </div>
                             ))}
                           </div>
@@ -1285,24 +1295,24 @@ export default function ConsolePage() {
                         <CardContent className="p-4">
                           <h4 className="text-white text-sm font-medium mb-3 flex items-center gap-2">
                             <Info className="w-4 h-4 text-cyan-400" />
-                            说明
+                            {t("notes")}
                           </h4>
                           <ul className="text-slate-400 text-xs space-y-2">
                             <li className="flex items-start gap-2">
                               <span className="text-cyan-400 mt-0.5">•</span>
-                              <span>Cloud 模式（推荐）：复制配置到 IDE，索引和检索都在云端完成</span>
+                              <span>{t("cloudModeRecommendedCopyTheConfigurationInto")}</span>
                             </li>
                             <li className="flex items-start gap-2">
                               <span className="text-cyan-400 mt-0.5">•</span>
-                              <span>远程 HTTP 模式：无需安装任何组件，适合 CI/CD 等无法运行 Node.js 的场景</span>
+                              <span>{t("remoteHttpModeNoLocalComponentIs")}</span>
                             </li>
                             <li className="flex items-start gap-2">
                               <span className="text-cyan-400 mt-0.5">•</span>
-                              <span>每个 API Key 拥有独立的检索索引，互不影响</span>
+                              <span>{t("eachApiKeyHasAnIsolatedSearch")}</span>
                             </li>
                             <li className="flex items-start gap-2">
                               <span className="text-cyan-400 mt-0.5">•</span>
-                              <span>请妥善保管 API 密钥，不要在公开场合分享</span>
+                              <span>{t("keepApiKeysPrivateAndNeverShare")}</span>
                             </li>
                           </ul>
                         </CardContent>
@@ -1313,7 +1323,7 @@ export default function ConsolePage() {
                   {/* 请求日志 */}
                   <TabsContent value="logs" className="flex flex-col flex-1 min-h-0 animate-tab-fade-in m-0">
                     <div className="flex items-center justify-between mb-4 sm:mb-6 flex-shrink-0">
-                      <h2 className="text-base sm:text-lg font-medium text-white">请求日志</h2>
+                      <h2 className="text-base sm:text-lg font-medium text-white">{t("requestLogs")}</h2>
                       <div className="flex items-center gap-2 sm:gap-3">
                         <div className="hidden sm:flex items-center gap-2">
                           <Checkbox
@@ -1323,7 +1333,7 @@ export default function ConsolePage() {
                             className="border-white/20 data-[state=checked]:bg-cyan-500 data-[state=checked]:border-cyan-500"
                           />
                           <Label htmlFor="auto-refresh" className="text-sm text-slate-400 cursor-pointer">
-                            自动刷新
+                            {t("autoRefresh")}
                           </Label>
                         </div>
                         <Button
@@ -1335,7 +1345,7 @@ export default function ConsolePage() {
                             autoRefresh && "bg-cyan-500/20 text-cyan-400 border-cyan-500/30"
                           )}
                         >
-                          {autoRefresh ? "自动" : "手动"}
+                          {autoRefresh ? t("auto") : t("manual")}
                         </Button>
                         <Button
                           variant="glass"
@@ -1344,7 +1354,7 @@ export default function ConsolePage() {
                           disabled={logsLoading}
                         >
                           <RefreshCw className={cn("w-4 h-4", logsLoading && "animate-spin")} />
-                          <span className="hidden sm:inline ml-1">刷新</span>
+                          <span className="hidden sm:inline ml-1">{t("refresh")}</span>
                         </Button>
                       </div>
                     </div>
@@ -1353,7 +1363,7 @@ export default function ConsolePage() {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-4 sm:mb-6 flex-shrink-0">
                       <Card className="bg-[#0a0f1a]/60 border-green-500/20">
                         <CardContent className="p-2 sm:p-4">
-                          <p className="text-slate-500 text-[10px] sm:text-xs mb-0.5 sm:mb-1">成功</p>
+                          <p className="text-slate-500 text-[10px] sm:text-xs mb-0.5 sm:mb-1">{t("success")}</p>
                           <p className="text-lg sm:text-2xl font-medium text-green-400">
                             {logsData?.stats.successCount.toLocaleString() || 0}
                           </p>
@@ -1361,7 +1371,7 @@ export default function ConsolePage() {
                       </Card>
                       <Card className="bg-[#0a0f1a]/60 border-red-500/20">
                         <CardContent className="p-2 sm:p-4">
-                          <p className="text-slate-500 text-[10px] sm:text-xs mb-0.5 sm:mb-1">失败</p>
+                          <p className="text-slate-500 text-[10px] sm:text-xs mb-0.5 sm:mb-1">{t("failed")}</p>
                           <p className="text-lg sm:text-2xl font-medium text-red-400">
                             {logsData?.stats.failedCount.toLocaleString() || 0}
                           </p>
@@ -1369,7 +1379,7 @@ export default function ConsolePage() {
                       </Card>
                       <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
                         <CardContent className="p-2 sm:p-4">
-                          <p className="text-slate-500 text-[10px] sm:text-xs mb-0.5 sm:mb-1">总计</p>
+                          <p className="text-slate-500 text-[10px] sm:text-xs mb-0.5 sm:mb-1">{t("total")}</p>
                           <p className="text-lg sm:text-2xl font-medium text-slate-300">
                             {logsData?.stats.totalCount.toLocaleString() || 0}
                           </p>
@@ -1397,7 +1407,7 @@ export default function ConsolePage() {
                         )}
                         {logsData?.logs.length === 0 && (
                           <div className="text-center py-8 text-slate-500">
-                            暂无请求日志
+                            {t("noRequestLogsYet")}
                           </div>
                         )}
                         {logsData?.logs.map((log) => (
@@ -1415,7 +1425,7 @@ export default function ConsolePage() {
                           onClick={() => fetchLogs(logsPage - 1)}
                           disabled={logsPage <= 1 || logsLoading}
                         >
-                          上一页
+                          {t("previous")}
                         </Button>
                         <span className="text-slate-500 text-sm px-3">
                           {logsPage} / {Math.ceil(logsData.pagination.total / 20)}
@@ -1426,7 +1436,7 @@ export default function ConsolePage() {
                           onClick={() => fetchLogs(logsPage + 1)}
                           disabled={logsPage >= Math.ceil(logsData.pagination.total / 20) || logsLoading}
                         >
-                          下一页
+                          {t("next")}
                         </Button>
                       </div>
                     )}
@@ -1434,7 +1444,7 @@ export default function ConsolePage() {
 
                   {/* 用户信息 */}
                   <TabsContent value="profile" className="animate-tab-fade-in m-0">
-                    <h2 className="text-lg font-medium text-white mb-6">用户信息</h2>
+                    <h2 className="text-lg font-medium text-white mb-6">{t("profile")}</h2>
 
                     {userInfo ? (
                       (() => {
@@ -1466,20 +1476,20 @@ export default function ConsolePage() {
 
                             {/* Info grid */}
                             <div className="grid grid-cols-2 gap-4">
-                              <InfoItem label="邮箱" value={userInfo.email || "-"} copyable />
-                              <InfoItem label="用户 ID" value={userInfo.id} copyable />
+                              <InfoItem label={t("email")} value={userInfo.email || "-"} copyable />
+                              <InfoItem label={t("userId")} value={userInfo.id} copyable />
                               {providers.includes("github") && (
                                 <InfoItem
-                                  label="GitHub 账号年龄"
-                                  value={userInfo.githubCreatedAt ? formatGithubAccountAge(userInfo.githubCreatedAt) : "-"}
+                                  label={t("githubAccountAge")}
+                                  value={userInfo.githubCreatedAt ? t("accountAgeDays", { count: githubAccountAgeDays(userInfo.githubCreatedAt) }) : "-"}
                                 />
                               )}
                               {providers.includes("linuxdo") && (
-                                <InfoItem label="信任等级" value={`Level ${userInfo.trustLevel || 0}`} />
+                                <InfoItem label={t("trustLevel")} value={`Level ${userInfo.trustLevel || 0}`} />
                               )}
                               <InfoItem
-                                label="注册时间"
-                                value={userInfo.createdAt ? new Date(userInfo.createdAt).toLocaleDateString("zh-CN") : "-"}
+                                label={t("registered")}
+                                value={userInfo.createdAt ? new Date(userInfo.createdAt).toLocaleDateString(locale) : "-"}
                               />
                             </div>
                           </div>
@@ -1506,7 +1516,7 @@ export default function ConsolePage() {
 
                   {/* 索引管理 */}
                   <TabsContent value="index" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
-                    <h2 className="text-lg font-medium text-white mb-6">索引管理</h2>
+                    <h2 className="text-lg font-medium text-white mb-6">{t("indexes")}</h2>
 
                     {tenantStatsError && tenantStats && (
                       <div className="mb-4 flex flex-col gap-3 rounded-lg border border-red-500/20 bg-red-500/[0.05] p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1519,7 +1529,7 @@ export default function ConsolePage() {
                           className="shrink-0"
                         >
                           <RefreshCw className={cn("mr-1 h-4 w-4", tenantStatsLoading && "animate-spin")} />
-                          重试
+                          {t("retry")}
                         </Button>
                       </div>
                     )}
@@ -1528,7 +1538,7 @@ export default function ConsolePage() {
                       <Card className="border-red-500/20 bg-red-500/[0.04]">
                         <CardContent className="flex flex-col items-center px-4 py-8 text-center">
                           <Info className="mb-3 h-6 w-6 text-red-400" />
-                          <p className="text-sm font-medium text-red-300">索引统计加载失败</p>
+                          <p className="text-sm font-medium text-red-300">{t("failedToLoadIndexStatistics")}</p>
                           <p className="mt-1 max-w-md text-xs text-slate-500">{tenantStatsError}</p>
                           <Button
                             variant="glass"
@@ -1538,7 +1548,7 @@ export default function ConsolePage() {
                             className="mt-4"
                           >
                             <RefreshCw className={cn("mr-1 h-4 w-4", tenantStatsLoading && "animate-spin")} />
-                            {tenantStatsLoading ? "重试中..." : "重新加载"}
+                            {tenantStatsLoading ? t("retrying") : t("reload")}
                           </Button>
                         </CardContent>
                       </Card>
@@ -1546,22 +1556,22 @@ export default function ConsolePage() {
                       <div className="space-y-4">
                         <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
                           <CardContent className="p-4">
-                            <p className="text-slate-500 text-xs mb-3">索引统计</p>
+                            <p className="text-slate-500 text-xs mb-3">{t("indexStatistics")}</p>
                             {tenantStats.active_job && (
                               <IndexingProgress job={tenantStats.active_job} />
                             )}
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                               <div>
                                 <p className="text-2xl font-semibold text-white">{tenantStats.fileCount.toLocaleString()}</p>
-                                <p className="text-slate-500 text-xs">已索引文件</p>
+                                <p className="text-slate-500 text-xs">{t("indexedFiles")}</p>
                               </div>
                               <div>
                                 <p className="text-2xl font-semibold text-white">{tenantStats.chunkCount.toLocaleString()}</p>
-                                <p className="text-slate-500 text-xs">代码分块</p>
+                                <p className="text-slate-500 text-xs">{t("codeChunks")}</p>
                               </div>
                               <div>
                                 <p className="text-2xl font-semibold text-cyan-400">{tenantStats.vectorIndexedCount.toLocaleString()}</p>
-                                <p className="text-slate-500 text-xs">向量索引</p>
+                                <p className="text-slate-500 text-xs">{t("vectors")}</p>
                               </div>
                               <div>
                                 <p className="text-2xl font-semibold text-white">
@@ -1569,18 +1579,18 @@ export default function ConsolePage() {
                                     ? `${(tenantStats.totalSizeBytes / 1048576).toFixed(1)} MB`
                                     : `${(tenantStats.totalSizeBytes / 1024).toFixed(0)} KB`}
                                 </p>
-                                <p className="text-slate-500 text-xs">索引大小</p>
+                                <p className="text-slate-500 text-xs">{t("indexSize")}</p>
                               </div>
                               {tenantStats.indexingCount != null && (
                                 <div>
                                   <p className="text-2xl font-semibold text-white">{tenantStats.indexingCount.toLocaleString()}</p>
-                                  <p className="text-slate-500 text-xs">已完成索引次数</p>
+                                  <p className="text-slate-500 text-xs">{t("completedIndexRuns")}</p>
                                 </div>
                               )}
                             </div>
                             {Object.keys(tenantStats.languages).length > 0 && (
                               <div className="mt-3 pt-3 border-t border-white/[0.04]">
-                                <p className="text-slate-500 text-xs mb-2">语言分布</p>
+                                <p className="text-slate-500 text-xs mb-2">{t("languages")}</p>
                                 <div className="flex flex-wrap gap-1.5">
                                   {Object.entries(tenantStats.languages).slice(0, 10).map(([lang, count]) => (
                                     <span key={lang} className="text-[11px] px-2 py-0.5 rounded bg-white/[0.04] text-slate-400">
@@ -1600,7 +1610,7 @@ export default function ConsolePage() {
                           disabled={tenantStatsLoading}
                         >
                           <RefreshCw className={cn("w-4 h-4 mr-1", tenantStatsLoading && "animate-spin")} />
-                          {tenantStatsLoading ? "刷新中..." : "刷新统计"}
+                          {tenantStatsLoading ? t("refreshing") : t("refreshStats")}
                         </Button>
 
                         {/* 我的索引 */}
@@ -1631,14 +1641,14 @@ export default function ConsolePage() {
 
                         {/* Clear index */}
                         <div className="mt-6 pt-6 border-t border-white/[0.06]">
-                          <h3 className="text-sm font-medium text-red-400 mb-3">危险操作</h3>
+                          <h3 className="text-sm font-medium text-red-400 mb-3">{t("dangerZone")}</h3>
                           <Card className="bg-red-500/[0.04] border-red-500/20">
                             <CardContent className="p-4">
                               <div className="flex items-center justify-between gap-4">
                                 <div className="min-w-0">
-                                  <p className="text-white text-sm font-medium">清除远程索引</p>
+                                  <p className="text-white text-sm font-medium">{t("clearRemoteIndexes")}</p>
                                   <p className="text-slate-500 text-xs mt-1">
-                                    删除所有已索引的代码数据和请求日志，72 小时内只能操作一次
+                                    {t("deleteAllIndexedCodeAndRequestLogs")}
                                   </p>
                                 </div>
                                 <Button
@@ -1649,7 +1659,7 @@ export default function ConsolePage() {
                                   className="shrink-0"
                                 >
                                   <Trash2 className="w-4 h-4 mr-1" />
-                                  {clearLoading ? "清除中..." : "清除索引"}
+                                  {clearLoading ? t("clearing") : t("clearIndexes")}
                                 </Button>
                               </div>
                               {clearResult && (
@@ -1671,7 +1681,7 @@ export default function ConsolePage() {
                             <IndexingProgress job={tenantStats.active_job} />
                           </div>
                         )}
-                        <p>尚未建立索引。{mcpConfigMode === "cloud" ? "配置完成后启动 IDE，首次连接会自动完成索引。" : "请让编码 Agent 调用 codebase_index 建立项目索引。"}</p>
+                        <p>{t("noIndexHasBeenCreated")}{mcpConfigMode === "cloud" ? t("startYourIdeAfterSetupTheFirst") : t("askYourCodingAgentToCallCodebase")}</p>
                         <Button
                           variant="glass"
                           size="sm"
@@ -1680,7 +1690,7 @@ export default function ConsolePage() {
                           className="mt-4"
                         >
                           <RefreshCw className={cn("mr-1 h-4 w-4", tenantStatsLoading && "animate-spin")} />
-                          {tenantStatsLoading ? "刷新中..." : "刷新统计"}
+                          {tenantStatsLoading ? t("refreshing") : t("refreshStats")}
                         </Button>
                       </div>
                     ) : (
@@ -1693,26 +1703,26 @@ export default function ConsolePage() {
 
                   {/* 我的 - 套餐与订阅 */}
                   <TabsContent value="plans" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
-                    <h2 className="text-lg font-medium text-white mb-6">套餐与订阅</h2>
+                    <h2 className="text-lg font-medium text-white mb-6">{t("plansBilling")}</h2>
                     <PlansTab />
                   </TabsContent>
 
                   {/* 我的 - 用户自定义 Rerank */}
                   <TabsContent value="model-config" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
-                    <h2 className="text-lg font-medium text-white mb-6">模型设置</h2>
+                    <h2 className="text-lg font-medium text-white mb-6">{t("modelSettings")}</h2>
                     <UserModelConfigTab />
                   </TabsContent>
 
                   {/* 我的 - 组织 */}
                   <TabsContent value="team" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
-                    <h2 className="text-lg font-medium text-white mb-6">组织</h2>
+                    <h2 className="text-lg font-medium text-white mb-6">{t("myOrganization")}</h2>
                     <OrgTab currentUserId={session.user.id} />
                   </TabsContent>
 
                   {/* 管理员 - 组织概览 */}
                   {isAdmin && (
                     <TabsContent value="org" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
-                      <h2 className="text-lg font-medium text-white mb-6">组织概览</h2>
+                      <h2 className="text-lg font-medium text-white mb-6">{t("organizationOverview")}</h2>
                       <AdminOverviewTab />
                     </TabsContent>
                   )}
@@ -1720,7 +1730,7 @@ export default function ConsolePage() {
                   {/* 管理员 - 用户管理 */}
                   {isAdmin && (
                     <TabsContent value="users" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
-                      <h2 className="text-lg font-medium text-white mb-6">用户管理</h2>
+                      <h2 className="text-lg font-medium text-white mb-6">{t("users")}</h2>
                       <AdminUsersTab />
                     </TabsContent>
                   )}
@@ -1728,7 +1738,7 @@ export default function ConsolePage() {
                   {/* 管理员 - Token 成本（调用统计） */}
                   {isAdmin && (
                     <TabsContent value="call-stats" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
-                      <h2 className="text-lg font-medium text-white mb-6">调用统计</h2>
+                      <h2 className="text-lg font-medium text-white mb-6">{t("usage")}</h2>
                       <AdminStatsTab />
                     </TabsContent>
                   )}
@@ -1736,7 +1746,7 @@ export default function ConsolePage() {
                   {/* 管理员 - 配额管理 */}
                   {isAdmin && (
                     <TabsContent value="quota" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
-                      <h2 className="text-lg font-medium text-white mb-6">配额管理</h2>
+                      <h2 className="text-lg font-medium text-white mb-6">{t("quotas")}</h2>
                       <AdminQuotaTab />
                     </TabsContent>
                   )}
@@ -1744,7 +1754,7 @@ export default function ConsolePage() {
                   {/* 管理员 - 组织管理（org_quotas 分配） */}
                   {isAdmin && (
                     <TabsContent value="admin-orgs" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
-                      <h2 className="text-lg font-medium text-white mb-6">组织管理</h2>
+                      <h2 className="text-lg font-medium text-white mb-6">{t("organizations")}</h2>
                       <AdminOrgsTab />
                     </TabsContent>
                   )}
@@ -1752,7 +1762,7 @@ export default function ConsolePage() {
                   {/* 管理员 - 套餐管理 */}
                   {isAdmin && (
                     <TabsContent value="plans-admin" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
-                      <h2 className="text-lg font-medium text-white mb-6">套餐管理</h2>
+                      <h2 className="text-lg font-medium text-white mb-6">{t("plans")}</h2>
                       <AdminPlansTab />
                     </TabsContent>
                   )}
@@ -1760,7 +1770,7 @@ export default function ConsolePage() {
                   {/* 管理员 - 模型管理 */}
                   {isAdmin && (
                     <TabsContent value="models" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
-                      <h2 className="text-lg font-medium text-white mb-6">模型管理</h2>
+                      <h2 className="text-lg font-medium text-white mb-6">{t("models")}</h2>
                       <AdminModelsTab />
                     </TabsContent>
                   )}
@@ -1768,13 +1778,13 @@ export default function ConsolePage() {
                   {/* 管理员 - 系统设置 */}
                   {isAdmin && (
                     <TabsContent value="menu-admin" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
-                      <h2 className="text-lg font-medium text-white mb-6">菜单管理</h2>
+                      <h2 className="text-lg font-medium text-white mb-6">{t("menus")}</h2>
                       <AdminMenuTab />
                     </TabsContent>
                   )}
                   {isAdmin && (
                     <TabsContent value="system-settings" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
-                      <h2 className="text-lg font-medium text-white mb-6">系统设置</h2>
+                      <h2 className="text-lg font-medium text-white mb-6">{t("settings")}</h2>
                       <AdminSettingsTab />
                     </TabsContent>
                   )}
@@ -1782,7 +1792,7 @@ export default function ConsolePage() {
                   {/* 管理员 - 系统日志 */}
                   {isAdmin && (
                     <TabsContent value="system-logs" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
-                      <h2 className="text-lg font-medium text-white mb-6">系统日志</h2>
+                      <h2 className="text-lg font-medium text-white mb-6">{t("systemLogs")}</h2>
                       <AdminLogsTab />
                     </TabsContent>
                   )}
@@ -1797,21 +1807,21 @@ export default function ConsolePage() {
       <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
         <AlertDialogContent className="bg-[#0d1424] border-white/[0.08]">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">确认重置密钥</AlertDialogTitle>
+            <AlertDialogTitle className="text-white">{t("resetApiKey")}</AlertDialogTitle>
             <AlertDialogDescription className="text-slate-400">
-              重置后旧密钥将立即失效，所有使用旧密钥的服务都需要更新。确定要继续吗？
+              {t("theOldKeyWillStopWorkingImmediately2")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="bg-transparent border-white/[0.08] text-slate-400 hover:text-white hover:bg-white/[0.06]">
-              取消
+              {t("cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleResetKey}
               disabled={loading}
               className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-white"
             >
-              {loading ? "处理中..." : "确认重置"}
+              {loading ? t("processing") : t("resetKey")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1821,20 +1831,20 @@ export default function ConsolePage() {
       <AlertDialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
         <AlertDialogContent className="bg-[#0d1424] border-white/[0.08]">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">确认退出登录</AlertDialogTitle>
+            <AlertDialogTitle className="text-white">{t("logOut2")}</AlertDialogTitle>
             <AlertDialogDescription className="text-slate-400">
-              确定要退出登录吗？
+              {t("areYouSureYouWantToLog")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="bg-transparent border-white/[0.08] text-slate-400 hover:text-white hover:bg-white/[0.06]">
-              取消
+              {t("cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleLogout}
               className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-white"
             >
-              确认退出
+              {t("logOut")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1844,21 +1854,21 @@ export default function ConsolePage() {
       <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
         <AlertDialogContent className="bg-[#0d1424] border-white/[0.08]">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">确认清除索引</AlertDialogTitle>
+            <AlertDialogTitle className="text-white">{t("clearIndexes2")}</AlertDialogTitle>
             <AlertDialogDescription className="text-slate-400">
-              此操作将删除所有已索引的代码数据和请求日志，且 72 小时内无法再次执行。清除后需要重新建立代码索引才能使用检索功能。确定要继续吗？
+              {t("thisDeletesAllIndexedCodeAndRequest")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="bg-transparent border-white/[0.08] text-slate-400 hover:text-white hover:bg-white/[0.06]">
-              取消
+              {t("cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleClearIndex}
               disabled={clearLoading}
               className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-white"
             >
-              {clearLoading ? "清除中..." : "确认清除"}
+              {clearLoading ? t("clearing") : t("clearIndexes")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1873,28 +1883,26 @@ export default function ConsolePage() {
       >
         <AlertDialogContent className="bg-[#0d1424] border-white/[0.08]">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">确认删除该项目索引</AlertDialogTitle>
+            <AlertDialogTitle className="text-white">{t("deleteProjectIndex")}</AlertDialogTitle>
             <AlertDialogDescription className="text-slate-400">
-              即将删除{" "}
-              <span className="font-mono text-cyan-300 break-all">
-                {rootPendingDelete?.workspace_id}
-              </span>
-              {rootPendingDelete && rootBranchLabel(rootPendingDelete)
-                ? `（分支 ${rootBranchLabel(rootPendingDelete)}）`
+              {rootPendingDelete
+                ? t("confirmDeleteProjectIndex", {
+                    workspace: rootPendingDelete.workspace_id,
+                    branch: rootBranchLabel(rootPendingDelete) || t("defaultBranch"),
+                  })
                 : ""}
-              {" "}的云端索引。删除后该项目需重新索引才能继续使用检索功能。确定要继续吗？
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="bg-transparent border-white/[0.08] text-slate-400 hover:text-white hover:bg-white/[0.06]">
-              取消
+              {t("cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteRoot}
               disabled={deleteRootLoading}
               className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-white"
             >
-              {deleteRootLoading ? "删除中..." : "确认删除"}
+              {deleteRootLoading ? t("deleting") : t("deleteIndex")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1907,7 +1915,7 @@ export default function ConsolePage() {
       }}>
         <AlertDialogContent className="bg-[#0d1424] border-white/[0.08] max-w-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">请求详情</AlertDialogTitle>
+            <AlertDialogTitle className="text-white">{t("requestDetails")}</AlertDialogTitle>
           </AlertDialogHeader>
 
           {detailLoading ? (
@@ -1919,7 +1927,7 @@ export default function ConsolePage() {
             <div className="space-y-4">
               {/* Request ID with copy */}
               <LogDetailItem
-                label="请求 ID"
+                label={t("requestId")}
                 value={logDetail.log.id}
                 copyable
                 mono
@@ -1927,44 +1935,44 @@ export default function ConsolePage() {
 
               {/* Main info grid */}
               <div className="grid grid-cols-2 gap-3">
-                <LogDetailItem label="请求方法" value={logDetail.log.requestMethod} />
+                <LogDetailItem label={t("method")} value={logDetail.log.requestMethod} />
                 <LogDetailItem
-                  label="状态码"
+                  label={t("statusCode")}
                   value={logDetail.log.statusCode?.toString() || logDetail.log.status}
                   statusCode={logDetail.log.statusCode}
                 />
                 <LogDetailItem
-                  label="响应时间"
+                  label={t("responseTime")}
                   value={logDetail.log.responseDurationMs !== null ? `${logDetail.log.responseDurationMs} ms` : "-"}
                 />
-                <LogDetailItem label="客户端 IP" value={logDetail.log.clientIp} mono />
+                <LogDetailItem label={t("clientIp")} value={logDetail.log.clientIp} mono />
               </div>
 
               {/* Request path - full width */}
               <LogDetailItem
-                label="请求路径"
+                label={t("requestPath")}
                 value={logDetail.log.requestPath}
                 mono
               />
 
               {/* Timestamp */}
               <LogDetailItem
-                label="请求时间"
-                value={new Date(logDetail.log.requestTimestamp).toLocaleString("zh-CN")}
+                label={t("requestedAt")}
+                value={new Date(logDetail.log.requestTimestamp).toLocaleString(locale)}
               />
 
               {/* Error section - only show if errors exist */}
               {logDetail.errors && logDetail.errors.length > 0 && (
                 <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg space-y-3">
-                  <p className="text-red-400 text-sm font-medium">错误信息</p>
+                  <p className="text-red-400 text-sm font-medium">{t("error")}</p>
                   {logDetail.errors.map((error) => (
                     <div key={error.id} className="space-y-2">
                       <div className="flex items-center gap-2 text-xs">
-                        <span className="text-slate-500">来源:</span>
+                        <span className="text-slate-500">{t("source")}</span>
                         <span className="text-slate-300">{error.source}</span>
                         <span className="text-slate-600">·</span>
                         <span className="text-slate-500">
-                          {new Date(error.createdAt).toLocaleString("zh-CN")}
+                          {new Date(error.createdAt).toLocaleString(locale)}
                         </span>
                       </div>
                       <p className="text-red-300 text-sm font-mono bg-red-500/5 p-2 rounded break-all">
@@ -1977,13 +1985,13 @@ export default function ConsolePage() {
             </div>
           ) : (
             <div className="text-center py-8 text-slate-500">
-              加载失败
+              {t("failedToLoad")}
             </div>
           )}
 
           <AlertDialogFooter>
             <AlertDialogCancel className="bg-transparent border-white/[0.08] text-slate-400 hover:text-white hover:bg-white/[0.06]">
-              关闭
+              {t("close")}
             </AlertDialogCancel>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1993,6 +2001,7 @@ export default function ConsolePage() {
 }
 
 function ProviderBadge({ provider }: { provider: string }) {
+  const t = useTranslations("Console");
   if (provider === "github") {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.12] text-slate-200 text-[10px] font-medium">
@@ -2016,7 +2025,7 @@ function ProviderBadge({ provider }: { provider: string }) {
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/[0.08] border border-cyan-500/25 text-cyan-300 text-[10px] font-medium">
       <Mail className="w-3 h-3" />
-      {provider === "unknown" ? "未知来源" : authProviderLabel(provider)}
+      {provider === "unknown" ? t("unknown") : authProviderLabel(provider)}
     </span>
   );
 }
@@ -2030,6 +2039,7 @@ function InfoItem({
   value: string;
   copyable?: boolean;
 }) {
+  const t = useTranslations("Console");
   const { copied, trigger: markCopied } = useCopyFeedback();
 
   const handleCopy = async () => {
@@ -2051,7 +2061,7 @@ function InfoItem({
               onClick={handleCopy}
               className="h-auto p-1 text-slate-400 hover:text-white"
             >
-              {copied ? "已复制" : "复制"}
+              {copied ? t("copied") : t("copy")}
             </Button>
           )}
         </div>
@@ -2073,6 +2083,7 @@ function LogDetailItem({
   mono?: boolean;
   statusCode?: number | null;
 }) {
+  const t = useTranslations("Console");
   const { copied, trigger: markCopied } = useCopyFeedback();
 
   const handleCopy = async () => {
@@ -2109,7 +2120,7 @@ function LogDetailItem({
             className="h-auto p-1 text-slate-400 hover:text-white shrink-0"
           >
             <Copy className="w-3.5 h-3.5" />
-            <span className="ml-1 text-xs">{copied ? "已复制" : "复制"}</span>
+            <span className="ml-1 text-xs">{copied ? t("copied") : t("copy")}</span>
           </Button>
         )}
       </div>
@@ -2118,6 +2129,8 @@ function LogDetailItem({
 }
 
 function LogEntry({ log, onClick }: { log: RequestLog; onClick?: () => void }) {
+  const locale = useLocale();
+  const t = useTranslations("Console");
   const methodColors: Record<string, string> = {
     GET: "bg-green-500/20 text-green-400 border-green-500/30",
     POST: "bg-blue-500/20 text-blue-400 border-blue-500/30",
@@ -2134,7 +2147,7 @@ function LogEntry({ log, onClick }: { log: RequestLog; onClick?: () => void }) {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-1.5 w-1.5 sm:h-2 sm:w-2 bg-yellow-500"></span>
           </span>
-          {compact ? "..." : "处理中"}
+          {compact ? "..." : t("processing2")}
         </Badge>
       );
     }
@@ -2157,8 +2170,8 @@ function LogEntry({ log, onClick }: { log: RequestLog; onClick?: () => void }) {
 
   const formatDateTime = (timestamp: string) => {
     const date = new Date(timestamp);
-    const dateStr = date.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" });
-    const timeStr = date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const dateStr = date.toLocaleDateString(locale, { month: "2-digit", day: "2-digit" });
+    const timeStr = date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     return { dateStr, timeStr };
   };
 
@@ -2199,6 +2212,7 @@ function LogEntry({ log, onClick }: { log: RequestLog; onClick?: () => void }) {
 
 // 索引统计卡片内的构建进度条：消费 tenant-stats 的 active_job 字段
 function IndexingProgress({ job }: { job: ActiveIndexJob }) {
+  const t = useTranslations("Console");
   const percent =
     job.total_files > 0
       ? Math.min(100, Math.round((job.indexed_files / job.total_files) * 100))
@@ -2208,7 +2222,7 @@ function IndexingProgress({ job }: { job: ActiveIndexJob }) {
       <div className="flex items-center justify-between gap-2 mb-2">
         <p className="flex items-center gap-2 text-xs text-cyan-300">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          索引构建中 {job.indexed_files.toLocaleString()}/{job.total_files.toLocaleString()} 文件
+          {t("indexing")} {job.indexed_files.toLocaleString()}/{job.total_files.toLocaleString()} {t("files")}
         </p>
         <span className="text-xs text-slate-500">{job.phase}</span>
       </div>
@@ -2247,17 +2261,19 @@ function RootsSection({
   onRefresh: () => void;
   onDelete: (root: RelayRoot) => void;
 }) {
+  const locale = useLocale();
+  const t = useTranslations("Console");
   return (
     <div className="mt-6 pt-6 border-t border-white/[0.06]">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-white">我的索引</h3>
+        <h3 className="text-sm font-medium text-white">{t("myIndexes")}</h3>
         <Button variant="glass" size="sm" onClick={onRefresh} disabled={loading}>
           <RefreshCw className={cn("w-4 h-4 mr-1", loading && "animate-spin")} />
-          {loading ? "刷新中..." : "刷新"}
+          {loading ? t("refreshing") : t("refresh")}
         </Button>
       </div>
       <p className="-mt-1 mb-3 text-[11px] text-slate-600">
-        同一项目的不同分支各自维护独立的索引视图，互不影响，可分别删除。
+        {t("eachBranchHasAnIndependentIndexView")}
       </p>
 
       {orgOptions.length > 0 && (
@@ -2272,7 +2288,7 @@ function RootsSection({
                 : "text-slate-500 border-white/[0.08] hover:text-slate-300"
             )}
           >
-            个人
+            {t("personal")}
           </button>
           {orgOptions.map((org) => (
             <button
@@ -2294,7 +2310,7 @@ function RootsSection({
       )}
 
       {activeOrg && !canDelete && roots !== null && (
-        <p className="text-xs text-slate-500 mb-3">仅组织所有者可删除组织索引</p>
+        <p className="text-xs text-slate-500 mb-3">{t("onlyOrganizationOwnersCanDeleteOrganizationIndexes")}</p>
       )}
 
       {deleteResult && (
@@ -2313,7 +2329,7 @@ function RootsSection({
           <p className="text-sm text-red-300">{error}</p>
           <Button variant="glass" size="sm" onClick={onRefresh} disabled={loading} className="shrink-0">
             <RefreshCw className={cn("mr-1 h-4 w-4", loading && "animate-spin")} />
-            重试
+            {t("retry")}
           </Button>
         </div>
       ) : roots === null ? (
@@ -2323,7 +2339,7 @@ function RootsSection({
         </div>
       ) : roots.length === 0 ? (
         <div className="rounded-lg border border-white/[0.04] bg-[#0a0f1a]/60 px-4 py-6 text-center text-xs text-slate-500">
-          暂无已索引的项目。在 IDE 中连接 MCP 并完成首次索引后，项目会出现在这里。
+          {t("noIndexedProjectsYetConnectMcpIn")}
         </div>
       ) : (
         <div className="space-y-2">
@@ -2345,11 +2361,11 @@ function RootsSection({
                         )}
                       </div>
                       <p className="mt-1 text-xs text-slate-500">
-                        {group.entries[0].root.file_count.toLocaleString()} 个文件
+                        {group.entries[0].root.file_count.toLocaleString()} {t("files")}
                         <span className="text-slate-700"> · </span>
                         {formatSizeBytes(group.entries[0].root.total_size_bytes)}
                         <span className="text-slate-700"> · </span>
-                        最后索引 {new Date(group.entries[0].root.indexed_at).toLocaleString("zh-CN")}
+                        {t("lastIndexed")} {new Date(group.entries[0].root.indexed_at).toLocaleString(locale)}
                       </p>
                     </div>
                     <Button
@@ -2360,7 +2376,7 @@ function RootsSection({
                         "shrink-0 text-slate-500 hover:text-red-400 hover:bg-red-500/10",
                         !canDelete && "hidden"
                       )}
-                      aria-label={`删除 ${group.entries[0].root.workspace_id} 的索引`}
+                      aria-label={t("deleteTheIndexFor", {p0: group.entries[0].root.workspace_id})}
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
@@ -2376,7 +2392,7 @@ function RootsSection({
                       {group.workspaceId}
                     </p>
                     <span className="text-[10px] text-slate-600">
-                      {group.entries.length} 个分支视图
+                      {group.entries.length} {t("branchViews")}
                     </span>
                   </div>
                   <div className="mt-2 space-y-1.5">
@@ -2391,11 +2407,11 @@ function RootsSection({
                               {branch}
                             </Badge>
                             <p className="text-xs text-slate-500">
-                              {root.file_count.toLocaleString()} 个文件
+                              {root.file_count.toLocaleString()} {t("files")}
                               <span className="text-slate-700"> · </span>
                               {formatSizeBytes(root.total_size_bytes)}
                               <span className="text-slate-700"> · </span>
-                              最后索引 {new Date(root.indexed_at).toLocaleString("zh-CN")}
+                              {t("lastIndexed")} {new Date(root.indexed_at).toLocaleString(locale)}
                             </p>
                           </div>
                         </div>
@@ -2407,7 +2423,7 @@ function RootsSection({
                             "shrink-0 text-slate-500 hover:text-red-400 hover:bg-red-500/10",
                             !canDelete && "hidden"
                           )}
-                          aria-label={`删除 ${group.workspaceId} 分支 ${branch} 的索引`}
+                          aria-label={t("deleteBranchIndex", { workspace: group.workspaceId, branch })}
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -2427,7 +2443,11 @@ function RootsSection({
 // 配置说明第 3 步：引导用户在 CLAUDE.md / AGENTS.md 中声明 LCE 使用规则
 // （只加 MCP 配置不保证代理会用，需要项目规则显式要求）
 function AgentRulesCard({ mode }: { mode: "cloud" | "remote" }) {
-  const snippet = mode === "cloud" ? AGENT_RULES_CLOUD : AGENT_RULES_REMOTE;
+  const locale = useLocale();
+  const t = useTranslations("Console");
+  const snippet = mode === "cloud"
+    ? locale === "zh-CN" ? AGENT_RULES_CLOUD : AGENT_RULES_CLOUD_EN
+    : locale === "zh-CN" ? AGENT_RULES_REMOTE : AGENT_RULES_REMOTE_EN;
   const { copied, trigger: markCopied } = useCopyFeedback();
   const copyRules = async () => {
     try {
@@ -2442,14 +2462,13 @@ function AgentRulesCard({ mode }: { mode: "cloud" | "remote" }) {
           <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
             3
           </span>
-          <h3 className="text-white font-medium">让 AI 代理优先使用 LCE</h3>
+          <h3 className="text-white font-medium">{t("makeLceTheAgentSFirstChoice")}</h3>
         </div>
         <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-          只添加 MCP 服务器并不保证代理会用它。把以下规则加入项目根目录的{" "}
+          {t("addingAnMcpServerDoesNotGuarantee")} {" "}
           <code className="text-cyan-400 text-xs">CLAUDE.md</code> /{" "}
           <code className="text-cyan-400 text-xs">AGENTS.md</code>
-          （Cursor 用户也可放入 <code className="text-cyan-400 text-xs">.cursor/rules</code>），
-          要求代理查找代码时优先走 LCE 语义检索：
+          {t("cursorUsersCanAlsoPutItIn")} <code className="text-cyan-400 text-xs">.cursor/rules</code>{t("soTheAgentUsesLceSemanticSearch")}
         </p>
         <div className="relative group">
           <div className="bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-3 font-mono text-xs overflow-x-auto">
@@ -2458,7 +2477,7 @@ function AgentRulesCard({ mode }: { mode: "cloud" | "remote" }) {
             </pre>
           </div>
           <Button variant="glass" size="sm" onClick={copyRules} className="absolute top-2 right-2">
-            {copied ? "已复制" : "复制"}
+            {copied ? t("copied") : t("copy")}
           </Button>
         </div>
       </CardContent>

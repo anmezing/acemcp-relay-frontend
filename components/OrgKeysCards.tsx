@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Building2, Copy, Crown, FileCode2 } from "lucide-react";
 import { buildCloudMcpConfigJson } from "@/lib/mcp-config";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 interface KeyListItem {
   orgId: string | null;
@@ -20,6 +21,7 @@ interface KeyListItem {
 // 密钥管理页的组织密钥区块：列出各组织密钥（归属徽标），支持复制密钥 /
 // 一键复制该密钥的 MCP 配置。个人密钥卡片仍由 console 页原有 UI 负责。
 export function OrgKeysCards() {
+  const t = useTranslations("OrganizationKeys");
   const [keys, setKeys] = useState<KeyListItem[] | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<Record<string, string>>({});
@@ -34,9 +36,9 @@ export function OrgKeysCards() {
       setError("");
     } catch {
       if (signal?.aborted) return;
-      setError("组织密钥列表加载失败");
+      setError(t("failedToLoadOrganizationKeys"));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -66,9 +68,9 @@ export function OrgKeysCards() {
     try {
       const key = await revealKey(orgId);
       await navigator.clipboard.writeText(key);
-      flash(orgId, "密钥已复制");
+      flash(orgId, t("keyCopied"));
     } catch (e) {
-      flash(orgId, e instanceof Error ? e.message : "复制失败");
+      flash(orgId, e instanceof Error ? e.message : t("copyFailed"));
     }
   };
 
@@ -82,9 +84,9 @@ export function OrgKeysCards() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
       await navigator.clipboard.writeText(buildCloudMcpConfigJson(data.apiKey));
-      flash(orgId, "MCP 配置已复制");
+      flash(orgId, t("mcpConfigurationCopied"));
     } catch (e) {
-      flash(orgId, e instanceof Error ? e.message : "复制失败");
+      flash(orgId, e instanceof Error ? e.message : t("copyFailed"));
     }
   };
 
@@ -99,17 +101,16 @@ export function OrgKeysCards() {
   if (!keys || keys.length === 0) {
     return (
       <p className="text-slate-600 text-xs pt-4 border-t border-white/[0.06]">
-        暂无组织密钥。加入或创建组织后会自动生成组织专用密钥；
-        公司项目请使用组织密钥，个人项目使用个人密钥。
+        {t("noOrganizationKeysYetJoiningOrCreating")}
       </p>
     );
   }
 
   return (
     <div className="pt-4 border-t border-white/[0.06] space-y-3">
-      <h3 className="text-sm font-medium text-white">组织密钥</h3>
+      <h3 className="text-sm font-medium text-white">{t("organizationKeys")}</h3>
       <p className="text-slate-600 text-xs">
-        公司项目请使用对应组织的密钥（用量与配额计入组织），个人项目使用上方的个人密钥。
+        {t("useTheMatchingOrganizationKeyForCompany")}
       </p>
       {keys.map((k) => (
         <Card key={k.orgId} className="bg-[#0a0f1a]/60 border-white/[0.06]">
@@ -124,7 +125,7 @@ export function OrgKeysCards() {
                   {k.orgRole === "owner" && (
                     <span className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded border bg-amber-500/10 text-amber-300 border-amber-500/30 text-[10px]">
                       <Crown className="w-3 h-3 mr-1" />
-                      所有者
+                      {t("owner")}
                     </span>
                   )}
                 </p>
@@ -133,11 +134,11 @@ export function OrgKeysCards() {
               <div className="flex items-center gap-2">
                 <Button variant="glass" size="sm" onClick={() => k.orgId && copyKey(k.orgId)}>
                   <Copy className="w-4 h-4 mr-1" />
-                  复制密钥
+                  {t("copyKey")}
                 </Button>
                 <Button variant="glass" size="sm" onClick={() => k.orgId && copyConfig(k.orgId)}>
                   <FileCode2 className="w-4 h-4 mr-1" />
-                  复制配置
+                  {t("copyConfig")}
                 </Button>
               </div>
             </div>
@@ -145,7 +146,7 @@ export function OrgKeysCards() {
               <p
                 className={cn(
                   "text-xs mt-2",
-                  /失败|HTTP|不是/.test(notice[k.orgId]) ? "text-red-400" : "text-emerald-400"
+                  /失败|failed|HTTP|不是/i.test(notice[k.orgId]) ? "text-red-400" : "text-emerald-400"
                 )}
               >
                 {notice[k.orgId]}

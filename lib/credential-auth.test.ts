@@ -12,7 +12,7 @@ describe("credential auth form", () => {
       email: "user@example.com",
       password: "password",
       confirmPassword: "password",
-    })).toBe("请输入昵称");
+    })).toEqual({ key: "enterDisplayName" });
 
     expect(validateCredentialFields({
       mode: "register",
@@ -20,7 +20,7 @@ describe("credential auth form", () => {
       email: "user@example.com",
       password: "password",
       confirmPassword: "different",
-    })).toBe("两次输入的密码不一致");
+    })).toEqual({ key: "passwordsDoNotMatch" });
   });
 
   it("does not require registration fields when logging in", () => {
@@ -33,18 +33,18 @@ describe("credential auth form", () => {
     })).toBeNull();
   });
 
-  it("maps Better Auth errors to actionable Chinese messages", () => {
+  it("maps Better Auth errors to translation keys", () => {
     expect(credentialAuthErrorMessage(
       { code: "USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL" },
       "register"
-    )).toContain("该邮箱已注册");
+    )).toEqual({ key: "emailAlreadyRegistered" });
     expect(credentialAuthErrorMessage(
       { message: "REGISTRATION_DISABLED" },
       "register"
-    )).toBe("当前未开放新用户注册");
+    )).toEqual({ key: "registrationClosed" });
     expect(credentialAuthErrorMessage(
       { code: "INVALID_EMAIL_OR_PASSWORD" },
       "login"
-    )).toBe("邮箱或密码错误");
+    )).toEqual({ key: "incorrectEmailOrPassword" });
   });
 });

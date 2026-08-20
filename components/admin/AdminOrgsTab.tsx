@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 interface AdminOrgRow {
   org_id: string;
@@ -29,21 +30,8 @@ type OrgQuotaSource =
   | "owner_tier"
   | "platform_default";
 
-function sourceLabel(source: OrgQuotaSource, org: AdminOrgRow): string {
-  switch (source) {
-    case "admin_override":
-      return "管理员覆盖";
-    case "subscription":
-      return org.plan_name ? `套餐 ${org.plan_name}` : "有效套餐";
-    case "owner_tier":
-      return `owner ${org.owner_tier === "pro" ? "Pro" : "Free"}`;
-    default:
-      return "平台 Free 默认";
-  }
-}
-
-function formatLimit(value: number, bytes = false): string {
-  if (value === 0) return "不限";
+function formatLimit(value: number, unlimited: string, bytes = false): string {
+  if (value === 0) return unlimited;
   if (!bytes) return value.toLocaleString();
   const units = ["B", "KiB", "MiB", "GiB", "TiB"];
   let amount = value;
@@ -58,12 +46,14 @@ function formatLimit(value: number, bytes = false): string {
 // 平台管理员：组织列表 + 共享配额池分配（org_quotas，relay 消费）。
 // 跟随 AdminQuotaTab 的行内编辑风格。
 export function AdminOrgsTab() {
+  const t = useTranslations("AdminOrganizations");
   const [orgs, setOrgs] = useState<AdminOrgRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [drafts, setDrafts] = useState<Record<string, { req: string; bytes: string }>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const [noticeOk, setNoticeOk] = useState(false);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -76,9 +66,9 @@ export function AdminOrgsTab() {
       setError("");
     } catch {
       if (signal?.aborted) return;
-      setError("组织列表加载失败");
+      setError(t("failedToLoadOrganizations"));
     }
-  }, []);
+  }, [t]);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -108,7 +98,8 @@ export function AdminOrgsTab() {
       const req = parseDraft(draft.req);
       const bytes = parseDraft(draft.bytes);
       if (req === undefined || bytes === undefined) {
-        setNotice("配额必须是 ≥0 的整数（留空 = 未设置/默认）");
+        setNotice(t("quotaMustBeANonNegativeInteger"));
+        setNoticeOk(false);
         return;
       }
       setBusy(org.org_id);
@@ -125,14 +116,16 @@ export function AdminOrgsTab() {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         await load();
-        setNotice("已保存，立即生效");
+        setNotice(t("savedAndAppliedImmediately"));
+        setNoticeOk(true);
       } catch {
-        setNotice("保存失败，请重试");
+        setNotice(t("failedToSaveTryAgain"));
+        setNoticeOk(false);
       } finally {
         setBusy(null);
       }
     },
-    [drafts, load]
+    [drafts, load, t]
   );
 
   if (orgs === null && !error) {
@@ -151,7 +144,7 @@ export function AdminOrgsTab() {
         <p className="text-red-400 text-sm">{error}</p>
         <Button variant="glass" size="sm" onClick={refresh} disabled={loading} className="text-xs">
           <RefreshCw className={cn("w-4 h-4 mr-1", loading && "animate-spin")} />
-          重试
+          {t("retry")}
         </Button>
       </div>
     );
@@ -161,7 +154,7 @@ export function AdminOrgsTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-slate-500 text-xs">
-          组织共享配额池：全组织每日请求上限与每日索引字节上限，超限整个组织受限。
+          {t("sharedQuotaDescription")}
         </p>
         <Button
           variant="ghost"
@@ -176,13 +169,13 @@ export function AdminOrgsTab() {
 
       {error && <p className="text-xs text-red-400">{error}</p>}
       {notice && (
-        <p className={cn("text-xs", notice.startsWith("已保存") ? "text-emerald-400" : "text-red-400")}>
+        <p className={cn("text-xs", noticeOk ? "text-emerald-400" : "text-red-400")}>
           {notice}
         </p>
       )}
 
       {orgs.length === 0 && (
-        <p className="text-slate-500 text-sm text-center py-6">暂无组织</p>
+        <p className="text-slate-500 text-sm text-center py-6">{t("noOrganizations")}</p>
       )}
 
       <div className="space-y-2">
@@ -198,28 +191,32 @@ export function AdminOrgsTab() {
                 <p className="text-slate-600 text-[11px] truncate">
                   owner: {org.owner_email || "-"}
                   <span className="text-slate-700"> · </span>
-                  {org.member_count} 名成员
+                  {t("memberCount", { count: org.member_count })}
                   <span className="text-slate-700"> · </span>
-                  近 7 天 {(org.requests_7d ?? 0).toLocaleString()} 请求
+                  {t("requestsInPast7Days", { count: org.requests_7d ?? 0 })}
                 </p>
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-500">
                   <span>
-                    生效请求：{formatLimit(org.effective_daily_request_limit)} / 日
+                    {t("effectiveRequests")} {formatLimit(org.effective_daily_request_limit, t("unlimited"))} / {t("day")}
                     <span className="text-slate-600">
-                      {`（${sourceLabel(org.daily_request_source, org)}）`}
+                      {` (${org.daily_request_source === "subscription" && !org.plan_name
+                        ? t("quotaSource.activePlan")
+                        : t(`quotaSource.${org.daily_request_source}`, { plan: org.plan_name || "", tier: org.owner_tier === "pro" ? "Pro" : "Free" })})`}
                     </span>
                   </span>
                   <span>
-                    生效索引：{formatLimit(org.effective_daily_index_bytes_limit, true)} / 日
+                    {t("effectiveIndex")} {formatLimit(org.effective_daily_index_bytes_limit, t("unlimited"), true)} / {t("day")}
                     <span className="text-slate-600">
-                      {`（${sourceLabel(org.daily_index_bytes_source, org)}）`}
+                      {` (${org.daily_index_bytes_source === "subscription" && !org.plan_name
+                        ? t("quotaSource.activePlan")
+                        : t(`quotaSource.${org.daily_index_bytes_source}`, { plan: org.plan_name || "", tier: org.owner_tier === "pro" ? "Pro" : "Free" })})`}
                     </span>
                   </span>
                 </div>
               </div>
               {(org.daily_request_limit !== null || org.daily_index_bytes_limit !== null) && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded border bg-cyan-500/10 text-cyan-400 border-cyan-500/20">
-                  管理员覆盖
+                  {t("adminOverride")}
                 </span>
               )}
               <div className="flex items-center gap-2 ml-auto">
@@ -236,9 +233,9 @@ export function AdminOrgsTab() {
                       },
                     }))
                   }
-                  placeholder="请求/日"
+                  placeholder={t("requestsPerDay")}
                   inputMode="numeric"
-                  title="每日请求上限（留空 = 未设置）"
+                  title={t("dailyRequestLimitTitle")}
                   className="w-24 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/40 text-right font-mono"
                 />
                 <input
@@ -254,9 +251,9 @@ export function AdminOrgsTab() {
                       },
                     }))
                   }
-                  placeholder="索引字节/日"
+                  placeholder={t("indexBytesPerDay")}
                   inputMode="numeric"
-                  title="每日索引字节上限（留空 = 未设置）"
+                  title={t("dailyIndexLimitTitle")}
                   className="w-28 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/40 text-right font-mono"
                 />
                 <Button
@@ -266,7 +263,7 @@ export function AdminOrgsTab() {
                   onClick={() => save(org)}
                   className="h-7 px-2.5 text-xs"
                 >
-                  保存
+                  {t("save")}
                 </Button>
               </div>
             </div>
@@ -275,8 +272,7 @@ export function AdminOrgsTab() {
       </div>
 
       <p className="text-slate-600 text-[10px]">
-        输入框只编辑管理员覆盖值：留空 = 继承 owner 套餐或基础档位；0 = 不限；正整数 = 上限。
-        保存后立即生效。
+        {t("overrideHint")}
       </p>
     </div>
   );

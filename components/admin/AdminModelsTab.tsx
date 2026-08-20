@@ -18,6 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RERANK_PROVIDER_PRESETS, type RerankProvider } from "@/lib/rerank-providers";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 type EmbeddingProvider = "openai-compatible" | "voyage";
 type ModelKind = "embeddings" | "rerank";
@@ -94,6 +95,7 @@ function KeyPoolInput({ value, onChange, placeholder }: {
   onChange: (value: string) => void;
   placeholder: string;
 }) {
+  const t = useTranslations("AdminModels");
   const keys = value === "" ? [""] : value.split(/\r?\n/);
   const update = (index: number, next: string) => {
     const values = [...keys];
@@ -117,7 +119,7 @@ function KeyPoolInput({ value, onChange, placeholder }: {
               type="button"
               variant="glass"
               size="icon"
-              title="移除这个 Key"
+              title={t("removeThisKey")}
               onClick={() => onChange(keys.filter((_, keyIndex) => keyIndex !== index).join("\n"))}
               className="h-[31px] w-[31px] shrink-0 text-slate-500 hover:text-red-400"
             >
@@ -130,18 +132,19 @@ function KeyPoolInput({ value, onChange, placeholder }: {
         type="button"
         variant="glass"
         size="sm"
-        title="添加 Voyage API Key"
+        title={t("addVoyageApiKey")}
         onClick={() => onChange(`${value}${value ? "\n" : ""}`)}
         className="h-7 px-2 text-[11px] text-cyan-400"
       >
         <Plus className="h-3.5 w-3.5" />
-        添加 Key
+        {t("addKey")}
       </Button>
     </div>
   );
 }
 
 export function AdminModelsTab() {
+  const t = useTranslations("AdminModels");
   const [view, setView] = useState<ModelView | null>(null);
   const [form, setForm] = useState<ModelForm | null>(null);
   const [loading, setLoading] = useState(true);
@@ -169,12 +172,12 @@ export function AdminModelsTab() {
       if (clearNotice) setNotice("");
     } catch (error) {
       if (signal?.aborted) return;
-      setNotice(error instanceof Error ? error.message : "加载失败，请重试");
+      setNotice(error instanceof Error ? error.message : t("failedToLoadTryAgain"));
       setNoticeOk(false);
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -235,7 +238,7 @@ export function AdminModelsTab() {
       const models = Array.isArray(data.models)
         ? data.models.filter((model: unknown): model is string => typeof model === "string" && model.trim() !== "")
         : [];
-      if (models.length === 0) throw new Error("供应商未返回可用模型");
+      if (models.length === 0) throw new Error(t("theProviderReturnedNoAvailableModels"));
       if (kind === "embeddings") {
         setEmbeddingModels(models);
         updateEmbeddings({ model: models.includes(form.embeddings.model) ? form.embeddings.model : models[0] });
@@ -243,15 +246,15 @@ export function AdminModelsTab() {
         setRerankModels(models);
         updateRerank({ model: models.includes(form.rerank.model) ? form.rerank.model : models[0] });
       }
-      setNotice(`已获取 ${models.length} 个${kind === "embeddings" ? " Embedding" : " Rerank"} 模型`);
+      setNotice(t("loadedModels", { count: models.length, kind: kind === "embeddings" ? "Embedding" : "Rerank" }));
       setNoticeOk(true);
     } catch (error) {
-      setNotice(`获取模型失败：${error instanceof Error ? error.message : String(error)}`);
+      setNotice(t("failedToLoadModels", {p0: error instanceof Error ? error.message : String(error)}));
       setNoticeOk(false);
     } finally {
       setModelsLoading(null);
     }
-  }, [form, updateEmbeddings, updateRerank]);
+  }, [form, updateEmbeddings, updateRerank, t]);
 
   const submit = useCallback(async (confirmEmbeddingReset: boolean) => {
     if (!form) return;
@@ -286,58 +289,58 @@ export function AdminModelsTab() {
       setConfirmReset(false);
       await load(undefined, false);
       setNotice(data.embeddingChanged
-        ? "配置已保存，旧索引已清除；现有项目需要重新索引"
-        : "模型配置已保存并立即生效");
+        ? t("configurationSavedAndOldIndexesClearedExisting")
+        : t("modelConfigurationSavedAndAppliedImmediately"));
       setNoticeOk(true);
     } catch (error) {
-      setNotice(`保存失败：${error instanceof Error ? error.message : String(error)}`);
+      setNotice(t("failedToSave", {p0: error instanceof Error ? error.message : String(error)}));
       setNoticeOk(false);
     } finally {
       setBusy(false);
     }
-  }, [form, load]);
+  }, [form, load, t]);
 
   const validationError = useMemo(() => {
     if (!form) return "";
     const embeddingKeys = parseKeyInput(form.embeddings.apiKey);
     const rerankKeys = parseKeyInput(form.rerank.apiKey);
-    if (!form.embeddings.baseUrl.trim()) return "请填写 Embedding Base URL";
-    if (embeddingKeys.length === 0 && !canReuseEmbeddingKey) return "请填写 Embedding API Key";
-    if (embeddingKeys.length > 100) return "Embedding Key 池最多支持 100 个 Key";
+    if (!form.embeddings.baseUrl.trim()) return t("enterTheEmbeddingBaseUrl");
+    if (embeddingKeys.length === 0 && !canReuseEmbeddingKey) return t("enterAnEmbeddingApiKey");
+    if (embeddingKeys.length > 100) return t("theEmbeddingKeyPoolSupportsUpTo");
     if (form.embeddings.provider !== "voyage" && embeddingKeys.length > 1) {
-      return "只有 Voyage Embedding 支持多 Key";
+      return t("onlyVoyageEmbeddingSupportsMultipleKeys");
     }
     if (!form.embeddings.model.trim()) return form.embeddings.provider === "openai-compatible"
-      ? "请先获取并选择 Embedding 模型"
-      : "请选择 Embedding 模型";
+      ? t("loadAndSelectAnEmbeddingModel")
+      : t("selectAnEmbeddingModel");
     if (!Number.isSafeInteger(form.embeddings.dimensions) || form.embeddings.dimensions <= 0) {
-      return "请输入有效的 Embedding 索引维度";
+      return t("enterAValidEmbeddingIndexDimension");
     }
     if (form.embeddings.dimensions !== CLOUD_INDEX_DIMENSIONS) {
-      return `云端索引当前固定为 ${CLOUD_INDEX_DIMENSIONS} 维；修改数据库向量维度需要单独迁移并重建索引`;
+      return t("cloudIndexesCurrentlyUseDimensionsChangingThe", {p0: CLOUD_INDEX_DIMENSIONS});
     }
     if (
       form.embeddings.provider === "voyage" &&
       form.embeddings.outputDimension !== undefined &&
       form.embeddings.outputDimension !== form.embeddings.dimensions
     ) {
-      return "Voyage 供应商输出维度必须与索引维度一致（当前为 1024）";
+      return t("voyageOutputDimensionsMustMatchTheIndex");
     }
-    if (!form.rerank.baseUrl.trim()) return "请填写 Rerank Base URL";
-    if (rerankKeys.length === 0 && !canReuseRerankKey) return "请填写 Rerank API Key";
-    if (rerankKeys.length > 100) return "Rerank Key 池最多支持 100 个 Key";
+    if (!form.rerank.baseUrl.trim()) return t("enterTheRerankBaseUrl");
+    if (rerankKeys.length === 0 && !canReuseRerankKey) return t("enterARerankApiKey");
+    if (rerankKeys.length > 100) return t("theRerankKeyPoolSupportsUpTo");
     if (form.rerank.provider !== "voyage" && rerankKeys.length > 1) {
-      return "只有 Voyage Rerank 支持多 Key";
+      return t("onlyVoyageRerankSupportsMultipleKeys");
     }
     if (!form.rerank.model.trim()) return form.rerank.provider === "siliconflow-compatible"
-      ? "请先获取并选择 Rerank 模型"
-      : "请选择或填写 Rerank 模型";
+      ? t("loadAndSelectARerankModel")
+      : t("selectOrEnterARerankModel");
     return "";
-  }, [canReuseEmbeddingKey, canReuseRerankKey, form]);
+  }, [canReuseEmbeddingKey, canReuseRerankKey, form, t]);
 
   if (loading) return <Skeleton className="h-72 rounded-xl bg-white/[0.06]" />;
   if (!form || !view) {
-    return <p className="text-sm text-red-400">{notice || "模型配置加载失败"}</p>;
+    return <p className="text-sm text-red-400">{notice || t("failedToLoadModelConfiguration")}</p>;
   }
 
   const rerankPreset = RERANK_PROVIDER_PRESETS[form.rerank.provider];
@@ -355,8 +358,7 @@ export function AdminModelsTab() {
   return (
     <div className="space-y-4">
       <p className="text-xs leading-relaxed text-slate-500">
-        配置保存在 LCE 数据库并立即生效。API Key 不回显；只有供应商和 Base URL
-        都未变化时，留空才会沿用当前 Key。
+        {t("configurationIsStoredInTheLceDatabase")}
       </p>
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -365,11 +367,11 @@ export function AdminModelsTab() {
             <div>
               <h3 className="text-sm font-medium text-white">Embeddings</h3>
               <p className="mt-1 text-[10px] text-slate-600">
-                切换 Embedding 会清除旧向量索引，避免不同向量空间混用。
+                {t("changingEmbeddingClearsOldVectorIndexesTo")}
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="1. 供应商">
+              <Field label={t("1Provider")}>
                 <select
                   value={form.embeddings.provider}
                   onChange={(event) => {
@@ -388,12 +390,12 @@ export function AdminModelsTab() {
                   className={inputClass}
                 >
                   <option value="voyage">Voyage AI</option>
-                  <option value="openai-compatible">OpenAI-compatible / 自定义</option>
+                  <option value="openai-compatible">OpenAI-compatible / {t("custom")}</option>
                 </select>
               </Field>
               <Field
                 label="2. Base URL"
-                hint={form.embeddings.provider === "voyage" ? "官方地址由系统固定" : "填写兼容 OpenAI embeddings 接口的完整地址"}
+                hint={form.embeddings.provider === "voyage" ? t("theOfficialEndpointIsFixedByThe") : t("enterTheFullUrlOfAnOpenai")}
               >
                 <input
                   readOnly={form.embeddings.provider === "voyage"}
@@ -409,14 +411,14 @@ export function AdminModelsTab() {
                 />
               </Field>
               <Field
-                label={form.embeddings.provider === "voyage" ? "3. API Key 池" : "3. API Key"}
+                label={form.embeddings.provider === "voyage" ? t("3ApiKeyPool") : "3. API Key"}
                 hint={form.embeddings.provider === "voyage"
-                  ? `每行一个 Key，自动轮询和故障切换；已保存 ${view.embeddings.apiKeyCount} 个，留空沿用，填写后整体替换`
+                  ? t("oneKeyPerRowWithRotationAnd", {p0: view.embeddings.apiKeyCount})
                   : undefined}
               >
                 <div className="flex gap-2">
                   {form.embeddings.provider === "voyage" ? <KeyPoolInput
-                    placeholder={canReuseEmbeddingKey ? `已保存 ${view.embeddings.apiKeyCount} 个，留空沿用` : "每行一个 Voyage API Key"}
+                    placeholder={canReuseEmbeddingKey ? t("savedLeaveBlankToReuse", {p0: view.embeddings.apiKeyCount}) : t("oneVoyageApiKeyPerRow")}
                     value={form.embeddings.apiKey}
                     onChange={(value) => {
                       setEmbeddingModels([]);
@@ -430,7 +432,7 @@ export function AdminModelsTab() {
                   /> : <input
                     type="password"
                     autoComplete="new-password"
-                    placeholder={canReuseEmbeddingKey ? "已保存，留空沿用" : "必填"}
+                    placeholder={canReuseEmbeddingKey ? t("savedLeaveBlankToReuse2") : t("required")}
                     value={form.embeddings.apiKey}
                     onChange={(event) => updateEmbeddings({ apiKey: event.target.value, model: "" })}
                     className={inputClass}
@@ -451,25 +453,25 @@ export function AdminModelsTab() {
                       {modelsLoading === "embeddings"
                         ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         : <RefreshCw className="h-3.5 w-3.5" />}
-                      获取模型
+                      {t("loadModels")}
                     </Button>
                   )}
                 </div>
               </Field>
-              <Field label="4. 模型">
+              <Field label={t("4Model")}>
                 <select
                   value={form.embeddings.model}
                   onChange={(event) => updateEmbeddings({ model: event.target.value })}
                   disabled={embeddingOptions.length === 0}
                   className={cn(inputClass, embeddingOptions.length === 0 && "cursor-not-allowed text-slate-600")}
                 >
-                  {embeddingOptions.length === 0 && <option value="">请先获取模型</option>}
+                  {embeddingOptions.length === 0 && <option value="">{t("loadModelsFirst")}</option>}
                   {embeddingOptions.map((model) => <option key={model} value={model}>{model}</option>)}
                 </select>
               </Field>
               <Field
-                label="5. 索引维度"
-                hint={`对应 EMBEDDINGS_DIMENSIONS；当前云端 PostgreSQL 向量列固定为 ${CLOUD_INDEX_DIMENSIONS} 维`}
+                label={t("5IndexDimension")}
+                hint={t("mapsToEmbeddingsDimensionsTheCloudPostgresql", {p0: CLOUD_INDEX_DIMENSIONS})}
               >
                 <input
                   type="number"
@@ -483,10 +485,10 @@ export function AdminModelsTab() {
                 />
               </Field>
               <Field
-                label="6. 供应商输出维度"
+                label={t("6ProviderOutputDimension")}
                 hint={form.embeddings.provider === "voyage"
-                  ? "Voyage 的 output_dimension；必须与索引维度一致"
-                  : "OpenAI-compatible 接口由模型返回；系统会校验返回值为索引维度"}
+                  ? t("voyageOutputDimensionItMustMatchThe")
+                  : t("returnedByTheOpenaiCompatibleModelThe")}
               >
                 {form.embeddings.provider === "voyage" ? (
                   <input
@@ -502,7 +504,7 @@ export function AdminModelsTab() {
                 ) : (
                   <input
                     readOnly
-                    value="由供应商接口返回"
+                    value={t("returnedByProvider")}
                     className={cn(inputClass, "cursor-default text-slate-500")}
                   />
                 )}
@@ -516,11 +518,11 @@ export function AdminModelsTab() {
             <div>
               <h3 className="text-sm font-medium text-white">Rerank</h3>
               <p className="mt-1 text-[10px] text-slate-600">
-                Rerank 可独立切换，不需要重建向量索引。
+                {t("rerankCanBeChangedIndependentlyWithoutRebuilding")}
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="1. 供应商">
+              <Field label={t("1Provider")}>
                 <select
                   value={form.rerank.provider}
                   onChange={(event) => {
@@ -543,7 +545,7 @@ export function AdminModelsTab() {
               </Field>
               <Field
                 label="2. Base URL"
-                hint={form.rerank.provider === "custom" ? "自定义服务需填写完整 rerank 接口地址" : "官方地址由系统固定"}
+                hint={form.rerank.provider === "custom" ? t("enterTheCompleteRerankEndpointUrlFor") : t("theOfficialEndpointIsFixedByThe")}
               >
                 <input
                   readOnly={form.rerank.provider !== "custom"}
@@ -559,14 +561,14 @@ export function AdminModelsTab() {
                 />
               </Field>
               <Field
-                label={form.rerank.provider === "voyage" ? "3. API Key 池" : "3. API Key"}
+                label={form.rerank.provider === "voyage" ? t("3ApiKeyPool") : "3. API Key"}
                 hint={form.rerank.provider === "voyage"
-                  ? `每行一个 Key，自动轮询和故障切换；已保存 ${view.rerank.apiKeyCount} 个，留空沿用，填写后整体替换`
+                  ? t("oneKeyPerRowWithRotationAnd", {p0: view.rerank.apiKeyCount})
                   : undefined}
               >
                 <div className="flex gap-2">
                   {form.rerank.provider === "voyage" ? <KeyPoolInput
-                    placeholder={canReuseRerankKey ? `已保存 ${view.rerank.apiKeyCount} 个，留空沿用` : "每行一个 Voyage API Key"}
+                    placeholder={canReuseRerankKey ? t("savedLeaveBlankToReuse", {p0: view.rerank.apiKeyCount}) : t("oneVoyageApiKeyPerRow")}
                     value={form.rerank.apiKey}
                     onChange={(value) => {
                       setRerankModels([]);
@@ -580,7 +582,7 @@ export function AdminModelsTab() {
                   /> : <input
                     type="password"
                     autoComplete="new-password"
-                    placeholder={canReuseRerankKey ? "已保存，留空沿用" : "必填"}
+                    placeholder={canReuseRerankKey ? t("savedLeaveBlankToReuse2") : t("required")}
                     value={form.rerank.apiKey}
                     onChange={(event) => {
                       setRerankModels([]);
@@ -603,17 +605,17 @@ export function AdminModelsTab() {
                       {modelsLoading === "rerank"
                         ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         : <RefreshCw className="h-3.5 w-3.5" />}
-                      获取模型
+                      {t("loadModels")}
                     </Button>
                   )}
                 </div>
               </Field>
-              <Field label="4. 模型">
+              <Field label={t("4Model")}>
                 {form.rerank.provider === "custom" ? (
                   <input
                     value={form.rerank.model}
                     onChange={(event) => updateRerank({ model: event.target.value })}
-                    placeholder="自定义服务模型名"
+                    placeholder={t("customServiceModelName")}
                     className={inputClass}
                   />
                 ) : (
@@ -623,7 +625,7 @@ export function AdminModelsTab() {
                     disabled={rerankOptions.length === 0}
                     className={cn(inputClass, rerankOptions.length === 0 && "cursor-not-allowed text-slate-600")}
                   >
-                    {rerankOptions.length === 0 && <option value="">请先获取模型</option>}
+                    {rerankOptions.length === 0 && <option value="">{t("loadModelsFirst")}</option>}
                     {rerankOptions.map((model) => <option key={model} value={model}>{model}</option>)}
                   </select>
                 )}
@@ -648,16 +650,15 @@ export function AdminModelsTab() {
         className="text-xs text-cyan-400"
       >
         {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-        保存平台配置
+        {t("savePlatformConfiguration")}
       </Button>
 
       <AlertDialog open={confirmReset} onOpenChange={(open) => !busy && setConfirmReset(open)}>
         <AlertDialogContent className="border-white/[0.08] bg-[#0d1424]">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">确认切换 Embedding</AlertDialogTitle>
+            <AlertDialogTitle className="text-white">{t("changeEmbedding")}</AlertDialogTitle>
             <AlertDialogDescription className="text-slate-400">
-              新旧 Embedding 的向量空间不能混用。继续后会清除 Relay 和 LCE
-              中的全部旧索引状态，所有项目都需要重新索引。此操作不能撤销。
+              {t("oldAndNewEmbeddingVectorSpacesCannot")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -665,7 +666,7 @@ export function AdminModelsTab() {
               disabled={busy}
               className="border-white/[0.08] bg-transparent text-slate-400 hover:bg-white/[0.06] hover:text-white"
             >
-              取消
+              {t("cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               disabled={busy}
@@ -673,7 +674,7 @@ export function AdminModelsTab() {
               className="bg-red-500/90 text-white hover:bg-red-500"
             >
               {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              清除旧索引并保存
+              {t("clearOldIndexesAndSave")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

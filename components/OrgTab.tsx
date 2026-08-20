@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Building2, Copy, Crown, LogOut, RefreshCw, UserMinus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 interface OrgSummary {
   id: string;
@@ -52,19 +53,6 @@ interface OrgUsageData {
   };
 }
 
-function quotaSourceLabel(today: OrgUsageData["today"]): string {
-  switch (today.source) {
-    case "admin_override":
-      return "管理员覆盖";
-    case "subscription":
-      return today.planName ? `套餐：${today.planName}` : "有效套餐";
-    case "owner_tier":
-      return "组织所有者基础档位";
-    default:
-      return "平台 Free 默认";
-  }
-}
-
 function isOwnerRole(role: string | null | undefined): boolean {
   return Boolean(role?.split(",").map((r) => r.trim()).includes("owner"));
 }
@@ -80,6 +68,7 @@ function slugify(name: string): string {
 }
 
 export function OrgTab({ currentUserId }: { currentUserId: string }) {
+  const t = useTranslations("Organization");
   const { data: orgs, isPending, refetch } = authClient.useListOrganizations();
   const [activeOrgId, setActiveOrgId] = useState<string | null>(null);
   const [members, setMembers] = useState<OrgMember[] | null>(null);
@@ -121,7 +110,7 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
       const { data, error } = await authClient.organization.getFullOrganization({
         query: { organizationId: orgId },
       });
-      if (error || !data) throw new Error(error?.message || "加载失败");
+      if (error || !data) throw new Error(error?.message || t("failedToLoad"));
       const loadedMembers = (data.members as OrgMember[]) ?? [];
       setMembers(loadedMembers);
       setInvitations(
@@ -148,9 +137,9 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
       setMembers(null);
       setInvitations(null);
       setQuotaDrafts({});
-      setDetailError(e instanceof Error ? e.message : "组织详情加载失败");
+      setDetailError(e instanceof Error ? e.message : t("failedToLoadOrganizationDetails"));
     }
-  }, [currentUserId]);
+  }, [currentUserId, t]);
 
   useEffect(() => {
     if (!activeOrg) return;
@@ -182,13 +171,13 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
           slug: `${slugify(name)}-${Math.random().toString(36).slice(2, 6)}`,
         }));
       }
-      if (error || !data) throw new Error(error?.message || "创建失败");
+      if (error || !data) throw new Error(error?.message || t("failedToCreateOrganization"));
       setCreateName("");
       setActiveOrgId(data.id);
       refetch?.();
-      setNotice("组织已创建，你的组织密钥已自动生成（见密钥管理）");
+      setNotice(t("organizationCreatedYourOrganizationKeyWasGenerated"));
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : "创建组织失败");
+      setNotice(e instanceof Error ? e.message : t("failedToCreateOrganization"));
     } finally {
       setCreating(false);
     }
@@ -206,19 +195,19 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
         role: "member",
         organizationId: activeOrg.id,
       });
-      if (error || !data) throw new Error(error?.message || "邀请失败");
+      if (error || !data) throw new Error(error?.message || t("failedToCreateInvitation"));
       const link = `${window.location.origin}/accept-invitation/${data.id}`;
       setInviteLink(link);
       setInviteEmail("");
       await loadDetail(activeOrg.id);
       try {
         await navigator.clipboard.writeText(link);
-        setNotice("邀请已创建，链接已复制到剪贴板（48 小时内有效）");
+        setNotice(t("invitationCreatedAndLinkCopiedItIs"));
       } catch {
-        setNotice("邀请已创建，请手动复制链接（48 小时内有效）");
+        setNotice(t("invitationCreatedCopyTheLinkManuallyIt"));
       }
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : "邀请失败");
+      setNotice(e instanceof Error ? e.message : t("failedToCreateInvitation"));
     } finally {
       setBusy(null);
     }
@@ -227,16 +216,16 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
   const removeMember = (m: OrgMember) => {
     if (!activeOrg) return;
     setConfirmAction({
-      title: "移除成员",
-      description: `确定将 ${m.user.email || m.userId} 移出组织？其组织密钥将立即失效。`,
+      title: t("removeMember"),
+      description: t("removeFromTheOrganizationTheirOrganizationKey", {p0: m.user.email || m.userId}),
       run: async () => {
         const { error } = await authClient.organization.removeMember({
           memberIdOrEmail: m.id,
           organizationId: activeOrg.id,
         });
-        if (error) throw new Error(error.message || "移除失败");
+        if (error) throw new Error(error.message || t("failedToRemoveMember"));
         await loadDetail(activeOrg.id);
-        setNotice("已移除成员并吊销其组织密钥");
+        setNotice(t("memberRemovedAndOrganizationKeyRevoked"));
       },
     });
   };
@@ -244,8 +233,8 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
   const transferOwner = (m: OrgMember) => {
     if (!activeOrg || !myMember) return;
     setConfirmAction({
-      title: "转让所有者",
-      description: `确定将组织所有者转让给 ${m.user.email || m.userId}？你将降级为普通成员。`,
+      title: t("transferOwnership"),
+      description: t("transferOwnershipToYouWillBecomeA", {p0: m.user.email || m.userId}),
       run: async () => {
         // 先升对方，再降自己；两把组织密钥的 org_role 由 hooks 同步
         const up = await authClient.organization.updateMemberRole({
@@ -253,7 +242,7 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
           role: "owner",
           organizationId: activeOrg.id,
         });
-        if (up.error) throw new Error(up.error.message || "转让失败");
+        if (up.error) throw new Error(up.error.message || t("transferFailed"));
         const down = await authClient.organization.updateMemberRole({
           memberId: myMember.id,
           role: "member",
@@ -261,11 +250,11 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
         });
         if (down.error) {
           throw new Error(
-            `对方已升为所有者，但你的降级失败：${down.error.message || "请重试"}`
+            t("ownershipTransferredButRoleChangeFailed", { error: down.error.message || t("tryAgain") })
           );
         }
         await loadDetail(activeOrg.id);
-        setNotice("所有者已转让");
+        setNotice(t("ownershipTransferred"));
       },
     });
   };
@@ -273,17 +262,17 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
   const leaveOrg = () => {
     if (!activeOrg) return;
     setConfirmAction({
-      title: "退出组织",
-      description: "退出后你的组织密钥将立即失效，公司项目将无法继续使用该密钥。确定退出？",
+      title: t("leaveOrganization"),
+      description: t("yourOrganizationKeyWillStopWorkingImmediately"),
       run: async () => {
         const { error } = await authClient.organization.leave({
           organizationId: activeOrg.id,
         });
-        if (error) throw new Error(error.message || "退出失败");
+        if (error) throw new Error(error.message || t("failedToLeaveOrganization"));
         setActiveOrgId(null);
         setMembers(null);
         refetch?.();
-        setNotice("已退出组织");
+        setNotice(t("youLeftTheOrganization"));
       },
     });
   };
@@ -294,7 +283,7 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
     let limit: number | null = null;
     if (raw !== "") {
       if (!/^\d+$/.test(raw)) {
-        setNotice("配额必须是 ≥0 的整数（0 = 不限，留空 = 默认）");
+        setNotice(t("quotaMustBeAnInteger00"));
         return;
       }
       limit = Number(raw);
@@ -309,9 +298,9 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      setNotice("成员配额已保存，立即生效");
+      setNotice(t("memberQuotaSavedAndAppliedImmediately"));
     } catch (e) {
-      setNotice(e instanceof Error ? e.message : "保存失败");
+      setNotice(e instanceof Error ? e.message : t("failedToSave"));
     } finally {
       setBusy(null);
     }
@@ -329,7 +318,7 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
   return (
     <div className="space-y-5">
       {notice && (
-        <p className={cn("text-xs", /失败|错误|必须/.test(notice) ? "text-red-400" : "text-emerald-400")}>
+        <p className={cn("text-xs", /失败|错误|必须|failed|must/i.test(notice) ? "text-red-400" : "text-emerald-400")}>
           {notice}
         </p>
       )}
@@ -339,18 +328,17 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
           <CardContent className="p-6 text-center space-y-4">
             <Building2 className="w-8 h-8 text-slate-600 mx-auto" />
             <p className="text-slate-400 text-sm">
-              你还没有加入任何组织。创建组织后会自动生成一把组织密钥，
-              公司项目请使用组织密钥，个人项目继续使用个人密钥。
+              {t("youHaveNotJoinedAnOrganizationCreating")}
             </p>
             <div className="flex items-center justify-center gap-2">
               <input
                 value={createName}
                 onChange={(e) => setCreateName(e.target.value)}
-                placeholder="组织名称"
+                placeholder={t("organizationName")}
                 className="w-48 bg-white/[0.03] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/40"
               />
               <Button variant="gradient" size="sm" onClick={handleCreate} disabled={creating || !createName.trim()}>
-                {creating ? "创建中..." : "创建组织"}
+                {creating ? t("creating") : t("createOrganization")}
               </Button>
             </div>
           </CardContent>
@@ -378,11 +366,11 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
               <input
                 value={createName}
                 onChange={(e) => setCreateName(e.target.value)}
-                placeholder="新组织名称"
+                placeholder={t("newOrganizationName")}
                 className="w-36 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/40"
               />
               <Button variant="glass" size="sm" onClick={handleCreate} disabled={creating || !createName.trim()}>
-                {creating ? "创建中..." : "创建"}
+                {creating ? t("creating") : t("create")}
               </Button>
             </div>
           </div>
@@ -392,7 +380,7 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
               <p className="text-sm text-red-300">{detailError}</p>
               <Button variant="glass" size="sm" onClick={() => activeOrg && loadDetail(activeOrg.id)}>
                 <RefreshCw className="w-4 h-4 mr-1" />
-                重试
+                {t("retry")}
               </Button>
             </div>
           )}
@@ -406,7 +394,7 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
           ) : members !== null && (
             <>
               <div className="space-y-2">
-                <h3 className="text-sm font-medium text-white">成员（{members.length}）</h3>
+                <h3 className="text-sm font-medium text-white">{t("members", {p0: members.length})}</h3>
                 {members.map((m) => {
                   const owner = isOwnerRole(m.role);
                   const isSelf = m.userId === currentUserId;
@@ -417,7 +405,7 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
                     >
                       <span className="text-slate-300 text-sm truncate max-w-[200px] flex-1 min-w-[140px]">
                         {m.user.name || m.user.email || m.userId}
-                        {isSelf && <span className="text-slate-600 text-xs ml-1">（我）</span>}
+                        {isSelf && <span className="text-slate-600 text-xs ml-1">{t("me")}</span>}
                       </span>
                       <Badge
                         variant="outline"
@@ -429,7 +417,7 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
                         )}
                       >
                         {owner && <Crown className="w-3 h-3 mr-1" />}
-                        {owner ? "所有者" : "成员"}
+                        {owner ? t("owner") : t("member")}
                       </Badge>
                       {iAmOwner && !isSelf && (
                         <div className="flex items-center gap-2 ml-auto">
@@ -438,9 +426,9 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
                             onChange={(e) =>
                               setQuotaDrafts((d) => ({ ...d, [m.userId]: e.target.value }))
                             }
-                            placeholder="日上限"
+                            placeholder={t("dailyLimit")}
                             inputMode="numeric"
-                            title="该成员每日请求上限（留空=默认，0=不限）"
+                            title={t("dailyRequestLimitForThisMemberBlank")}
                             className="w-16 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/40 text-right font-mono"
                           />
                           <Button
@@ -450,7 +438,7 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
                             disabled={busy === `quota:${m.userId}`}
                             onClick={() => saveMemberQuota(m)}
                           >
-                            设上限
+                            {t("setLimit")}
                           </Button>
                           <Button
                             variant="ghost"
@@ -459,7 +447,7 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
                             onClick={() => transferOwner(m)}
                           >
                             <Crown className="w-3.5 h-3.5 mr-1" />
-                            转让
+                            {t("transfer")}
                           </Button>
                           <Button
                             variant="ghost"
@@ -468,7 +456,7 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
                             onClick={() => removeMember(m)}
                           >
                             <UserMinus className="w-3.5 h-3.5 mr-1" />
-                            移除
+                            {t("remove")}
                           </Button>
                         </div>
                       )}
@@ -481,12 +469,12 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
               {iAmOwner && (
                 <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
                   <CardContent className="p-4 space-y-3">
-                    <h3 className="text-sm font-medium text-white">邀请成员</h3>
+                    <h3 className="text-sm font-medium text-white">{t("inviteMember")}</h3>
                     <div className="flex items-center gap-2">
                       <input
                         value={inviteEmail}
                         onChange={(e) => setInviteEmail(e.target.value)}
-                        placeholder="成员邮箱"
+                        placeholder={t("memberEmail")}
                         type="email"
                         className="flex-1 bg-white/[0.03] border border-white/[0.08] rounded-lg px-3 py-2 text-sm text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/40"
                       />
@@ -496,7 +484,7 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
                         onClick={handleInvite}
                         disabled={busy === "invite" || !inviteEmail.trim()}
                       >
-                        {busy === "invite" ? "生成中..." : "生成邀请链接"}
+                        {busy === "invite" ? t("generating") : t("generateInvitationLink")}
                       </Button>
                     </div>
                     {inviteLink && (
@@ -514,7 +502,7 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
                     )}
                     {invitations && invitations.length > 0 && (
                       <div className="space-y-1">
-                        <p className="text-xs text-slate-500">待接受的邀请</p>
+                        <p className="text-xs text-slate-500">{t("pendingInvitations")}</p>
                         {invitations.map((i) => (
                           <div key={i.id} className="flex items-center gap-2 text-xs text-slate-400">
                             <span className="truncate">{i.email}</span>
@@ -528,7 +516,7 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
                                 )
                               }
                             >
-                              复制链接
+                              {t("copyLink")}
                             </Button>
                           </div>
                         ))}
@@ -547,13 +535,12 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
                   className="text-slate-500 hover:text-red-400 hover:bg-red-500/10"
                 >
                   <LogOut className="w-4 h-4 mr-1" />
-                  退出该组织
+                  {t("leaveOrganization")}
                 </Button>
               )}
 
               <p className="text-slate-600 text-[10px]">
-                公司项目请使用组织密钥（密钥管理页可复制配置），个人项目使用个人密钥。
-                成员日上限：留空 = 默认；0 = 不限；保存后立即生效。
+                {t("useOrganizationKeysForCompanyProjectsAnd")}
               </p>
             </>
           )}
@@ -579,7 +566,7 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="bg-transparent border-white/[0.08] text-slate-400 hover:text-white hover:bg-white/[0.06]">
-              取消
+              {t("cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={async () => {
@@ -589,12 +576,12 @@ export function OrgTab({ currentUserId }: { currentUserId: string }) {
                 try {
                   await action.run();
                 } catch (e) {
-                  setNotice(e instanceof Error ? e.message : "操作失败");
+                  setNotice(e instanceof Error ? e.message : t("operationFailed"));
                 }
               }}
               className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-white"
             >
-              确认
+              {t("confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -623,6 +610,7 @@ function UsageBar({ label, value, max }: { label: string; value: number; max: nu
 // 索引字节用量本期不展示：request_logs 无字节数（计数在 relay 侧 Redis），
 // 不放假数据。
 function OrgUsageSection({ orgId }: { orgId: string }) {
+  const t = useTranslations("Organization");
   const [usage, setUsage] = useState<OrgUsageData | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -638,10 +626,10 @@ function OrgUsageSection({ orgId }: { orgId: string }) {
         setError("");
       } catch {
         if (signal?.aborted) return;
-        setError("组织用量加载失败");
+        setError(t("failedToLoadOrganizationUsage"));
       }
     },
-    [orgId]
+    [orgId, t]
   );
 
   const refresh = useCallback(() => {
@@ -668,7 +656,7 @@ function OrgUsageSection({ orgId }: { orgId: string }) {
     <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
       <CardContent className="p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium text-white">用量（近 30 天）</h3>
+          <h3 className="text-sm font-medium text-white">{t("usage30Days")}</h3>
           <Button
             variant="ghost"
             size="sm"
@@ -694,16 +682,24 @@ function OrgUsageSection({ orgId }: { orgId: string }) {
               <div>
                 <div className="flex items-start justify-between gap-3 mb-1.5">
                   <div>
-                    <p className="text-xs text-slate-500">今日请求 / 组织日配额</p>
+                    <p className="text-xs text-slate-500">{t("todaySRequestsDailyOrganizationQuota")}</p>
                     <p className="mt-0.5 text-[10px] text-slate-600">
-                      {quotaSourceLabel(usage.today)}
+                      {usage.today.source === "admin_override"
+                        ? t("quotaSource.adminOverride")
+                        : usage.today.source === "subscription"
+                          ? usage.today.planName
+                            ? t("quotaSource.plan", { plan: usage.today.planName })
+                            : t("quotaSource.activePlan")
+                          : usage.today.source === "owner_tier"
+                            ? t("quotaSource.ownerTier")
+                            : t("quotaSource.platformDefault")}
                     </p>
                   </div>
                   <p className="text-xs font-mono text-slate-300">
                     {usage.today.used.toLocaleString()}
                     <span className="text-slate-600"> / </span>
                     {usage.today.limit === 0
-                      ? "不限"
+                      ? t("unlimited")
                       : usage.today.limit.toLocaleString()}
                   </p>
                 </div>
@@ -726,9 +722,9 @@ function OrgUsageSection({ orgId }: { orgId: string }) {
 
               {/* 每日请求数 */}
               <div>
-                <p className="text-xs text-slate-500 mb-2">每日请求数</p>
+                <p className="text-xs text-slate-500 mb-2">{t("dailyRequests")}</p>
                 {usage.daily.length === 0 ? (
-                  <p className="text-slate-600 text-xs">暂无数据</p>
+                  <p className="text-slate-600 text-xs">{t("noData")}</p>
                 ) : (
                   <div className="space-y-1.5">
                     {usage.daily.map((d) => (
@@ -740,9 +736,9 @@ function OrgUsageSection({ orgId }: { orgId: string }) {
 
               {/* 成员请求 Top 分布 */}
               <div>
-                <p className="text-xs text-slate-500 mb-2">成员请求 Top 分布</p>
+                <p className="text-xs text-slate-500 mb-2">{t("topMembersByRequests")}</p>
                 {usage.topMembers.length === 0 ? (
-                  <p className="text-slate-600 text-xs">暂无数据</p>
+                  <p className="text-slate-600 text-xs">{t("noData")}</p>
                 ) : (
                   <div className="space-y-1.5">
                     {usage.topMembers.map((m, i) => (
@@ -764,8 +760,7 @@ function OrgUsageSection({ orgId }: { orgId: string }) {
               </div>
 
               <p className="text-slate-600 text-[10px]">
-                统计基于组织请求日志（tenant_id 自新版 relay 起回填，只覆盖新数据）；
-                索引字节用量暂不提供。
+                {t("statisticsUseOrganizationRequestLogsTenantId")}
               </p>
             </>
           )

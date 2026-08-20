@@ -10,6 +10,7 @@ import {
   RERANK_PROVIDER_PRESETS,
   type RerankProvider,
 } from "@/lib/rerank-providers";
+import { useTranslations } from "next-intl";
 
 interface FormState {
   provider: RerankProvider;
@@ -38,6 +39,7 @@ const inputCls =
   "w-full bg-white/[0.03] border border-white/[0.08] rounded-lg px-2.5 py-1.5 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/40 font-mono";
 
 export function UserModelConfigTab() {
+  const t = useTranslations("UserModels");
   const [activeSide, setActiveSide] = useState<"embeddings" | "rerank">("rerank");
   const [loaded, setLoaded] = useState(false);
   const [enabled, setEnabled] = useState(true);
@@ -86,10 +88,10 @@ export function UserModelConfigTab() {
       setLoaded(true);
     } catch {
       if (signal?.aborted) return;
-      setNotice("加载失败，请刷新重试");
+      setNotice(t("failedToLoadRefreshAndTryAgain"));
       setLoaded(true);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -98,8 +100,8 @@ export function UserModelConfigTab() {
   }, [load]);
 
   const set = (patch: Partial<FormState>) => setForm((current) => ({ ...current, ...patch }));
-  const showNotice = (text: string, ok: boolean) => {
-    setNotice(text);
+  const showNotice = (message: string, ok: boolean) => {
+    setNotice(message);
     setNoticeOk(ok);
   };
 
@@ -129,19 +131,19 @@ export function UserModelConfigTab() {
       const models = Array.isArray(data.models)
         ? data.models.filter((model: unknown): model is string => typeof model === "string")
         : [];
-      if (models.length === 0) throw new Error("没有可用的 Rerank 模型");
+      if (models.length === 0) throw new Error(t("noRerankModelsAreAvailable"));
       setModelOptions(models);
       setForm((current) => ({
         ...current,
         model: models.includes(current.model) ? current.model : models[0],
       }));
-      showNotice(`已获取 ${models.length} 个 Rerank 模型`, true);
+      showNotice(t("loadedRerankModels", {p0: models.length}), true);
     } catch (error) {
-      showNotice(`获取模型失败：${error instanceof Error ? error.message : String(error)}`, false);
+      showNotice(t("failedToLoadModels", {p0: error instanceof Error ? error.message : String(error)}), false);
     } finally {
       setModelsLoading(false);
     }
-  }, [form.apiKey, form.provider]);
+  }, [form.apiKey, form.provider, t]);
 
   const save = useCallback(async () => {
     setBusy(true);
@@ -154,14 +156,14 @@ export function UserModelConfigTab() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
-      showNotice("Rerank 配置已保存", true);
+      showNotice(t("rerankConfigurationSaved"), true);
       await load();
     } catch (error) {
-      showNotice(`保存失败：${error instanceof Error ? error.message : String(error)}`, false);
+      showNotice(t("failedToSave", {p0: error instanceof Error ? error.message : String(error)}), false);
     } finally {
       setBusy(false);
     }
-  }, [form, load]);
+  }, [form, load, t]);
 
   const reset = useCallback(async () => {
     setBusy(true);
@@ -173,20 +175,20 @@ export function UserModelConfigTab() {
         body: JSON.stringify({ reset: true }),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      showNotice("已恢复平台 Rerank", true);
+      showNotice(t("restoredPlatformRerank"), true);
       await load();
     } catch {
-      showNotice("操作失败，请重试", false);
+      showNotice(t("operationFailedTryAgain"), false);
     } finally {
       setBusy(false);
     }
-  }, [load]);
+  }, [load, t]);
 
   if (!loaded) return <Skeleton className="h-64 bg-white/[0.06] rounded-xl" />;
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-1 border-b border-white/[0.08]" role="tablist" aria-label="模型类型">
+      <div className="flex items-center gap-1 border-b border-white/[0.08]" role="tablist" aria-label={t("modelType")}>
         <button
           type="button"
           role="tab"
@@ -223,28 +225,28 @@ export function UserModelConfigTab() {
             <div>
               <h3 className="text-sm font-medium text-white">Embedding</h3>
               <p className="mt-1 text-xs text-slate-500">
-                Embedding 由平台统一管理，保证所有用户共享索引的向量空间一致，当前不可在个人设置中修改。
+                {t("embeddingsAreManagedByThePlatformSo")}
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Provider">
                 <input
                   readOnly
-                  value={platformDefaults.embeddings.provider || "平台统一配置"}
+                  value={platformDefaults.embeddings.provider || t("platformManaged")}
                   className={cn(inputCls, "cursor-default text-slate-400")}
                 />
               </Field>
               <Field label="Model">
                 <input
                   readOnly
-                  value={platformDefaults.embeddings.model || "平台统一配置"}
+                  value={platformDefaults.embeddings.model || t("platformManaged")}
                   className={cn(inputCls, "cursor-default text-slate-400")}
                 />
               </Field>
               <Field label="Base URL">
                 <input
                   readOnly
-                  value={platformDefaults.embeddings.baseUrl || "平台统一配置"}
+                  value={platformDefaults.embeddings.baseUrl || t("platformManaged")}
                   className={cn(inputCls, "cursor-default text-slate-400")}
                 />
               </Field>
@@ -253,14 +255,14 @@ export function UserModelConfigTab() {
         </Card>
       ) : !enabled ? (
         <p className="text-slate-500 text-sm py-6">
-          {platformDefaults.rerank.model || "平台 Rerank"}
+          {platformDefaults.rerank.model || t("platformRerank")}
         </p>
       ) : (
         <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
           <CardContent className="p-4 space-y-4">
             <h3 className="text-white text-sm font-medium">Rerank</h3>
             <div className="grid gap-3">
-              <Field label="供应商">
+              <Field label={t("provider")}>
                 <select
                   value={form.provider}
                   onChange={(event) => selectProvider(event.target.value as RerankProvider)}
@@ -283,7 +285,7 @@ export function UserModelConfigTab() {
               <Field
                 label={
                   configured && form.provider === configuredProvider
-                    ? "API Key（留空表示使用已保存的 Key）"
+                    ? t("apiKeyLeaveBlankToUseThe")
                     : "API Key"
                 }
               >
@@ -293,7 +295,7 @@ export function UserModelConfigTab() {
                     value={form.apiKey}
                     onChange={(event) => set({ apiKey: event.target.value })}
                     placeholder={
-                      configured && form.provider === configuredProvider ? "已保存" : "sk-..."
+                      configured && form.provider === configuredProvider ? t("saved") : "sk-..."
                     }
                     className={inputCls}
                   />
@@ -309,17 +311,17 @@ export function UserModelConfigTab() {
                       {modelsLoading
                         ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         : <RefreshCw className="h-3.5 w-3.5" />}
-                      获取模型
+                      {t("loadModels")}
                     </Button>
                   )}
                 </div>
               </Field>
-              <Field label="模型">
+              <Field label={t("model")}>
                 {form.provider === "custom" ? (
                   <input
                     value={form.model}
                     onChange={(event) => set({ model: event.target.value })}
-                    placeholder="输入兼容服务的模型 ID"
+                    placeholder={t("enterTheCompatibleServiceModelId")}
                     className={inputCls}
                   />
                 ) : (
@@ -332,8 +334,8 @@ export function UserModelConfigTab() {
                     {modelOptions.length === 0 ? (
                       <option value="">
                         {form.provider === "siliconflow-compatible"
-                          ? "填写 API Key 后获取模型"
-                          : "暂无可用模型"}
+                          ? t("enterAnApiKeyThenLoadModels")
+                          : t("noModelsAvailable")}
                       </option>
                     ) : modelOptions.map((model) => (
                       <option key={model} value={model}>{model}</option>
@@ -360,12 +362,12 @@ export function UserModelConfigTab() {
             className="text-xs text-cyan-400"
           >
             <Save className="w-3.5 h-3.5" />
-            保存
+            {t("save")}
           </Button>
           {configured && (
             <Button variant="glass" size="sm" disabled={busy} onClick={reset} className="text-xs text-slate-400">
               <RotateCcw className="w-3.5 h-3.5" />
-              恢复平台配置
+              {t("restorePlatformSettings")}
             </Button>
           )}
         </div>
