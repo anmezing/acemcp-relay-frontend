@@ -1765,7 +1765,7 @@ export default function ConsolePage() {
                     )}
                   </TabsContent>
 
-                  {/* 我的 - 套餐与订阅 */}
+                  {/* 我的 - 套餐订阅 */}
                   <TabsContent value="plans" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                     <h2 className="text-lg font-medium text-white mb-6">{t("plansBilling")}</h2>
                     <PlansTab />
