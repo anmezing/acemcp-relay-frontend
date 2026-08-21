@@ -4,7 +4,7 @@ import path from "node:path";
 import { AGENT_RULES_CLOUD, CLOUD_TOOLS } from "@/lib/agent-rules";
 
 // 跨仓库契约钉住测试：lce 仓库 docs/contracts/cloud-protocol.json 是云协议
-// 的单一源头（cloudToolSurface = 客户端实际暴露的 4 个云端工具名）。本测试
+// 的单一源头（cloudToolSurface = 客户端实际暴露的云端工具名）。本测试
 // 断言前端两处工具名列举点（agent-rules 文案 + 控制台工具列表 CLOUD_TOOLS）
 // 与契约一致，防止前端文案与客户端实际工具面漂移。
 // 契约文件在 sibling 仓库中；找不到时 skip（如 CI 单独 checkout 本仓库）。
@@ -31,7 +31,7 @@ describe.skipIf(!contractPath)(
       const raw = JSON.parse(fs.readFileSync(contractPath!, "utf8"));
       const surface = raw.cloudToolSurface;
       expect(Array.isArray(surface)).toBe(true);
-      expect(surface.length).toBe(4);
+      expect(surface.length).toBeGreaterThan(0);
       return surface;
     }
 
@@ -41,7 +41,7 @@ describe.skipIf(!contractPath)(
       expect([...names].sort()).toEqual([...surface].sort());
     });
 
-    it("AGENT_RULES_CLOUD 文案包含且仅包含契约的 4 个工具名", () => {
+    it("AGENT_RULES_CLOUD 文案包含且仅包含契约的工具名", () => {
       const surface = loadSurface();
       for (const name of surface) {
         expect(AGENT_RULES_CLOUD).toContain(`\`${name}\``);

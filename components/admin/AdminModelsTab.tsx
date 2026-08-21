@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 
 type EmbeddingProvider = "openai-compatible" | "voyage";
+type PromptEnhancerProvider = "openai-compatible" | "anthropic" | "gemini";
 type ModelKind = "embeddings" | "rerank" | "promptEnhancer";
 
 interface ModelForm {
@@ -44,7 +45,7 @@ interface ModelForm {
   };
   promptEnhancer: {
     enabled: boolean;
-    provider: "openai-compatible";
+    provider: PromptEnhancerProvider;
     model: string;
     baseUrl: string;
     apiKey: string;
@@ -62,6 +63,11 @@ const inputClass =
 const VOYAGE_EMBEDDING_URL = "https://api.voyageai.com/v1/embeddings";
 const VOYAGE_EMBEDDING_MODELS = ["voyage-code-3"] as const;
 const CLOUD_INDEX_DIMENSIONS = 1024;
+const PROMPT_ENHANCER_PROVIDER_PRESETS: Record<PromptEnhancerProvider, { label: string; baseUrl: string }> = {
+  "openai-compatible": { label: "OpenAI-compatible / Custom", baseUrl: "" },
+  anthropic: { label: "Anthropic", baseUrl: "https://api.anthropic.com/v1/messages" },
+  gemini: { label: "Google Gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta/models" },
+};
 
 function toForm(config: ModelView): ModelForm {
   const embeddings = { ...config.embeddings };
@@ -708,17 +714,31 @@ export function AdminModelsTab() {
               <Field label={t("1Provider")}>
                 <select
                   value={form.promptEnhancer.provider}
-                  disabled
-                  className={cn(inputClass, "cursor-default text-slate-400")}
+                  disabled={!form.promptEnhancer.enabled}
+                  onChange={(event) => {
+                    const provider = event.target.value as PromptEnhancerProvider;
+                    setPromptEnhancerModels([]);
+                    updatePromptEnhancer({
+                      provider,
+                      baseUrl: PROMPT_ENHANCER_PROVIDER_PRESETS[provider].baseUrl,
+                      apiKey: "",
+                      model: "",
+                    });
+                  }}
+                  className={cn(inputClass, !form.promptEnhancer.enabled && "cursor-not-allowed text-slate-600")}
                 >
-                  <option value="openai-compatible">OpenAI-compatible</option>
+                  {Object.entries(PROMPT_ENHANCER_PROVIDER_PRESETS).map(([provider, preset]) => (
+                    <option key={provider} value={provider}>{preset.label}</option>
+                  ))}
                 </select>
               </Field>
-              <Field label="2. Base URL" hint={t("enterTheFullChatCompletionsUrl")}>
+              <Field label="2. Base URL" hint={t("enterThePromptEnhancerEndpointForTheSelectedProvider")}>
                 <input
                   disabled={!form.promptEnhancer.enabled}
                   value={form.promptEnhancer.baseUrl}
-                  placeholder="https://api.example.com/v1/chat/completions"
+                  placeholder={form.promptEnhancer.provider === "openai-compatible"
+                    ? "https://api.example.com/v1/chat/completions"
+                    : PROMPT_ENHANCER_PROVIDER_PRESETS[form.promptEnhancer.provider].baseUrl}
                   onChange={(event) => {
                     setPromptEnhancerModels([]);
                     updatePromptEnhancer({ baseUrl: event.target.value, apiKey: "", model: "" });

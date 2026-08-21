@@ -4,6 +4,7 @@
 export const CLOUD_TOOLS = [
   { name: "codebase-retrieval", desc: "语义检索项目代码上下文", descEn: "Semantic retrieval for project code context" },
   { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析", descEn: "Symbol calls and dependency analysis" },
+  { name: "codebase_enhance_prompt", desc: "基于真实代码上下文增强任务提示词", descEn: "Enhance tasks with verified repository context" },
   { name: "codebase_git_context", desc: "Git 状态、diff、提交历史、blame", descEn: "Git status, diffs, history, and blame" },
   { name: "codebase_review_changes", desc: "变更评审与检索计划", descEn: "Change review and retrieval planning" },
 ] as const;
@@ -18,6 +19,7 @@ export const AGENT_RULES_CLOUD = `## 代码检索（LCE）
 
 - 查找、理解、定位代码一律优先使用 \`codebase-retrieval\`（语义检索），用自然语言描述要找的功能、符号或逻辑，不要先用 grep / 逐文件浏览。
 - 分析符号的定义、引用、调用链、依赖关系与修改影响用 \`codebase_symbol_graph\`。
+- 需要把自然语言任务整理为带代码证据的目标、要求、约束和验证步骤时，用 \`codebase_enhance_prompt\`。
 - Git 状态、diff、提交历史、blame、分支上下文用 \`codebase_git_context\`。
 - 变更评审（review range、风险点、检索计划、测试计划）用 \`codebase_review_changes\`。
 - 仅当 LCE 工具不可用，或需要精确的正则 / 字面量匹配时，才退回本地全文搜索。`;
@@ -34,6 +36,7 @@ export const AGENT_RULES_CLOUD_EN = `## Code Retrieval (LCE)
 
 - Always use \`codebase-retrieval\` first when finding, understanding, or locating code. Describe the feature, symbol, or logic in natural language instead of starting with grep or browsing files.
 - Use \`codebase_symbol_graph\` for symbol definitions, references, call chains, dependencies, and change impact.
+- Use \`codebase_enhance_prompt\` to turn a natural-language task into goals, requirements, constraints, and verification steps grounded in verified repository context.
 - Use \`codebase_git_context\` for Git status, diffs, commit history, blame, and branch context.
 - Use \`codebase_review_changes\` for review ranges, risks, retrieval plans, and test plans.
 - Fall back to local text search only when LCE is unavailable or exact regex/literal matching is required.`;

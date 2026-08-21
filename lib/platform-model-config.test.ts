@@ -62,5 +62,22 @@ describe("platform prompt enhancer config parsing", () => {
     fetchMock.mockResolvedValue(new Response(JSON.stringify(responseConfig(undefined)), { status: 200 }));
     await expect(fetchPlatformModelConfig()).rejects.toThrow("promptEnhancer");
   });
+
+  it("preserves native Anthropic and Gemini providers from the backend", async () => {
+    for (const provider of ["anthropic", "gemini"] as const) {
+      fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(responseConfig({
+        enabled: true,
+        provider,
+        model: provider === "anthropic" ? "claude-3-5-sonnet" : "gemini-2.5-flash",
+        baseUrl: provider === "anthropic"
+          ? "https://api.anthropic.com/v1/messages"
+          : "https://generativelanguage.googleapis.com/v1beta/models",
+        apiKeyConfigured: true,
+        apiKeyCount: 1,
+      })), { status: 200 }));
+      const result = await fetchPlatformModelConfig();
+      expect(result.promptEnhancer.provider).toBe(provider);
+    }
+  });
 });
 

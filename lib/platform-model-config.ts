@@ -26,7 +26,7 @@ export interface PlatformModelConfigView {
   };
   promptEnhancer: {
     enabled: boolean;
-    provider: "openai-compatible";
+    provider: "openai-compatible" | "anthropic" | "gemini";
     model: string;
     baseUrl: string;
     apiKeyConfigured: boolean;
@@ -75,7 +75,11 @@ function parseView(value: unknown): PlatformModelConfigView {
   ) {
     throw new Error("模型配置响应包含未知 rerank provider");
   }
-  if (promptEnhancerValue.provider !== "openai-compatible") {
+  if (
+    promptEnhancerValue.provider !== "openai-compatible" &&
+    promptEnhancerValue.provider !== "anthropic" &&
+    promptEnhancerValue.provider !== "gemini"
+  ) {
     throw new Error("模型配置响应包含未知 promptEnhancer provider");
   }
   if (typeof promptEnhancerValue.enabled !== "boolean") {
@@ -131,7 +135,7 @@ function parseView(value: unknown): PlatformModelConfigView {
     },
     promptEnhancer: {
       enabled: promptEnhancerValue.enabled,
-      provider: "openai-compatible",
+      provider: promptEnhancerValue.provider,
       model: typeof promptEnhancerValue.model === "string" ? promptEnhancerValue.model.trim() : "",
       baseUrl: typeof promptEnhancerValue.baseUrl === "string" ? promptEnhancerValue.baseUrl.trim() : "",
       apiKeyConfigured: promptEnhancerValue.apiKeyConfigured === true,

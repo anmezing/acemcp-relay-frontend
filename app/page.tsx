@@ -148,6 +148,12 @@ export default async function Home() {
                 title={<I18nText id="bugLocation" />}
                 description={<I18nText id="combinesNaturalLanguageRetrievalExactTermsAnd" />}
               />
+              <div className="md:col-span-2">
+                <FeatureCard
+                  title={<I18nText id="codeGroundedPromptEnhancement" />}
+                  description={<I18nText id="enhancesNaturalLanguageCodingRequestsWithRetrievedCodeContext" />}
+                />
+              </div>
             </div>
           </section>
 
