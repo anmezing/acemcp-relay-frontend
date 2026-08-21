@@ -43,6 +43,14 @@ beforeEach(() => {
       apiKeyConfigured: true,
       apiKeyCount: 1,
     },
+    promptEnhancer: {
+      enabled: false,
+      provider: "openai-compatible",
+      model: "",
+      baseUrl: "",
+      apiKeyConfigured: false,
+      apiKeyCount: 0,
+    },
   });
   fetchMock.mockResolvedValue(new Response(JSON.stringify({ ok: true }), {
     status: 200,

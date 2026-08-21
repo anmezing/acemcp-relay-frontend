@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       headers: { ...getRelayAdminHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({
         action: "models",
-        kind: body.kind === "embeddings" || body.kind === "rerank" ? body.kind : "",
+        kind: body.kind === "embeddings" || body.kind === "rerank" || body.kind === "promptEnhancer" ? body.kind : "",
         provider: typeof body.provider === "string" ? body.provider : "",
         baseUrl: typeof body.baseUrl === "string" ? body.baseUrl : "",
         apiKey: typeof body.apiKey === "string" ? body.apiKey : "",

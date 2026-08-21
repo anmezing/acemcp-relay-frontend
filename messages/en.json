@@ -448,6 +448,7 @@
     "loadedModels": "Loaded {count} {kind} models",
     "removeThisKey": "Remove this key",
     "addVoyageApiKey": "Add Voyage API key",
+    "addApiKey": "Add API key",
     "addKey": "Add key",
     "failedToLoadTryAgain": "Failed to load. Try again.",
     "theProviderReturnedNoAvailableModels": "The provider returned no available models",
@@ -470,6 +471,10 @@
     "onlyVoyageRerankSupportsMultipleKeys": "Only Voyage Rerank supports multiple keys",
     "loadAndSelectARerankModel": "Load and select a Rerank model",
     "selectOrEnterARerankModel": "Select or enter a Rerank model",
+    "enterThePromptEnhancerBaseUrl": "Enter the prompt enhancer Base URL",
+    "enterAPromptEnhancerApiKey": "Enter a prompt enhancer API key",
+    "thePromptEnhancerKeyPoolSupportsUpTo": "The prompt enhancer key pool supports up to 100 keys",
+    "loadAndSelectAPromptEnhancerModel": "Load and select a prompt enhancer model",
     "failedToLoadModelConfiguration": "Failed to load model configuration",
     "configurationIsStoredInTheLceDatabase": "Configuration is stored in the LCE database and applied immediately. API keys are never displayed. A blank key reuses the current value only when the provider and Base URL are unchanged.",
     "changingEmbeddingClearsOldVectorIndexesTo": "Changing Embedding clears old vector indexes to prevent incompatible vector spaces from being mixed.",
@@ -493,6 +498,11 @@
     "returnedByTheOpenaiCompatibleModelThe": "Returned by the OpenAI-compatible model; the system validates it against the index dimension",
     "returnedByProvider": "Returned by provider",
     "rerankCanBeChangedIndependentlyWithoutRebuilding": "Rerank can be changed independently without rebuilding vector indexes.",
+    "promptEnhancement": "Prompt Enhancement",
+    "promptEnhancementUsesRetrievedCodeContext": "The original task and retrieved code snippets are sent to the configured generation model; file and line references are verified by the server.",
+    "enabled": "Enabled",
+    "enterTheFullChatCompletionsUrl": "Enter the full URL of an OpenAI-compatible chat/completions endpoint",
+    "oneApiKeyPerRow": "One API key per row",
     "enterTheCompleteRerankEndpointUrlFor": "Enter the complete rerank endpoint URL for a custom service",
     "customServiceModelName": "Custom service model name",
     "savePlatformConfiguration": "Save platform configuration",
@@ -727,6 +737,7 @@
     "typescriptJavascriptSymbolGraphsPreferBoundedCompiler": "TypeScript/JavaScript symbol graphs prefer bounded compiler projects. Files outside the compilation budget fall back to AST or heuristic facts with coverage and confidence labels.",
     "theServerRejectsEnvFilesKeysBinaries": "The server rejects .env files, keys, binaries, dependency directories, and build artifacts. Review repositories for other sensitive content before indexing.",
     "theFrontendAndAdminConsoleAreBased": "The frontend and admin console are based on the open-source work by",
-    "withThanks": ". With thanks."
+    "withThanks": ". With thanks.",
+    "feedbackAndContact": "Feedback and contact: WeChat"
   }
 }

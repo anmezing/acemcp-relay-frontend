@@ -69,6 +69,7 @@ export function AdminSettingsTab() {
   );
 
   const saveLimit = useCallback(async () => {
+    if (!registrationEnabled) return;
     const value = limitDraft.trim() === "" ? null : Number(limitDraft);
     if (value !== null && (!Number.isInteger(value) || value < 1)) { setNotice(t("enterAPositiveIntegerOrLeaveBlank")); return; }
     setBusy(true);
@@ -77,7 +78,7 @@ export function AdminSettingsTab() {
       if (!res.ok) throw new Error();
       setLimitDraft(value === null ? "" : String(value)); setNotice(t("registrationLimitSaved"));
     } catch { setNotice(t("failedToSaveTryAgain")); } finally { setBusy(false); }
-  }, [limitDraft, t]);
+  }, [limitDraft, registrationEnabled, t]);
 
   if (registrationEnabled === null && !error) {
     return <Skeleton className="h-32 bg-white/[0.06] rounded-xl" />;
@@ -114,7 +115,7 @@ export function AdminSettingsTab() {
             </div>
             <div className="flex items-center gap-2">
               <span className={cn(
-                "text-xs px-2 py-0.5 rounded border",
+                "inline-flex h-8 w-24 items-center justify-center rounded-md border px-3 text-xs",
                 registrationEnabled
                   ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                   : "bg-red-500/10 text-red-400 border-red-500/20"
@@ -122,7 +123,7 @@ export function AdminSettingsTab() {
                 {registrationEnabled ? t("open") : t("closed")}
               </span>
               <Button variant="glass" size="sm" disabled={busy}
-                onClick={() => toggle(!registrationEnabled)} className="text-xs">
+                onClick={() => toggle(!registrationEnabled)} className="h-8 w-24 text-xs">
                 {registrationEnabled ? t("disable") : t("enable")}
               </Button>
             </div>
@@ -130,15 +131,32 @@ export function AdminSettingsTab() {
         </CardContent>
       </Card>
 
-      <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
-        <CardContent className="p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex-1 min-w-[220px]"><h3 className="text-white text-sm font-medium">{t("registrationLimit")}</h3><p className="text-slate-500 text-xs mt-1">{t("usersRegisteredNewRegistrationsAreRejectedWhen", {p0: registeredUsers})}</p></div>
-            <input aria-label={t("registrationLimit")} value={limitDraft} onChange={(event) => setLimitDraft(event.target.value)} placeholder={t("unlimited")} inputMode="numeric" className="w-24 rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-sm text-white" />
-            <Button variant="glass" size="sm" disabled={busy} onClick={saveLimit} className="text-xs">{t("saveLimit")}</Button>
-          </div>
-        </CardContent>
-      </Card>
+      {registrationEnabled && (
+        <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
+          <CardContent className="p-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="min-w-[220px] flex-1">
+                <h3 className="text-white text-sm font-medium">{t("registrationLimit")}</h3>
+                <p className="mt-1 text-slate-500 text-xs">{t("usersRegisteredNewRegistrationsAreRejectedWhen", {p0: registeredUsers})}</p>
+              </div>
+              <div className="flex w-full items-center gap-2 sm:w-auto">
+                <input
+                  aria-label={t("registrationLimit")}
+                  disabled={busy}
+                  value={limitDraft}
+                  onChange={(event) => setLimitDraft(event.target.value)}
+                  placeholder={t("unlimited")}
+                  inputMode="numeric"
+                  className="h-8 w-28 rounded-md border border-white/10 bg-black/20 px-2 text-sm text-white disabled:cursor-not-allowed"
+                />
+                <Button variant="glass" size="sm" disabled={busy} onClick={saveLimit} className="h-8 min-w-[72px] text-xs">
+                  {t("saveLimit")}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <p className="text-slate-600 text-[10px]">
         {t("otherSystemSettingsIncludingDefaultDailyRequest")}

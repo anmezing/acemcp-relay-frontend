@@ -24,6 +24,14 @@ export interface PlatformModelConfigView {
     apiKeyConfigured: boolean;
     apiKeyCount: number;
   };
+  promptEnhancer: {
+    enabled: boolean;
+    provider: "openai-compatible";
+    model: string;
+    baseUrl: string;
+    apiKeyConfigured: boolean;
+    apiKeyCount: number;
+  };
 }
 
 function requiredString(value: unknown, field: string): string {
@@ -43,15 +51,20 @@ function parseView(value: unknown): PlatformModelConfigView {
   }
   const embeddings = (config as { embeddings?: unknown }).embeddings;
   const rerank = (config as { rerank?: unknown }).rerank;
+  const promptEnhancer = (config as { promptEnhancer?: unknown }).promptEnhancer;
   if (!embeddings || typeof embeddings !== "object" || Array.isArray(embeddings)) {
     throw new Error("模型配置响应缺少 embeddings");
   }
   if (!rerank || typeof rerank !== "object" || Array.isArray(rerank)) {
     throw new Error("模型配置响应缺少 rerank");
   }
+  if (!promptEnhancer || typeof promptEnhancer !== "object" || Array.isArray(promptEnhancer)) {
+    throw new Error("模型配置响应缺少 promptEnhancer");
+  }
 
   const embeddingValue = embeddings as Record<string, unknown>;
   const rerankValue = rerank as Record<string, unknown>;
+  const promptEnhancerValue = promptEnhancer as Record<string, unknown>;
   if (embeddingValue.provider !== "openai-compatible" && embeddingValue.provider !== "voyage") {
     throw new Error("模型配置响应包含未知 embeddings provider");
   }
@@ -61,6 +74,12 @@ function parseView(value: unknown): PlatformModelConfigView {
     rerankValue.provider !== "custom"
   ) {
     throw new Error("模型配置响应包含未知 rerank provider");
+  }
+  if (promptEnhancerValue.provider !== "openai-compatible") {
+    throw new Error("模型配置响应包含未知 promptEnhancer provider");
+  }
+  if (typeof promptEnhancerValue.enabled !== "boolean") {
+    throw new Error("模型配置响应包含无效 promptEnhancer enabled");
   }
   if (
     typeof embeddingValue.dimensions !== "number" ||
@@ -108,6 +127,16 @@ function parseView(value: unknown): PlatformModelConfigView {
       apiKeyConfigured: rerankValue.apiKeyConfigured === true,
       apiKeyCount: typeof rerankValue.apiKeyCount === "number" && Number.isSafeInteger(rerankValue.apiKeyCount)
         ? rerankValue.apiKeyCount
+        : 0,
+    },
+    promptEnhancer: {
+      enabled: promptEnhancerValue.enabled,
+      provider: "openai-compatible",
+      model: typeof promptEnhancerValue.model === "string" ? promptEnhancerValue.model.trim() : "",
+      baseUrl: typeof promptEnhancerValue.baseUrl === "string" ? promptEnhancerValue.baseUrl.trim() : "",
+      apiKeyConfigured: promptEnhancerValue.apiKeyConfigured === true,
+      apiKeyCount: typeof promptEnhancerValue.apiKeyCount === "number" && Number.isSafeInteger(promptEnhancerValue.apiKeyCount)
+        ? promptEnhancerValue.apiKeyCount
         : 0,
     },
   };
