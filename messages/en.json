@@ -737,6 +737,7 @@
     "typescriptJavascriptSymbolGraphsPreferBoundedCompiler": "TypeScript/JavaScript symbol graphs prefer bounded compiler projects. Files outside the compilation budget fall back to AST or heuristic facts with coverage and confidence labels.",
     "theServerRejectsEnvFilesKeysBinaries": "The server rejects .env files, keys, binaries, dependency directories, and build artifacts. Review repositories for other sensitive content before indexing.",
     "theFrontendAndAdminConsoleAreBased": "The frontend and admin console are based on the open-source work by",
-    "withThanks": ". With thanks."
+    "withThanks": ". With thanks.",
+    "feedbackAndContact": "Feedback and contact: WeChat"
   }
 }

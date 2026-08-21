@@ -737,6 +737,7 @@
     "typescriptJavascriptSymbolGraphsPreferBoundedCompiler": "TypeScript/JavaScript 符号图优先使用有界编译项目；超出编译预算或无法解析的文件会降级为 AST/启发式事实，并在结果中标注 coverage 与 confidence",
     "theServerRejectsEnvFilesKeysBinaries": "服务端拒绝 .env、密钥、二进制、依赖目录和构建产物；仍应在提交清单前检查仓库中的其他敏感内容",
     "theFrontendAndAdminConsoleAreBased": "本项目的前端与管理后台基于",
-    "withThanks": " 的开源实现构建，谨致谢意。"
+    "withThanks": " 的开源实现构建，谨致谢意。",
+    "feedbackAndContact": "反馈与联系：微信"
   }
 }

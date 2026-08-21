@@ -239,9 +239,15 @@ export default async function Home() {
 
       <footer className="relative px-6 py-6 text-center">
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-slate-700/50 to-transparent" />
-        <p className="text-sm text-slate-500">
-          <I18nText id="theFrontendAndAdminConsoleAreBased" /> <span className="text-slate-300">heroman</span><I18nText id="withThanks" />
-        </p>
+        <div className="space-y-2">
+          <p className="text-sm text-slate-500">
+            <I18nText id="theFrontendAndAdminConsoleAreBased" /> <span className="text-slate-300">heroman</span><I18nText id="withThanks" />
+          </p>
+          <p className="text-sm text-slate-500">
+            <I18nText id="feedbackAndContact" />{" "}
+            <span className="font-mono text-cyan-300">wx_exception</span>
+          </p>
+        </div>
       </footer>
     </div>
   );
