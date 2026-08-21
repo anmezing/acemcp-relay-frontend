@@ -413,7 +413,7 @@ export function AdminModelsTab() {
         {t("configurationIsStoredInTheLceDatabase")}
       </p>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid items-start gap-4 xl:grid-cols-2">
         <Card className="border-white/[0.06] bg-[#0a0f1a]/60">
           <CardContent className="space-y-4 p-4">
             <div>
@@ -704,7 +704,7 @@ export function AdminModelsTab() {
                 {t("enabled")}
               </label>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
               <Field label={t("1Provider")}>
                 <select
                   value={form.promptEnhancer.provider}
@@ -730,7 +730,7 @@ export function AdminModelsTab() {
                 label={t("3ApiKeyPool")}
                 hint={t("oneKeyPerRowWithRotationAnd", {p0: view.promptEnhancer.apiKeyCount})}
               >
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
                   <KeyPoolInput
                     disabled={!form.promptEnhancer.enabled}
                     placeholder={canReusePromptEnhancerKey
@@ -753,7 +753,7 @@ export function AdminModelsTab() {
                       !form.promptEnhancer.baseUrl.trim() ||
                       (!form.promptEnhancer.apiKey.trim() && !canReusePromptEnhancerKey)
                     }
-                    className="h-[31px] shrink-0 px-2 text-xs text-cyan-400"
+                    className="h-[31px] w-full shrink-0 px-2 text-xs text-cyan-400 sm:w-auto"
                   >
                     {modelsLoading === "promptEnhancer"
                       ? <Loader2 className="h-3.5 w-3.5 animate-spin" />

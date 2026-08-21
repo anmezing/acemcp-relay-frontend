@@ -1058,7 +1058,7 @@ export default function ConsolePage() {
 
             <div className="flex gap-4 flex-1 min-h-0">
               {/* Sidebar - desktop only */}
-              <aside className="hidden md:block flex-shrink-0 w-48 overflow-y-auto pr-1 scrollbar-thin">
+              <aside className="hidden w-48 flex-shrink-0 overflow-y-auto pr-1 [scrollbar-width:none] md:block [&::-webkit-scrollbar]:hidden">
                 <nav className="flex flex-col gap-4">
                   {!navigationReady ? (
                     <div aria-hidden="true" className="space-y-4">
@@ -1833,7 +1833,7 @@ export default function ConsolePage() {
 
                   {/* 管理员 - 模型管理 */}
                   {isAdmin && (
-                    <TabsContent value="models" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
+                    <TabsContent value="models" className="animate-tab-fade-in m-0 flex-1 overflow-y-auto pr-1 [scrollbar-gutter:stable] scrollbar-thin md:pr-2">
                       <h2 className="text-lg font-medium text-white mb-6">{t("models")}</h2>
                       <AdminModelsTab />
                     </TabsContent>
