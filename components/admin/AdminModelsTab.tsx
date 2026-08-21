@@ -15,13 +15,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RERANK_PROVIDER_PRESETS, type RerankProvider } from "@/lib/rerank-providers";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 
 type EmbeddingProvider = "openai-compatible" | "voyage";
-type ModelKind = "embeddings" | "rerank";
+type ModelKind = "embeddings" | "rerank" | "promptEnhancer";
 
 interface ModelForm {
   embeddings: {
@@ -41,11 +42,19 @@ interface ModelForm {
     baseUrl: string;
     apiKey: string;
   };
+  promptEnhancer: {
+    enabled: boolean;
+    provider: "openai-compatible";
+    model: string;
+    baseUrl: string;
+    apiKey: string;
+  };
 }
 
 interface ModelView {
   embeddings: Omit<ModelForm["embeddings"], "apiKey"> & { apiKeyConfigured: boolean; apiKeyCount: number };
   rerank: Omit<ModelForm["rerank"], "apiKey"> & { apiKeyConfigured: boolean; apiKeyCount: number };
+  promptEnhancer: Omit<ModelForm["promptEnhancer"], "apiKey"> & { apiKeyConfigured: boolean; apiKeyCount: number };
 }
 
 const inputClass =
@@ -57,14 +66,17 @@ const CLOUD_INDEX_DIMENSIONS = 1024;
 function toForm(config: ModelView): ModelForm {
   const embeddings = { ...config.embeddings };
   const rerank = { ...config.rerank };
+  const promptEnhancer = { ...config.promptEnhancer };
   delete (embeddings as { apiKeyConfigured?: boolean }).apiKeyConfigured;
   delete (rerank as { apiKeyConfigured?: boolean }).apiKeyConfigured;
+  delete (promptEnhancer as { apiKeyConfigured?: boolean }).apiKeyConfigured;
   if (embeddings.provider === "voyage" && embeddings.outputDimension === undefined) {
     embeddings.outputDimension = CLOUD_INDEX_DIMENSIONS;
   }
   return {
     embeddings: { ...embeddings, apiKey: "" },
     rerank: { ...rerank, apiKey: "" },
+    promptEnhancer: { ...promptEnhancer, apiKey: "" },
   };
 }
 
@@ -90,10 +102,11 @@ function Field({ label, children, hint }: {
   );
 }
 
-function KeyPoolInput({ value, onChange, placeholder }: {
+function KeyPoolInput({ value, onChange, placeholder, disabled = false }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
+  disabled?: boolean;
 }) {
   const t = useTranslations("AdminModels");
   const keys = value === "" ? [""] : value.split(/\r?\n/);
@@ -108,15 +121,17 @@ function KeyPoolInput({ value, onChange, placeholder }: {
         <div key={index} className="flex gap-2">
           <input
             type="password"
+            disabled={disabled}
             autoComplete="new-password"
             value={key}
-            placeholder={index === 0 ? placeholder : "Voyage API Key"}
+        placeholder={index === 0 ? placeholder : "API Key"}
             onChange={(event) => update(index, event.target.value)}
-            className={inputClass}
+            className={cn(inputClass, disabled && "cursor-not-allowed text-slate-600")}
           />
           {keys.length > 1 && (
             <Button
               type="button"
+              disabled={disabled}
               variant="glass"
               size="icon"
               title={t("removeThisKey")}
@@ -130,9 +145,10 @@ function KeyPoolInput({ value, onChange, placeholder }: {
       ))}
       <Button
         type="button"
+        disabled={disabled}
         variant="glass"
         size="sm"
-        title={t("addVoyageApiKey")}
+        title={t("addApiKey")}
         onClick={() => onChange(`${value}${value ? "\n" : ""}`)}
         className="h-7 px-2 text-[11px] text-cyan-400"
       >
@@ -154,6 +170,7 @@ export function AdminModelsTab() {
   const [modelsLoading, setModelsLoading] = useState<ModelKind | null>(null);
   const [embeddingModels, setEmbeddingModels] = useState<string[]>([]);
   const [rerankModels, setRerankModels] = useState<string[]>([]);
+  const [promptEnhancerModels, setPromptEnhancerModels] = useState<string[]>([]);
   const [confirmReset, setConfirmReset] = useState(false);
 
   const load = useCallback(async (signal?: AbortSignal, clearNotice = true) => {
@@ -169,6 +186,7 @@ export function AdminModelsTab() {
       setForm(toForm(data.config));
       setEmbeddingModels([]);
       setRerankModels([]);
+      setPromptEnhancerModels([]);
       if (clearNotice) setNotice("");
     } catch (error) {
       if (signal?.aborted) return;
@@ -202,6 +220,13 @@ export function AdminModelsTab() {
     });
   }, []);
 
+  const updatePromptEnhancer = useCallback((patch: Partial<ModelForm["promptEnhancer"]>) => {
+    setForm((current) => current && {
+      ...current,
+      promptEnhancer: { ...current.promptEnhancer, ...patch },
+    });
+  }, []);
+
   const canReuseEmbeddingKey = Boolean(
     view &&
     form &&
@@ -215,6 +240,13 @@ export function AdminModelsTab() {
     view.rerank.apiKeyConfigured &&
     form.rerank.provider === view.rerank.provider &&
     form.rerank.baseUrl.trim() === view.rerank.baseUrl,
+  );
+  const canReusePromptEnhancerKey = Boolean(
+    view &&
+    form &&
+    view.promptEnhancer.apiKeyConfigured &&
+    form.promptEnhancer.provider === view.promptEnhancer.provider &&
+    form.promptEnhancer.baseUrl.trim() === view.promptEnhancer.baseUrl,
   );
 
   const discoverModels = useCallback(async (kind: ModelKind) => {
@@ -242,11 +274,15 @@ export function AdminModelsTab() {
       if (kind === "embeddings") {
         setEmbeddingModels(models);
         updateEmbeddings({ model: models.includes(form.embeddings.model) ? form.embeddings.model : models[0] });
-      } else {
+      } else if (kind === "rerank") {
         setRerankModels(models);
         updateRerank({ model: models.includes(form.rerank.model) ? form.rerank.model : models[0] });
+      } else {
+        setPromptEnhancerModels(models);
+        updatePromptEnhancer({ model: models.includes(form.promptEnhancer.model) ? form.promptEnhancer.model : models[0] });
       }
-      setNotice(t("loadedModels", { count: models.length, kind: kind === "embeddings" ? "Embedding" : "Rerank" }));
+      const kindLabel = kind === "embeddings" ? "Embedding" : kind === "rerank" ? "Rerank" : t("promptEnhancement");
+      setNotice(t("loadedModels", { count: models.length, kind: kindLabel }));
       setNoticeOk(true);
     } catch (error) {
       setNotice(t("failedToLoadModels", {p0: error instanceof Error ? error.message : String(error)}));
@@ -254,7 +290,7 @@ export function AdminModelsTab() {
     } finally {
       setModelsLoading(null);
     }
-  }, [form, updateEmbeddings, updateRerank, t]);
+  }, [form, updateEmbeddings, updatePromptEnhancer, updateRerank, t]);
 
   const submit = useCallback(async (confirmEmbeddingReset: boolean) => {
     if (!form) return;
@@ -275,6 +311,11 @@ export function AdminModelsTab() {
               ...form.rerank,
               apiKey: parseKeyInput(form.rerank.apiKey)[0] ?? "",
               apiKeys: parseKeyInput(form.rerank.apiKey),
+            },
+            promptEnhancer: {
+              ...form.promptEnhancer,
+              apiKey: parseKeyInput(form.promptEnhancer.apiKey)[0] ?? "",
+              apiKeys: parseKeyInput(form.promptEnhancer.apiKey),
             },
           },
           confirmEmbeddingReset,
@@ -304,6 +345,7 @@ export function AdminModelsTab() {
     if (!form) return "";
     const embeddingKeys = parseKeyInput(form.embeddings.apiKey);
     const rerankKeys = parseKeyInput(form.rerank.apiKey);
+    const promptEnhancerKeys = parseKeyInput(form.promptEnhancer.apiKey);
     if (!form.embeddings.baseUrl.trim()) return t("enterTheEmbeddingBaseUrl");
     if (embeddingKeys.length === 0 && !canReuseEmbeddingKey) return t("enterAnEmbeddingApiKey");
     if (embeddingKeys.length > 100) return t("theEmbeddingKeyPoolSupportsUpTo");
@@ -335,8 +377,14 @@ export function AdminModelsTab() {
     if (!form.rerank.model.trim()) return form.rerank.provider === "siliconflow-compatible"
       ? t("loadAndSelectARerankModel")
       : t("selectOrEnterARerankModel");
+    if (form.promptEnhancer.enabled) {
+      if (!form.promptEnhancer.baseUrl.trim()) return t("enterThePromptEnhancerBaseUrl");
+      if (promptEnhancerKeys.length === 0 && !canReusePromptEnhancerKey) return t("enterAPromptEnhancerApiKey");
+      if (promptEnhancerKeys.length > 100) return t("thePromptEnhancerKeyPoolSupportsUpTo");
+      if (!form.promptEnhancer.model.trim()) return t("loadAndSelectAPromptEnhancerModel");
+    }
     return "";
-  }, [canReuseEmbeddingKey, canReuseRerankKey, form, t]);
+  }, [canReuseEmbeddingKey, canReusePromptEnhancerKey, canReuseRerankKey, form, t]);
 
   if (loading) return <Skeleton className="h-72 rounded-xl bg-white/[0.06]" />;
   if (!form || !view) {
@@ -353,6 +401,10 @@ export function AdminModelsTab() {
     [...rerankPreset.models],
     rerankModels,
     [form.rerank.model],
+  );
+  const promptEnhancerOptions = uniqueModels(
+    promptEnhancerModels,
+    [form.promptEnhancer.model],
   );
 
   return (
@@ -629,6 +681,100 @@ export function AdminModelsTab() {
                     {rerankOptions.map((model) => <option key={model} value={model}>{model}</option>)}
                   </select>
                 )}
+              </Field>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-white/[0.06] bg-[#0a0f1a]/60 xl:col-span-2">
+          <CardContent className="space-y-4 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-medium text-white">{t("promptEnhancement")}</h3>
+                <p className="mt-1 text-[10px] text-slate-600">
+                  {t("promptEnhancementUsesRetrievedCodeContext")}
+                </p>
+              </div>
+              <label htmlFor="prompt-enhancer-enabled" className="flex shrink-0 items-center gap-2 text-xs text-slate-400">
+                <Checkbox
+                  id="prompt-enhancer-enabled"
+                  checked={form.promptEnhancer.enabled}
+                  onCheckedChange={(checked) => updatePromptEnhancer({ enabled: checked === true })}
+                />
+                {t("enabled")}
+              </label>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Field label={t("1Provider")}>
+                <select
+                  value={form.promptEnhancer.provider}
+                  disabled
+                  className={cn(inputClass, "cursor-default text-slate-400")}
+                >
+                  <option value="openai-compatible">OpenAI-compatible</option>
+                </select>
+              </Field>
+              <Field label="2. Base URL" hint={t("enterTheFullChatCompletionsUrl")}>
+                <input
+                  disabled={!form.promptEnhancer.enabled}
+                  value={form.promptEnhancer.baseUrl}
+                  placeholder="https://api.example.com/v1/chat/completions"
+                  onChange={(event) => {
+                    setPromptEnhancerModels([]);
+                    updatePromptEnhancer({ baseUrl: event.target.value, apiKey: "", model: "" });
+                  }}
+                  className={cn(inputClass, !form.promptEnhancer.enabled && "cursor-not-allowed text-slate-600")}
+                />
+              </Field>
+              <Field
+                label={t("3ApiKeyPool")}
+                hint={t("oneKeyPerRowWithRotationAnd", {p0: view.promptEnhancer.apiKeyCount})}
+              >
+                <div className="flex gap-2">
+                  <KeyPoolInput
+                    disabled={!form.promptEnhancer.enabled}
+                    placeholder={canReusePromptEnhancerKey
+                      ? t("savedLeaveBlankToReuse", {p0: view.promptEnhancer.apiKeyCount})
+                      : t("oneApiKeyPerRow")}
+                    value={form.promptEnhancer.apiKey}
+                    onChange={(value) => {
+                      setPromptEnhancerModels([]);
+                      updatePromptEnhancer({ apiKey: value, model: "" });
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="glass"
+                    size="sm"
+                    onClick={() => void discoverModels("promptEnhancer")}
+                    disabled={
+                      !form.promptEnhancer.enabled ||
+                      modelsLoading !== null ||
+                      !form.promptEnhancer.baseUrl.trim() ||
+                      (!form.promptEnhancer.apiKey.trim() && !canReusePromptEnhancerKey)
+                    }
+                    className="h-[31px] shrink-0 px-2 text-xs text-cyan-400"
+                  >
+                    {modelsLoading === "promptEnhancer"
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : <RefreshCw className="h-3.5 w-3.5" />}
+                    {t("loadModels")}
+                  </Button>
+                </div>
+              </Field>
+              <Field label={t("4Model")}>
+                <select
+                  value={form.promptEnhancer.model}
+                  onChange={(event) => updatePromptEnhancer({ model: event.target.value })}
+                  disabled={!form.promptEnhancer.enabled || promptEnhancerOptions.length === 0}
+                  className={cn(
+                    inputClass,
+                    (!form.promptEnhancer.enabled || promptEnhancerOptions.length === 0) && "cursor-not-allowed text-slate-600",
+                  )}
+                >
+                  {promptEnhancerOptions.length === 0 && <option value="">{t("loadModelsFirst")}</option>}
+                  {promptEnhancerOptions.map((model) => <option key={model} value={model}>{model}</option>)}
+                </select>
               </Field>
             </div>
           </CardContent>

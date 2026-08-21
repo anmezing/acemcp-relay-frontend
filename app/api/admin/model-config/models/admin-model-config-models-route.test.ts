@@ -56,4 +56,20 @@ describe("POST /api/admin/model-config/models", () => {
     expect(response.status).toBe(413);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("accepts prompt enhancer model discovery", async () => {
+    await POST(request(JSON.stringify({
+      kind: "promptEnhancer",
+      provider: "openai-compatible",
+      baseUrl: "https://api.example.com/v1/chat/completions",
+      apiKey: "secret",
+    })));
+    expect(fetchMock.mock.calls[0][1].body).toBe(JSON.stringify({
+      action: "models",
+      kind: "promptEnhancer",
+      provider: "openai-compatible",
+      baseUrl: "https://api.example.com/v1/chat/completions",
+      apiKey: "secret",
+    }));
+  });
 });
