@@ -12,11 +12,7 @@ import {
   onOrganizationDeleted,
 } from "@/lib/org-sync";
 import { getOrganizationMembershipLimit } from "@/lib/billing";
-
-const trustedAuthProxies = (process.env.BETTER_AUTH_TRUSTED_PROXIES || "")
-  .split(",")
-  .map((proxy) => proxy.trim())
-  .filter(Boolean);
+import { authIpAddressOptions } from "@/lib/auth-ip";
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
@@ -28,12 +24,7 @@ export const auth = betterAuth({
     autoSignIn: true,
   },
   advanced: {
-    ipAddress: {
-      ipAddressHeaders: ["x-forwarded-for"],
-      ...(trustedAuthProxies.length > 0
-        ? { trustedProxies: trustedAuthProxies }
-        : {}),
-    },
+    ipAddress: authIpAddressOptions(process.env.BETTER_AUTH_TRUSTED_PROXIES),
   },
   database: new Pool({
     host: process.env.POSTGRES_HOST || "localhost",

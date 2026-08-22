@@ -9,31 +9,20 @@ import {
   REMOTE_TOOLS,
 } from "@/lib/agent-rules";
 
-// 跨仓库契约钉住测试：lce 仓库 docs/contracts/cloud-protocol.json 是云协议
-// 的单一源头（cloudToolSurface = 客户端实际暴露的云端工具名）。本测试
-// 断言 Agent 规则与工具面定义和契约一致，防止配置说明与客户端实际能力漂移。
-// 契约文件在 sibling 仓库中；找不到时 skip（如 CI 单独 checkout 本仓库）。
+// 随仓提交的快照让独立 CI 也必须验证协议；缺文件会直接失败，不依赖
+// sibling checkout。部署前再比较三仓摘要，保证快照与 LCE 单一源一致。
+const contractPath = path.resolve(
+  import.meta.dirname,
+  "..",
+  "contracts",
+  "cloud-protocol.json",
+);
 
-const CANDIDATES = [
-  "../lce-clean-20260704-213701/docs/contracts/cloud-protocol.json",
-  "../lce/docs/contracts/cloud-protocol.json",
-];
-
-function findContract(): string | null {
-  for (const rel of CANDIDATES) {
-    const p = path.resolve(import.meta.dirname, "..", rel);
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
-}
-
-const contractPath = findContract();
-
-describe.skipIf(!contractPath)(
-  "cloud-protocol 契约钉住（sibling lce 仓库缺席时跳过）",
+describe(
+  "cloud-protocol 契约钉住",
   () => {
     function loadSurface(): string[] {
-      const raw = JSON.parse(fs.readFileSync(contractPath!, "utf8"));
+      const raw = JSON.parse(fs.readFileSync(contractPath, "utf8"));
       const surface = raw.cloudToolSurface;
       expect(Array.isArray(surface)).toBe(true);
       expect(surface.length).toBeGreaterThan(0);
