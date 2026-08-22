@@ -291,7 +291,10 @@ export function AdminModelsTab() {
       setNotice(t("loadedModels", { count: models.length, kind: kindLabel }));
       setNoticeOk(true);
     } catch (error) {
-      setNotice(t("failedToLoadModels", {p0: error instanceof Error ? error.message : String(error)}));
+      const reason = error instanceof Error ? error.message : String(error);
+      setNotice(kind === "promptEnhancer"
+        ? t("failedToLoadPromptEnhancerModelsUseManual", { p0: reason })
+        : t("failedToLoadModels", { p0: reason }));
       setNoticeOk(false);
     } finally {
       setModelsLoading(null);
@@ -387,7 +390,7 @@ export function AdminModelsTab() {
       if (!form.promptEnhancer.baseUrl.trim()) return t("enterThePromptEnhancerBaseUrl");
       if (promptEnhancerKeys.length === 0 && !canReusePromptEnhancerKey) return t("enterAPromptEnhancerApiKey");
       if (promptEnhancerKeys.length > 100) return t("thePromptEnhancerKeyPoolSupportsUpTo");
-      if (!form.promptEnhancer.model.trim()) return t("loadAndSelectAPromptEnhancerModel");
+      if (!form.promptEnhancer.model.trim()) return t("enterOrSelectAPromptEnhancerModel");
     }
     return "";
   }, [canReuseEmbeddingKey, canReusePromptEnhancerKey, canReuseRerankKey, form, t]);
@@ -782,19 +785,23 @@ export function AdminModelsTab() {
                   </Button>
                 </div>
               </Field>
-              <Field label={t("4Model")}>
-                <select
+              <Field label={t("4Model")} hint={t("promptEnhancerModelCanBeEnteredManually")}>
+                <input
+                  type="text"
+                  list="prompt-enhancer-model-options"
+                  autoComplete="off"
                   value={form.promptEnhancer.model}
                   onChange={(event) => updatePromptEnhancer({ model: event.target.value })}
-                  disabled={!form.promptEnhancer.enabled || promptEnhancerOptions.length === 0}
+                  disabled={!form.promptEnhancer.enabled}
+                  placeholder={t("enterOrSelectModel")}
                   className={cn(
                     inputClass,
-                    (!form.promptEnhancer.enabled || promptEnhancerOptions.length === 0) && "cursor-not-allowed text-slate-600",
+                    !form.promptEnhancer.enabled && "cursor-not-allowed text-slate-600",
                   )}
-                >
-                  {promptEnhancerOptions.length === 0 && <option value="">{t("loadModelsFirst")}</option>}
-                  {promptEnhancerOptions.map((model) => <option key={model} value={model}>{model}</option>)}
-                </select>
+                />
+                <datalist id="prompt-enhancer-model-options">
+                  {promptEnhancerOptions.map((model) => <option key={model} value={model} />)}
+                </datalist>
               </Field>
             </div>
           </CardContent>
