@@ -41,7 +41,7 @@ import { AdminSettingsTab } from "@/components/admin/AdminSettingsTab";
 import { AdminOrgsTab } from "@/components/admin/AdminOrgsTab";
 import { OrgTab } from "@/components/OrgTab";
 import { OrgKeysCards } from "@/components/OrgKeysCards";
-import { AGENT_RULES_CLOUD, AGENT_RULES_CLOUD_EN, AGENT_RULES_REMOTE, AGENT_RULES_REMOTE_EN, CLOUD_TOOLS, REMOTE_TOOLS } from "@/lib/agent-rules";
+import { AGENT_RULES_CLOUD, AGENT_RULES_CLOUD_EN, AGENT_RULES_REMOTE, AGENT_RULES_REMOTE_EN } from "@/lib/agent-rules";
 import { UserModelConfigTab } from "@/components/UserModelConfigTab";
 import { PlansTab } from "@/components/PlansTab";
 import { AdminPlansTab } from "@/components/admin/AdminPlansTab";
@@ -1334,67 +1334,8 @@ export default function ConsolePage() {
                         </CardContent>
                       </Card>
 
-                      {/* Step 3: Available tools */}
-                      <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
-                        <CardContent className="p-5">
-                          <div className="flex items-center gap-3 mb-3">
-                            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
-                              2
-                            </span>
-                            <h3 className="text-white font-medium">{t("availableTools")}</h3>
-                          </div>
-                          <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-                            {t("afterConnectingYourCodingAgentDiscoversThese")}
-                          </p>
-                          <div className="space-y-2">
-                            {(mcpConfigMode === "cloud" ? CLOUD_TOOLS : REMOTE_TOOLS).map((tool) => (
-                              <div key={tool.name} className="grid gap-2 rounded-lg border border-white/[0.04] bg-[#0a0f1a]/80 p-3 sm:grid-cols-[minmax(180px,auto)_1fr_auto] sm:items-center sm:gap-3">
-                                <code className="break-all font-mono text-xs text-cyan-400">{tool.name}</code>
-                                <p className="text-slate-400 text-xs">{locale === "zh-CN" ? tool.desc : tool.descEn}</p>
-                                <span className={cn(
-                                  "w-fit rounded-md border px-2 py-1 text-[10px]",
-                                  tool.location === "local"
-                                    ? "border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-300"
-                                    : "border-cyan-500/20 bg-cyan-500/[0.06] text-cyan-300",
-                                )}>
-                                  {tool.location === "local" ? t("localTool") : t("serverProvidedTool")}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Step 3: Agent rules */}
+                      {/* Step 2: Agent rules */}
                       <AgentRulesCard mode={mcpConfigMode} />
-
-                      {/* Tips */}
-                      <Card className="bg-gradient-to-br from-cyan-500/[0.06] to-blue-500/[0.06] border-cyan-500/20">
-                        <CardContent className="p-4">
-                          <h4 className="text-white text-sm font-medium mb-3 flex items-center gap-2">
-                            <Info className="w-4 h-4 text-cyan-400" />
-                            {t("notes")}
-                          </h4>
-                          <ul className="text-slate-400 text-xs space-y-2">
-                            <li className="flex items-start gap-2">
-                              <span className="text-cyan-400 mt-0.5">•</span>
-                              <span>{t("cloudModeRecommendedCopyTheConfigurationInto")}</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                              <span className="text-cyan-400 mt-0.5">•</span>
-                              <span>{t("remoteHttpModeNoLocalComponentIs")}</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                              <span className="text-cyan-400 mt-0.5">•</span>
-                              <span>{t("eachApiKeyHasAnIsolatedSearch")}</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                              <span className="text-cyan-400 mt-0.5">•</span>
-                              <span>{t("keepApiKeysPrivateAndNeverShare")}</span>
-                            </li>
-                          </ul>
-                        </CardContent>
-                      </Card>
                     </div>
                   </TabsContent>
 
@@ -2518,7 +2459,7 @@ function RootsSection({
   );
 }
 
-// 配置说明第 3 步：引导用户在 CLAUDE.md / AGENTS.md 中声明 LCE 使用规则
+// 配置说明第 2 步：引导用户在 CLAUDE.md / AGENTS.md 中声明 LCE 使用规则
 // （只加 MCP 配置不保证代理会用，需要项目规则显式要求）
 function AgentRulesCard({ mode }: { mode: "cloud" | "remote" }) {
   const locale = useLocale();
@@ -2538,7 +2479,7 @@ function AgentRulesCard({ mode }: { mode: "cloud" | "remote" }) {
       <CardContent className="p-5">
         <div className="flex items-center gap-3 mb-3">
           <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium">
-            3
+            2
           </span>
           <h3 className="text-white font-medium">{t("makeLceTheAgentSFirstChoice")}</h3>
         </div>

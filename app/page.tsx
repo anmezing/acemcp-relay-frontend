@@ -2,15 +2,10 @@ import { Header } from "@/components/Header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { AGENT_RULES_CLOUD, AGENT_RULES_CLOUD_EN, CLOUD_TOOLS } from "@/lib/agent-rules";
-import { buildCloudMcpConfigJson, buildCloudMcpConfigToml } from "@/lib/mcp-config";
 import { LceBrand } from "@/components/LceBrand";
 import { I18nText } from "@/components/I18nText";
-import { getLocale } from "next-intl/server";
 
-export default async function Home() {
-  const locale = await getLocale();
-  const agentRules = locale === "zh-CN" ? AGENT_RULES_CLOUD : AGENT_RULES_CLOUD_EN;
+export default function Home() {
   return (
     <div className="relative min-h-screen overflow-clip bg-[#0a0f1a] animate-page-fade-in">
       {/* Ambient light effects */}
@@ -67,6 +62,7 @@ export default async function Home() {
               { id: "incrementalIndexingBadge", color: "blue", delay: "animate-delay-400" },
               { id: "multiLanguage", color: "emerald", delay: "animate-delay-500" },
               { id: "changeAnalysis", color: "cyan", delay: "animate-delay-500" },
+              { id: "promptEnhancementBadge", color: "emerald", delay: "animate-delay-500" },
               { id: "cloudMode", color: "blue", delay: "animate-delay-500" },
             ].map((item) => (
               <Badge
@@ -157,87 +153,6 @@ export default async function Home() {
             </div>
           </section>
 
-          {/* Public MCP tool surface */}
-          <section>
-            <SectionTitle><I18nText id="mcpTools" /></SectionTitle>
-            <p className="mb-5 text-[15px] leading-relaxed text-slate-400">
-              <I18nText id="mcpToolsIntro" />
-            </p>
-            <div className="overflow-hidden rounded-lg border border-white/[0.06] bg-[#0d1424]/40">
-              {CLOUD_TOOLS.map((tool, index) => {
-                const runsLocally = tool.location === "local";
-                return (
-                  <div
-                    key={tool.name}
-                    className={cn(
-                      "grid gap-2 px-4 py-4 sm:grid-cols-[minmax(190px,0.8fr)_minmax(0,1.5fr)_auto] sm:items-center sm:gap-4",
-                      index < CLOUD_TOOLS.length - 1 && "border-b border-white/[0.06]",
-                    )}
-                  >
-                    <code className="break-all font-mono text-xs text-cyan-300">{tool.name}</code>
-                    <p className="text-sm leading-relaxed text-slate-400">
-                      {locale === "zh-CN" ? tool.desc : tool.descEn}
-                    </p>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "w-fit rounded-md px-2 py-1 text-[10px]",
-                        runsLocally
-                          ? "border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-300"
-                          : "border-cyan-500/20 bg-cyan-500/[0.06] text-cyan-300",
-                      )}
-                    >
-                      <I18nText id={runsLocally ? "runsLocally" : "runsInCloud"} />
-                    </Badge>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/[0.05] px-4 py-3 text-sm leading-relaxed text-amber-100/80">
-              <I18nText id="withoutNpmClientToolWarning" />
-            </div>
-            <h3 className="mt-7 text-sm font-medium text-white"><I18nText id="connectionModeDifferences" /></h3>
-            <div className="mt-3 overflow-hidden rounded-lg border border-white/[0.06] bg-[#0d1424]/30">
-              <div className="grid gap-2 border-b border-white/[0.06] px-4 py-4 sm:grid-cols-[180px_1fr] sm:gap-4">
-                <p className="text-sm font-medium text-cyan-300"><I18nText id="npmClientMode" /></p>
-                <p className="text-sm leading-relaxed text-slate-400"><I18nText id="npmClientModeDescription" /></p>
-              </div>
-              <div className="grid gap-2 px-4 py-4 sm:grid-cols-[180px_1fr] sm:gap-4">
-                <p className="text-sm font-medium text-slate-300"><I18nText id="remoteHttpModeName" /></p>
-                <p className="text-sm leading-relaxed text-slate-400"><I18nText id="remoteHttpModeDescription" /></p>
-              </div>
-            </div>
-            <div className="mt-8 border-t border-white/[0.06] pt-7">
-              <h3 className="text-base font-medium text-white"><I18nText id="promptEnhancementHowToUse" /></h3>
-              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
-                <I18nText id="promptEnhancementUsageIntro" />
-              </p>
-              <div className="mt-5 grid gap-5 md:grid-cols-3">
-                <div className="border-l border-cyan-500/25 pl-4">
-                  <p className="text-sm font-medium text-white"><I18nText id="promptEnhancementAsk" /></p>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-400"><I18nText id="promptEnhancementAskDescription" /></p>
-                </div>
-                <div className="border-l border-cyan-500/25 pl-4">
-                  <p className="text-sm font-medium text-white"><I18nText id="promptEnhancementAgentCalls" /></p>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-400"><I18nText id="promptEnhancementAgentCallsDescription" /></p>
-                </div>
-                <div className="border-l border-cyan-500/25 pl-4">
-                  <p className="text-sm font-medium text-white"><I18nText id="promptEnhancementContinue" /></p>
-                  <p className="mt-2 text-sm leading-relaxed text-slate-400"><I18nText id="promptEnhancementContinueDescription" /></p>
-                </div>
-              </div>
-              <div className="mt-5 border border-white/[0.06] bg-[#0a0f1a]/70 p-4">
-                <p className="text-xs font-medium text-slate-500"><I18nText id="promptEnhancementExampleLabel" /></p>
-                <code className="mt-2 block whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-cyan-200">
-                  <I18nText id="promptEnhancementExample" />
-                </code>
-              </div>
-              <p className="mt-3 text-xs leading-relaxed text-slate-500">
-                <I18nText id="promptEnhancementAvailability" />
-              </p>
-            </div>
-          </section>
-
           {/* How to start */}
           <section>
             <SectionTitle><I18nText id="getStarted" /></SectionTitle>
@@ -246,44 +161,9 @@ export default async function Home() {
                 <I18nText id="openTheConsoleAndGenerateAnApi" />
               </StepCard>
               <StepCard step={2} title={<I18nText id="addTheMcpConfiguration" />}>
-                <div className="space-y-3">
-                  <span>
-                    <I18nText id="addTheMcpConfigurationToYourIde" />
-                  </span>
-                  <div className="rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] p-3 text-sm text-slate-400">
-                    <p className="text-slate-300"><I18nText id="optionalInstallTheClientInAdvance" /></p>
-                    <code className="mt-2 block overflow-x-auto whitespace-pre font-mono text-xs text-cyan-300">
-                      npm install -g @anmezing/lce-cloud@latest
-                    </code>
-                    <p className="mt-2 text-xs text-slate-500">
-                      <I18nText id="afterGlobalInstallationReplace" /> <code className="text-slate-300">npx</code> <I18nText id="with" />{" "}
-                      <code className="text-slate-300">lce-cloud</code><I18nText id="theDefaultNpxConfigurationNeedsNoInstallation" />
-                    </p>
-                    <p className="mt-3 border-t border-white/[0.06] pt-3 text-xs leading-relaxed text-amber-100/70">
-                      <I18nText id="withoutNpmClientToolWarning" />
-                    </p>
-                  </div>
-                  <p className="text-xs text-slate-500">Cursor / Claude Code</p>
-                  <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-sm overflow-x-auto">
-                    <pre className="text-slate-300 whitespace-pre">{buildCloudMcpConfigJson(null)}</pre>
-                  </div>
-                  <p className="pt-2 text-xs text-slate-500">Codex</p>
-                  <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-sm overflow-x-auto">
-                    <pre className="text-slate-300 whitespace-pre">{buildCloudMcpConfigToml(null)}</pre>
-                  </div>
-                </div>
+                <I18nText id="addTheMcpConfigurationToYourIde" />
               </StepCard>
-              <StepCard step={3} title={<I18nText id="makeLceTheAgentSFirstChoice" />}>
-                <div className="space-y-3">
-                  <span>
-                    <I18nText id="addingAnMcpServerDoesNotGuarantee" />
-                  </span>
-                  <div className="mt-3 bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-4 font-mono text-xs overflow-x-auto">
-                    <pre className="text-slate-300 whitespace-pre-wrap break-words">{agentRules}</pre>
-                  </div>
-                </div>
-              </StepCard>
-              <StepCard step={4} title={<I18nText id="startSearching" />}>
+              <StepCard step={3} title={<I18nText id="startSearching" />}>
                 <I18nText id="afterSetupYourCodingAgentCanCall" />
               </StepCard>
             </div>
@@ -302,18 +182,6 @@ export default async function Home() {
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>
                     <span><I18nText id="retrievalQualityDependsOnIndexCoverageFiles" /></span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="text-slate-600 shrink-0">-</span>
-                    <span><I18nText id="inCloudModeIndexingAndRetrievalBoth" /></span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="text-slate-600 shrink-0">-</span>
-                    <span><I18nText id="gitStatusHistoryBlameAndChangeReview" /></span>
-                  </li>
-                  <li className="flex gap-3">
-                    <span className="text-slate-600 shrink-0">-</span>
-                    <span><I18nText id="typescriptJavascriptSymbolGraphsPreferBoundedCompiler" /></span>
                   </li>
                   <li className="flex gap-3">
                     <span className="text-slate-600 shrink-0">-</span>

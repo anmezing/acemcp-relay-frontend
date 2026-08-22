@@ -11,8 +11,7 @@ import {
 
 // 跨仓库契约钉住测试：lce 仓库 docs/contracts/cloud-protocol.json 是云协议
 // 的单一源头（cloudToolSurface = 客户端实际暴露的云端工具名）。本测试
-// 断言前端两处工具名列举点（agent-rules 文案 + 控制台工具列表 CLOUD_TOOLS）
-// 与契约一致，防止前端文案与客户端实际工具面漂移。
+// 断言 Agent 规则与工具面定义和契约一致，防止配置说明与客户端实际能力漂移。
 // 契约文件在 sibling 仓库中；找不到时 skip（如 CI 单独 checkout 本仓库）。
 
 const CANDIDATES = [
@@ -41,7 +40,7 @@ describe.skipIf(!contractPath)(
       return surface;
     }
 
-    it("控制台工具列表 CLOUD_TOOLS 与契约 cloudToolSurface 完全一致", () => {
+    it("CLOUD_TOOLS 与契约 cloudToolSurface 完全一致", () => {
       const surface = loadSurface();
       const names = CLOUD_TOOLS.map((t) => t.name);
       expect([...names].sort()).toEqual([...surface].sort());
@@ -70,9 +69,9 @@ describe("remote HTTP and npm client tool surfaces", () => {
       (tool) => !REMOTE_TOOLS.some((remoteTool) => remoteTool.name === tool.name),
     ).map((tool) => tool.name)).toEqual(NPM_LOCAL_TOOLS.map((tool) => tool.name));
     expect(NPM_LOCAL_TOOLS.every((tool) => tool.location === "local")).toBe(true);
-    expect(AGENT_RULES_CLOUD).toContain("（服务端）");
-    expect(AGENT_RULES_CLOUD).toContain("（本地 npm 客户端）");
-    expect(AGENT_RULES_CLOUD).toContain("无需全局安装");
+    expect(AGENT_RULES_CLOUD).not.toContain("（服务端）");
+    expect(AGENT_RULES_CLOUD).not.toContain("（本地 npm 客户端）");
+    expect(AGENT_RULES_CLOUD).not.toContain("npm 客户端");
   });
 
   it("keeps all remote business tools in the remote list and rules", () => {
@@ -81,9 +80,7 @@ describe("remote HTTP and npm client tool surfaces", () => {
       expect(AGENT_RULES_REMOTE).toContain(`\`${name}\``);
     }
     expect(REMOTE_TOOLS.every((tool) => tool.location === "server")).toBe(true);
-    expect(AGENT_RULES_REMOTE).toContain("远程 HTTP 直连模式");
-    expect(AGENT_RULES_REMOTE).toContain("不提供本地工具");
-    expect(AGENT_RULES_REMOTE).toContain("自动文件监听");
+    expect(AGENT_RULES_REMOTE).toContain("代码发生变化或切换分支后");
   });
 
   it("tells agents exactly when and how to call prompt enhancement", () => {
