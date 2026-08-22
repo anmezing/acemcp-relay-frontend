@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { AGENT_RULES_CLOUD, CLOUD_TOOLS } from "@/lib/agent-rules";
+import {
+  AGENT_RULES_CLOUD,
+  AGENT_RULES_REMOTE,
+  CLOUD_TOOLS,
+  NPM_LOCAL_TOOLS,
+  REMOTE_TOOLS,
+} from "@/lib/agent-rules";
 
 // 跨仓库契约钉住测试：lce 仓库 docs/contracts/cloud-protocol.json 是云协议
 // 的单一源头（cloudToolSurface = 客户端实际暴露的云端工具名）。本测试
@@ -53,3 +59,22 @@ describe.skipIf(!contractPath)(
     });
   }
 );
+
+describe("remote HTTP and npm client tool surfaces", () => {
+  it("documents the two tools that require the npm client", () => {
+    expect(NPM_LOCAL_TOOLS.map((tool) => tool.name)).toEqual([
+      "codebase_git_context",
+      "codebase_review_changes",
+    ]);
+    expect(CLOUD_TOOLS.filter(
+      (tool) => !REMOTE_TOOLS.some((remoteTool) => remoteTool.name === tool.name),
+    ).map((tool) => tool.name)).toEqual(NPM_LOCAL_TOOLS.map((tool) => tool.name));
+  });
+
+  it("keeps all remote business tools in the remote list and rules", () => {
+    for (const name of ["codebase-retrieval", "codebase_symbol_graph", "codebase_enhance_prompt", "codebase_index"]) {
+      expect(REMOTE_TOOLS.some((tool) => tool.name === name)).toBe(true);
+      expect(AGENT_RULES_REMOTE).toContain(`\`${name}\``);
+    }
+  });
+});

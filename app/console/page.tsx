@@ -1262,6 +1262,12 @@ export default function ConsolePage() {
                               ? t("copyTheConfigurationIntoYourIdeNpx")
                               : t("cursorClaudeCodeAndCodexCanConnect")}
                           </p>
+                          {mcpConfigMode === "remote" && (
+                            <div className="mb-4 flex gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.05] p-3 text-xs leading-relaxed text-amber-100/80">
+                              <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                              <p>{t("remoteHttpModeWithoutNpmWarning")}</p>
+                            </div>
+                          )}
                           {mcpConfigMode === "cloud" && (
                             <div className="mb-4 rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] p-3 text-sm text-slate-400">
                               <p className="text-slate-300">{t("optionalGlobalInstallation")}</p>

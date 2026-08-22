@@ -2,7 +2,7 @@ import { Header } from "@/components/Header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { AGENT_RULES_CLOUD, AGENT_RULES_CLOUD_EN } from "@/lib/agent-rules";
+import { AGENT_RULES_CLOUD, AGENT_RULES_CLOUD_EN, CLOUD_TOOLS, NPM_LOCAL_TOOLS } from "@/lib/agent-rules";
 import { buildCloudMcpConfigJson, buildCloudMcpConfigToml } from "@/lib/mcp-config";
 import { LceBrand } from "@/components/LceBrand";
 import { I18nText } from "@/components/I18nText";
@@ -157,6 +157,47 @@ export default async function Home() {
             </div>
           </section>
 
+          {/* Public MCP tool surface */}
+          <section>
+            <SectionTitle><I18nText id="mcpTools" /></SectionTitle>
+            <p className="mb-5 text-[15px] leading-relaxed text-slate-400">
+              <I18nText id="mcpToolsIntro" />
+            </p>
+            <div className="overflow-hidden rounded-lg border border-white/[0.06] bg-[#0d1424]/40">
+              {CLOUD_TOOLS.map((tool, index) => {
+                const runsLocally = NPM_LOCAL_TOOLS.some((localTool) => localTool.name === tool.name);
+                return (
+                  <div
+                    key={tool.name}
+                    className={cn(
+                      "grid gap-2 px-4 py-4 sm:grid-cols-[minmax(190px,0.8fr)_minmax(0,1.5fr)_auto] sm:items-center sm:gap-4",
+                      index < CLOUD_TOOLS.length - 1 && "border-b border-white/[0.06]",
+                    )}
+                  >
+                    <code className="break-all font-mono text-xs text-cyan-300">{tool.name}</code>
+                    <p className="text-sm leading-relaxed text-slate-400">
+                      {locale === "zh-CN" ? tool.desc : tool.descEn}
+                    </p>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "w-fit rounded-md px-2 py-1 text-[10px]",
+                        runsLocally
+                          ? "border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-300"
+                          : "border-cyan-500/20 bg-cyan-500/[0.06] text-cyan-300",
+                      )}
+                    >
+                      <I18nText id={runsLocally ? "runsLocally" : "runsInCloud"} />
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/[0.05] px-4 py-3 text-sm leading-relaxed text-amber-100/80">
+              <I18nText id="withoutNpmClientToolWarning" />
+            </div>
+          </section>
+
           {/* How to start */}
           <section>
             <SectionTitle><I18nText id="getStarted" /></SectionTitle>
@@ -177,6 +218,9 @@ export default async function Home() {
                     <p className="mt-2 text-xs text-slate-500">
                       <I18nText id="afterGlobalInstallationReplace" /> <code className="text-slate-300">npx</code> <I18nText id="with" />{" "}
                       <code className="text-slate-300">lce-cloud</code><I18nText id="theDefaultNpxConfigurationNeedsNoInstallation" />
+                    </p>
+                    <p className="mt-3 border-t border-white/[0.06] pt-3 text-xs leading-relaxed text-amber-100/70">
+                      <I18nText id="withoutNpmClientToolWarning" />
                     </p>
                   </div>
                   <p className="text-xs text-slate-500">Cursor / Claude Code</p>
