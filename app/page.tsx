@@ -253,6 +253,9 @@ export default async function Home() {
             <I18nText id="feedbackAndContact" />{" "}
             <span className="font-mono text-cyan-300">wx_exception</span>
           </p>
+          <p className="text-sm text-slate-500">
+            <I18nText id="copyrightNotice" />
+          </p>
         </div>
       </footer>
     </div>

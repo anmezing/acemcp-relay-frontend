@@ -741,6 +741,7 @@
     "theServerRejectsEnvFilesKeysBinaries": "服务端拒绝 .env、密钥、二进制、依赖目录和构建产物；仍应在提交清单前检查仓库中的其他敏感内容",
     "theFrontendAndAdminConsoleAreBased": "本项目的前端与管理后台基于",
     "withThanks": " 的开源实现构建，谨致谢意。",
-    "feedbackAndContact": "反馈与联系：微信"
+    "feedbackAndContact": "反馈与联系：微信",
+    "copyrightNotice": "© 2026 anmezing / LCE。保留所有权利。"
   }
 }

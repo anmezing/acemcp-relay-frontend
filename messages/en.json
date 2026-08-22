@@ -741,6 +741,7 @@
     "theServerRejectsEnvFilesKeysBinaries": "The server rejects .env files, keys, binaries, dependency directories, and build artifacts. Review repositories for other sensitive content before indexing.",
     "theFrontendAndAdminConsoleAreBased": "The frontend and admin console are based on the open-source work by",
     "withThanks": ". With thanks.",
-    "feedbackAndContact": "Feedback and contact: WeChat"
+    "feedbackAndContact": "Feedback and contact: WeChat",
+    "copyrightNotice": "© 2026 anmezing / LCE. All rights reserved."
   }
 }
