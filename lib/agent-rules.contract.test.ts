@@ -85,4 +85,14 @@ describe("remote HTTP and npm client tool surfaces", () => {
     expect(AGENT_RULES_REMOTE).toContain("不提供本地工具");
     expect(AGENT_RULES_REMOTE).toContain("自动文件监听");
   });
+
+  it("tells agents exactly when and how to call prompt enhancement", () => {
+    for (const rules of [AGENT_RULES_CLOUD, AGENT_RULES_REMOTE]) {
+      expect(rules).toContain("当用户明确要求增强/优化提示词");
+      expect(rules).toContain("`prompt`");
+      expect(rules).toContain("`technical_terms`");
+      expect(rules).toContain("原始要求始终优先");
+      expect(rules).toContain("不要对每个普通任务自动调用");
+    }
+  });
 });

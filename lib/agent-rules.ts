@@ -27,7 +27,7 @@ export const AGENT_RULES_CLOUD = `## LCE 工具使用规则
 - 默认 npx 配置会自动下载并运行 npm 客户端，无需全局安装；本规则适用于完整的 5 工具模式。
 - （服务端）查找、理解、定位代码一律优先使用 \`codebase-retrieval\`，用自然语言描述要找的功能、符号或逻辑，不要先用 grep / 逐文件浏览。
 - （服务端）分析符号的定义、引用、调用链、依赖关系与修改影响用 \`codebase_symbol_graph\`。
-- （服务端）需要把自然语言任务整理为带代码证据的目标、要求、约束和验证步骤时，用 \`codebase_enhance_prompt\`。
+- （服务端）当用户明确要求增强/优化提示词，或要求先生成基于当前代码的实施说明时，调用 \`codebase_enhance_prompt\`：完整原始任务放入 \`prompt\`，已知符号、文件名或错误码放入可选的 \`technical_terms\`。将返回结果作为补充计划，原始要求始终优先；不要对每个普通任务自动调用。
 - （本地 npm 客户端）Git 状态、diff、提交历史、blame、分支上下文用 \`codebase_git_context\`。
 - （本地 npm 客户端）变更评审（review range、风险点、检索计划、测试计划）用 \`codebase_review_changes\`。
 - 若改用远程 HTTP 直连而不运行 npm 客户端，\`codebase_git_context\` 和 \`codebase_review_changes\` 不可用，也没有自动文件监听、增量索引与分支视图跟踪。
@@ -39,7 +39,7 @@ export const AGENT_RULES_REMOTE = `## LCE 工具使用规则
 - （服务端）首次处理项目或代码发生变化后，先调用 \`codebase_index\` 建立索引：提交完整文本文件清单，只上传服务端返回的待更新文件，并在全部批次成功后完成任务。
 - （服务端）查找、理解、定位代码一律优先使用 \`codebase-retrieval\`，用自然语言描述要找的功能、符号或逻辑，不要先用 grep / 逐文件浏览。
 - （服务端）分析调用关系与修改影响用 \`codebase_symbol_graph\`。
-- （服务端）需要把自然语言任务整理为带代码证据的目标、要求、约束和验证步骤时，用 \`codebase_enhance_prompt\`。
+- （服务端）当用户明确要求增强/优化提示词，或要求先生成基于当前代码的实施说明时，调用 \`codebase_enhance_prompt\`：完整原始任务放入 \`prompt\`，已知符号、文件名或错误码放入可选的 \`technical_terms\`。将返回结果作为补充计划，原始要求始终优先；不要对每个普通任务自动调用。
 - Git 状态、历史、blame 和变更评审使用当前编码 Agent 自身的本地工具；不要把 .env、密钥、二进制、依赖目录或构建产物提交到索引。
 - 仅当 LCE 工具不可用，或需要精确的正则 / 字面量匹配时，才退回本地全文搜索。`;
 
@@ -48,7 +48,7 @@ export const AGENT_RULES_CLOUD_EN = `## LCE Tool Usage
 - The default npx configuration downloads and runs the npm client automatically; no global install is required. These rules apply to the complete five-tool mode.
 - (Server-provided) Always use \`codebase-retrieval\` first when finding, understanding, or locating code. Describe the feature, symbol, or logic in natural language instead of starting with grep or browsing files.
 - (Server-provided) Use \`codebase_symbol_graph\` for symbol definitions, references, call chains, dependencies, and change impact.
-- (Server-provided) Use \`codebase_enhance_prompt\` to turn a natural-language task into goals, requirements, constraints, and verification steps grounded in verified repository context.
+- (Server-provided) When the user explicitly asks to enhance/refine a prompt or requests a code-grounded implementation brief first, call \`codebase_enhance_prompt\`: put the complete original task in \`prompt\` and known symbols, file names, or error codes in optional \`technical_terms\`. Treat the result as a supplemental plan and keep the original request authoritative; do not call it automatically for every ordinary task.
 - (Local npm client) Use \`codebase_git_context\` for Git status, diffs, commit history, blame, and branch context.
 - (Local npm client) Use \`codebase_review_changes\` for review ranges, risks, retrieval plans, and test plans.
 - A direct Remote HTTP connection without the npm client omits \`codebase_git_context\` and \`codebase_review_changes\`, local file watching, automatic incremental indexing, and branch-view tracking.
@@ -60,6 +60,6 @@ export const AGENT_RULES_REMOTE_EN = `## LCE Tool Usage
 - (Server-provided) When first working with a project or after code changes, call \`codebase_index\`: submit the complete list of text files, upload only files requested by the server, and finish after every batch succeeds.
 - (Server-provided) Always use \`codebase-retrieval\` first when finding, understanding, or locating code. Describe the feature, symbol, or logic in natural language instead of starting with grep or browsing files.
 - (Server-provided) Use \`codebase_symbol_graph\` for call relationships and change impact.
-- (Server-provided) Use \`codebase_enhance_prompt\` to turn a natural-language task into goals, requirements, constraints, and verification steps grounded in verified repository context.
+- (Server-provided) When the user explicitly asks to enhance/refine a prompt or requests a code-grounded implementation brief first, call \`codebase_enhance_prompt\`: put the complete original task in \`prompt\` and known symbols, file names, or error codes in optional \`technical_terms\`. Treat the result as a supplemental plan and keep the original request authoritative; do not call it automatically for every ordinary task.
 - Use the coding agent's own local tools for Git status, history, blame, and change review. Never submit .env files, keys, binaries, dependency directories, or build output to the index.
 - Fall back to local text search only when LCE is unavailable or exact regex/literal matching is required.`;

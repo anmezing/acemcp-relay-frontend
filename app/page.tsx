@@ -207,6 +207,35 @@ export default async function Home() {
                 <p className="text-sm leading-relaxed text-slate-400"><I18nText id="remoteHttpModeDescription" /></p>
               </div>
             </div>
+            <div className="mt-8 border-t border-white/[0.06] pt-7">
+              <h3 className="text-base font-medium text-white"><I18nText id="promptEnhancementHowToUse" /></h3>
+              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-400">
+                <I18nText id="promptEnhancementUsageIntro" />
+              </p>
+              <div className="mt-5 grid gap-5 md:grid-cols-3">
+                <div className="border-l border-cyan-500/25 pl-4">
+                  <p className="text-sm font-medium text-white"><I18nText id="promptEnhancementAsk" /></p>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400"><I18nText id="promptEnhancementAskDescription" /></p>
+                </div>
+                <div className="border-l border-cyan-500/25 pl-4">
+                  <p className="text-sm font-medium text-white"><I18nText id="promptEnhancementAgentCalls" /></p>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400"><I18nText id="promptEnhancementAgentCallsDescription" /></p>
+                </div>
+                <div className="border-l border-cyan-500/25 pl-4">
+                  <p className="text-sm font-medium text-white"><I18nText id="promptEnhancementContinue" /></p>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-400"><I18nText id="promptEnhancementContinueDescription" /></p>
+                </div>
+              </div>
+              <div className="mt-5 border border-white/[0.06] bg-[#0a0f1a]/70 p-4">
+                <p className="text-xs font-medium text-slate-500"><I18nText id="promptEnhancementExampleLabel" /></p>
+                <code className="mt-2 block whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-cyan-200">
+                  <I18nText id="promptEnhancementExample" />
+                </code>
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-slate-500">
+                <I18nText id="promptEnhancementAvailability" />
+              </p>
+            </div>
           </section>
 
           {/* How to start */}
