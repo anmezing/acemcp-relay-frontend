@@ -70,6 +70,9 @@ describe("remote HTTP and npm client tool surfaces", () => {
       (tool) => !REMOTE_TOOLS.some((remoteTool) => remoteTool.name === tool.name),
     ).map((tool) => tool.name)).toEqual(NPM_LOCAL_TOOLS.map((tool) => tool.name));
     expect(NPM_LOCAL_TOOLS.every((tool) => tool.location === "local")).toBe(true);
+    expect(AGENT_RULES_CLOUD).toContain("（服务端）");
+    expect(AGENT_RULES_CLOUD).toContain("（本地 npm 客户端）");
+    expect(AGENT_RULES_CLOUD).toContain("无需全局安装");
   });
 
   it("keeps all remote business tools in the remote list and rules", () => {
@@ -78,5 +81,8 @@ describe("remote HTTP and npm client tool surfaces", () => {
       expect(AGENT_RULES_REMOTE).toContain(`\`${name}\``);
     }
     expect(REMOTE_TOOLS.every((tool) => tool.location === "server")).toBe(true);
+    expect(AGENT_RULES_REMOTE).toContain("远程 HTTP 直连模式");
+    expect(AGENT_RULES_REMOTE).toContain("不提供本地工具");
+    expect(AGENT_RULES_REMOTE).toContain("自动文件监听");
   });
 });
