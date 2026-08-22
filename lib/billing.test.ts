@@ -10,6 +10,12 @@ const mocks = vi.hoisted(() => {
   const poolQuery = vi.fn();
   const deleteQuotaLimitCache = vi.fn(async () => undefined);
   const deleteOrgQuotaCache = vi.fn(async () => undefined);
+  const getDailyQuotaUsage = vi.fn(async () => ({
+    available: true,
+    requestsUsed: 12,
+    indexBytesUsed: 2048,
+    resetAt: "2026-08-14T16:00:00.000Z",
+  }));
   return {
     clientQuery,
     release,
@@ -17,6 +23,7 @@ const mocks = vi.hoisted(() => {
     poolQuery,
     deleteQuotaLimitCache,
     deleteOrgQuotaCache,
+    getDailyQuotaUsage,
   };
 });
 
@@ -28,11 +35,13 @@ vi.mock("@/lib/db", () => ({
   initDB: vi.fn(async () => undefined),
   deleteQuotaLimitCache: mocks.deleteQuotaLimitCache,
   deleteOrgQuotaCache: mocks.deleteOrgQuotaCache,
+  getDailyQuotaUsage: mocks.getDailyQuotaUsage,
 }));
 
 import {
   createPendingOrder,
   getOrganizationMembershipLimit,
+  getBillingOverview,
   getSubaccountUsage,
   markOrderPaid,
 } from "./billing";
@@ -149,6 +158,22 @@ describe("subscription subaccount seats", () => {
     await expect(
       getOrganizationMembershipLimit("org-1", "candidate-1")
     ).resolves.toBe(3);
+  });
+});
+
+describe("billing overview quota usage", () => {
+  it("returns the Relay Redis counters used by the quota gate", async () => {
+    mocks.poolQuery.mockResolvedValue({ rows: [] });
+
+    const overview = await getBillingOverview("user-1");
+
+    expect(overview.usage).toEqual({
+      available: true,
+      requestsUsed: 12,
+      indexBytesUsed: 2048,
+      resetAt: "2026-08-14T16:00:00.000Z",
+    });
+    expect(mocks.getDailyQuotaUsage).toHaveBeenCalledWith("user-1");
   });
 });
 

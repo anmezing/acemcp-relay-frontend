@@ -6,7 +6,8 @@ const mocks = vi.hoisted(() => {
   const release = vi.fn();
   const connect = vi.fn(async () => ({ query, release }));
   const redisDel = vi.fn(async () => 1);
-  return { query, release, connect, redisDel };
+  const redisMGet = vi.fn(async () => ["12", "2048"]);
+  return { query, release, connect, redisDel, redisMGet };
 });
 
 vi.mock("pg", () => ({
@@ -20,6 +21,7 @@ vi.mock("redis", () => ({
     on: vi.fn(),
     connect: vi.fn(async () => undefined),
     del: mocks.redisDel,
+    mGet: mocks.redisMGet,
   })),
 }));
 
@@ -27,6 +29,7 @@ import {
   createApiKey,
   deleteOrgMemberQuotaCache,
   deleteOrgQuotaCache,
+  getDailyQuotaUsage,
   resetApiKey,
 } from "./db";
 
@@ -125,5 +128,35 @@ describe("API credential transactions", () => {
   it("uses the relay contract key for organization quota invalidation", async () => {
     await deleteOrgQuotaCache("org-1");
     expect(mocks.redisDel).toHaveBeenCalledWith("quota:limit:orgq:org-1");
+  });
+
+  it("loads the Relay counters for the Shanghai quota day", async () => {
+    mocks.redisMGet.mockResolvedValueOnce(["12", "2048"]);
+
+    await expect(
+      getDailyQuotaUsage("tenant-1", new Date("2026-08-14T16:30:00.000Z"))
+    ).resolves.toEqual({
+      available: true,
+      requestsUsed: 12,
+      indexBytesUsed: 2048,
+      resetAt: "2026-08-15T16:00:00.000Z",
+    });
+    expect(mocks.redisMGet).toHaveBeenCalledWith([
+      "quota:used:tenant-1:20260815",
+      "quota:indexbytes:tenant-1:20260815",
+    ]);
+  });
+
+  it("reports unavailable counters when Redis cannot be read", async () => {
+    mocks.redisMGet.mockRejectedValueOnce(new Error("redis unavailable"));
+
+    await expect(
+      getDailyQuotaUsage("tenant-1", new Date("2026-08-14T15:30:00.000Z"))
+    ).resolves.toEqual({
+      available: false,
+      requestsUsed: null,
+      indexBytesUsed: null,
+      resetAt: "2026-08-14T16:00:00.000Z",
+    });
   });
 });

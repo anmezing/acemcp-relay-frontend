@@ -2,6 +2,7 @@ import crypto from "crypto";
 import pool, {
   deleteOrgQuotaCache,
   deleteQuotaLimitCache,
+  getDailyQuotaUsage,
   initDB,
 } from "@/lib/db";
 
@@ -713,13 +714,14 @@ export async function markOrderPaid(input: {
 }
 
 export async function getBillingOverview(userId: string) {
-  const [plans, subscription, orders, seats] = await Promise.all([
+  const [plans, subscription, orders, seats, usage] = await Promise.all([
     listBillingPlans(false),
     getActiveSubscription(userId),
     listUserOrders(userId),
     getSubaccountUsage(userId),
+    getDailyQuotaUsage(userId),
   ]);
-  return { plans, subscription, orders, seats };
+  return { plans, subscription, orders, seats, usage };
 }
 
 export async function closeExpiredOrders(): Promise<void> {

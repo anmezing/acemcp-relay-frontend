@@ -49,6 +49,12 @@ interface BillingOverview {
   subscription: Subscription | null;
   orders: BillingOrder[];
   seats: { used: number; limit: number };
+  usage: {
+    available: boolean;
+    requestsUsed: number | null;
+    indexBytesUsed: number | null;
+    resetAt: string;
+  };
   providers: { alipay: boolean; wechat: boolean };
 }
 
@@ -78,6 +84,17 @@ function formatBytes(value: number, unlimited: string): string {
 
 function formatMoney(fen: number): string {
   return `¥${(fen / 100).toFixed(2)}`;
+}
+
+function quotaPercent(used: number | null, limit: number | undefined): number {
+  if (used === null || !limit || limit <= 0) return 0;
+  return Math.min(100, Math.max(0, (used / limit) * 100));
+}
+
+function quotaTone(percent: number): string {
+  if (percent >= 100) return "bg-red-400";
+  if (percent >= 80) return "bg-amber-400";
+  return "bg-cyan-400";
 }
 
 export function PlansTab() {
@@ -194,6 +211,14 @@ export function PlansTab() {
   );
 
   const recentOrders = useMemo(() => data?.orders.slice(0, 5) ?? [], [data]);
+  const requestPercent = quotaPercent(
+    data?.usage.requestsUsed ?? null,
+    data?.subscription?.dailyRequestLimit
+  );
+  const indexPercent = quotaPercent(
+    data?.usage.indexBytesUsed ?? null,
+    data?.subscription?.dailyIndexBytesLimit
+  );
 
   if (!data && !error) {
     return (
@@ -265,6 +290,47 @@ export function PlansTab() {
               </div>
             </div>
           </div>
+          <div className="mt-5 grid gap-4 border-t border-white/[0.06] pt-4 md:grid-cols-2">
+            <div className="min-w-0">
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="text-slate-400">{t("requestsUsedToday")}</span>
+                <span className="font-mono text-slate-200">
+                  {data.usage.requestsUsed === null
+                    ? t("usageTemporarilyUnavailable")
+                    : data.subscription
+                      ? `${data.usage.requestsUsed.toLocaleString()} / ${formatLimit(data.subscription.dailyRequestLimit, "", t("unlimited"))}`
+                      : data.usage.requestsUsed.toLocaleString()}
+                </span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                <div
+                  className={cn("h-full rounded-full transition-[width]", quotaTone(requestPercent))}
+                  style={{ width: `${requestPercent}%` }}
+                />
+              </div>
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="text-slate-400">{t("indexUsedToday")}</span>
+                <span className="font-mono text-slate-200">
+                  {data.usage.indexBytesUsed === null
+                    ? t("usageTemporarilyUnavailable")
+                    : data.subscription
+                      ? `${formatBytes(data.usage.indexBytesUsed, t("unlimited"))} / ${formatBytes(data.subscription.dailyIndexBytesLimit, t("unlimited"))}`
+                      : formatBytes(data.usage.indexBytesUsed, t("unlimited"))}
+                </span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                <div
+                  className={cn("h-full rounded-full transition-[width]", quotaTone(indexPercent))}
+                  style={{ width: `${indexPercent}%` }}
+                />
+              </div>
+            </div>
+          </div>
+          <p className="mt-3 text-right text-[11px] text-slate-600">
+            {t("quotaResetsAt", { p0: new Date(data.usage.resetAt).toLocaleString(locale) })}
+          </p>
         </CardContent>
       </Card>
 

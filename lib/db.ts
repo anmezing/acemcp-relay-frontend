@@ -26,6 +26,71 @@ async function getRedisClient(): Promise<RedisClientType> {
   return redisClient;
 }
 
+export interface DailyQuotaUsage {
+  available: boolean;
+  requestsUsed: number | null;
+  indexBytesUsed: number | null;
+  resetAt: string;
+}
+
+function shanghaiQuotaWindow(now: Date): { day: string; resetAt: string } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  const year = Number(value("year"));
+  const month = Number(value("month"));
+  const dayOfMonth = Number(value("day"));
+  const resetAt = new Date(
+    Date.UTC(year, month - 1, dayOfMonth + 1, 0, 0, 0) - 8 * 60 * 60 * 1000
+  );
+  return {
+    day: `${String(year).padStart(4, "0")}${String(month).padStart(2, "0")}${String(dayOfMonth).padStart(2, "0")}`,
+    resetAt: resetAt.toISOString(),
+  };
+}
+
+function parseQuotaCounter(value: string | null): number {
+  if (value === null) return 0;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+export async function getDailyQuotaUsage(
+  tenantId: string,
+  now = new Date()
+): Promise<DailyQuotaUsage> {
+  const window = shanghaiQuotaWindow(now);
+  try {
+    const redis = await getRedisClient();
+    const [requests, indexBytes] = await redis.mGet([
+      `quota:used:${tenantId}:${window.day}`,
+      `quota:indexbytes:${tenantId}:${window.day}`,
+    ]);
+    return {
+      available: true,
+      requestsUsed: parseQuotaCounter(requests),
+      indexBytesUsed: parseQuotaCounter(indexBytes),
+      resetAt: window.resetAt,
+    };
+  } catch (error) {
+    console.error(
+      "Failed to load daily quota usage:",
+      error instanceof Error ? error.message : "UNKNOWN"
+    );
+    return {
+      available: false,
+      requestsUsed: null,
+      indexBytesUsed: null,
+      resetAt: window.resetAt,
+    };
+  }
+}
+
 // 删除封禁状态缓存（relay 侧以 banned:{userId} 缓存，封禁/解封后立即生效）
 export async function deleteBannedCache(userId: string) {
   try {
