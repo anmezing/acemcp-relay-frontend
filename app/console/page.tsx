@@ -45,6 +45,7 @@ import { AGENT_RULES_CLOUD, AGENT_RULES_CLOUD_EN, AGENT_RULES_REMOTE, AGENT_RULE
 import { UserModelConfigTab } from "@/components/UserModelConfigTab";
 import { PlansTab } from "@/components/PlansTab";
 import { AdminPlansTab } from "@/components/admin/AdminPlansTab";
+import { isCurrentIndexContext, type IndexOrganizationContext } from "@/lib/index-context";
 import { AdminMenuTab } from "@/components/admin/AdminMenuTab";
 import { DEFAULT_MENU_VISIBILITY, normalizeMenuVisibility, ConsoleMenuId } from "@/lib/menu-config";
 import { LceBrand } from "@/components/LceBrand";
@@ -391,7 +392,9 @@ export default function ConsolePage() {
   const [deleteRootLoading, setDeleteRootLoading] = useState(false);
   const [deleteRootResult, setDeleteRootResult] = useState<{ success: boolean; message: string } | null>(null);
   // 索引上下文：null = 个人租户；组织时按组织密钥查询，删除权限依 orgRole
-  const [rootsOrg, setRootsOrg] = useState<{ id: string; name: string } | null>(null);
+  const [rootsOrg, setRootsOrg] = useState<IndexOrganizationContext | null>(null);
+  const rootsOrgRef = useRef<IndexOrganizationContext | null>(null);
+  const rootsLoadingRef = useRef(false);
   const [rootsOrgRole, setRootsOrgRole] = useState<"owner" | "member" | null>(null);
   const { data: myOrgs } = authClient.useListOrganizations();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -469,7 +472,10 @@ export default function ConsolePage() {
   }, []);
 
   // background=true 用于轮询：不闪 loading 态，静默失败（保留上次数据）
-  const fetchTenantStats = useCallback(async (background = false, orgContext = rootsOrg) => {
+  const fetchTenantStats = useCallback(async (
+    background = false,
+    orgContext = rootsOrgRef.current,
+  ) => {
     if (!background) {
       setTenantStatsLoading(true);
       setTenantStatsError(null);
@@ -492,26 +498,33 @@ export default function ConsolePage() {
         throw new Error(t("invalidIndexStatisticsResponse"));
       }
 
+      if (!isCurrentIndexContext(rootsOrgRef.current, orgContext)) return;
       setTenantStats(data);
       if (background) setTenantStatsError(null);
     } catch (error) {
       console.error("获取索引统计失败:", error);
-      if (!background) {
+      if (!background && isCurrentIndexContext(rootsOrgRef.current, orgContext)) {
         setTenantStatsError(error instanceof Error ? error.message : t("failedToLoadIndexStatistics"));
       }
     } finally {
-      if (!background) setTenantStatsLoading(false);
+      if (!background && isCurrentIndexContext(rootsOrgRef.current, orgContext)) {
+        setTenantStatsLoading(false);
+      }
     }
-  }, [rootsOrg, t]);
+  }, [t]);
 
-  const fetchRoots = useCallback(async (background = false) => {
+  const fetchRoots = useCallback(async (
+    background = false,
+    orgContext = rootsOrgRef.current,
+  ) => {
     if (!background) {
+      rootsLoadingRef.current = true;
       setRootsLoading(true);
       setRootsError(null);
     }
     try {
-      const url = rootsOrg
-        ? `/api/roots?orgId=${encodeURIComponent(rootsOrg.id)}`
+      const url = orgContext
+        ? `/api/roots?orgId=${encodeURIComponent(orgContext.id)}`
         : "/api/roots";
       const res = await fetch(url);
       const data: unknown = await res.json().catch(() => null);
@@ -531,19 +544,23 @@ export default function ConsolePage() {
         throw new Error(t("invalidIndexListResponse"));
       }
 
+      if (!isCurrentIndexContext(rootsOrgRef.current, orgContext)) return;
       setRoots((data as { roots: RelayRoot[] }).roots);
       const orgRole = (data as { orgRole?: unknown }).orgRole;
       setRootsOrgRole(orgRole === "owner" || orgRole === "member" ? orgRole : null);
       if (background) setRootsError(null);
     } catch (error) {
       console.error("获取索引列表失败:", error);
-      if (!background) {
+      if (!background && isCurrentIndexContext(rootsOrgRef.current, orgContext)) {
         setRootsError(error instanceof Error ? error.message : t("failedToLoadIndexList"));
       }
     } finally {
-      if (!background) setRootsLoading(false);
+      if (!background && isCurrentIndexContext(rootsOrgRef.current, orgContext)) {
+        rootsLoadingRef.current = false;
+        setRootsLoading(false);
+      }
     }
-  }, [rootsOrg, t]);
+  }, [t]);
 
   const handleDeleteRoot = useCallback(async () => {
     if (!rootPendingDelete) return;
@@ -564,7 +581,7 @@ export default function ConsolePage() {
           success: true,
           message: t("indexDeleted", { count: data.deleted_files ?? 0 }),
         });
-        await Promise.all([fetchRoots(), fetchTenantStats(false, rootsOrg)]);
+        await Promise.all([fetchRoots(false, rootsOrg), fetchTenantStats(false, rootsOrg)]);
       } else if (res.status === 409) {
         setDeleteRootResult({
           success: false,
@@ -719,10 +736,10 @@ export default function ConsolePage() {
 
   // 进入索引管理页时拉取"我的索引"列表（只在首次进入时触发）
   useEffect(() => {
-    if (activeTab !== "index" || !session || roots !== null) return;
+    if (activeTab !== "index" || !session || roots !== null || rootsLoadingRef.current) return;
 
     const timeoutId = window.setTimeout(() => {
-      void fetchRoots();
+      void fetchRoots(false, rootsOrgRef.current);
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
@@ -738,8 +755,8 @@ export default function ConsolePage() {
     let intervalId: number | null = null;
 
     const tick = () => {
-      void fetchTenantStats(true);
-      if (hasActiveJob) void fetchRoots(true);
+      void fetchTenantStats(true, rootsOrgRef.current);
+      if (hasActiveJob) void fetchRoots(true, rootsOrgRef.current);
     };
     const stop = () => {
       if (intervalId !== null) {
@@ -1537,6 +1554,25 @@ export default function ConsolePage() {
                   <TabsContent value="index" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
                     <h2 className="text-lg font-medium text-white mb-6">{t("indexes")}</h2>
 
+                    <IndexContextSwitcher
+                      orgOptions={(myOrgs ?? []).map((org) => ({ id: org.id, name: org.name }))}
+                      activeOrg={rootsOrg}
+                      onSelectOrg={(org) => {
+                        rootsOrgRef.current = org;
+                        setRootsOrg(org);
+                        setRootsOrgRole(null);
+                        setRoots(null);
+                        setTenantStats(null);
+                        setTenantStatsError(null);
+                        setRootsError(null);
+                        setDeleteRootResult(null);
+                        void Promise.all([
+                          fetchRoots(false, org),
+                          fetchTenantStats(false, org),
+                        ]);
+                      }}
+                    />
+
                     {tenantStatsError && tenantStats && (
                       <div className="mb-4 flex flex-col gap-3 rounded-lg border border-red-500/20 bg-red-500/[0.05] p-3 sm:flex-row sm:items-center sm:justify-between">
                         <p className="text-sm text-red-300">{tenantStatsError}</p>
@@ -1638,20 +1674,9 @@ export default function ConsolePage() {
                           loading={rootsLoading}
                           error={rootsError}
                           deleteResult={deleteRootResult}
-                          orgOptions={(myOrgs ?? []).map((o) => ({ id: o.id, name: o.name }))}
                           activeOrg={rootsOrg}
-                          onSelectOrg={(org) => {
-                            setRootsOrg(org);
-                            setRootsOrgRole(null);
-                            setRoots(null);
-                            setTenantStats(null);
-                            setTenantStatsError(null);
-                            setRootsError(null);
-                            setDeleteRootResult(null);
-                            void fetchTenantStats(false, org);
-                          }}
                           canDelete={!rootsOrg || rootsOrgRole === "owner"}
-                          onRefresh={() => fetchRoots()}
+                          onRefresh={() => fetchRoots(false, rootsOrgRef.current)}
                           onDelete={(root) => {
                             setDeleteRootResult(null);
                             setRootPendingDelete(root);
@@ -2255,6 +2280,55 @@ function IndexingProgress({ job }: { job: ActiveIndexJob }) {
   );
 }
 
+function IndexContextSwitcher({
+  orgOptions,
+  activeOrg,
+  onSelectOrg,
+}: {
+  orgOptions: IndexOrganizationContext[];
+  activeOrg: IndexOrganizationContext | null;
+  onSelectOrg: (org: IndexOrganizationContext | null) => void;
+}) {
+  const t = useTranslations("Console");
+
+  if (orgOptions.length === 0) return null;
+
+  return (
+    <div className="mb-6 flex flex-wrap items-center gap-1.5" data-testid="index-context-switcher">
+      <button
+        type="button"
+        aria-pressed={!activeOrg}
+        onClick={() => onSelectOrg(null)}
+        className={cn(
+          "rounded-lg border px-2.5 py-1 text-xs transition-colors",
+          !activeOrg
+            ? "border-cyan-500/30 bg-cyan-400/10 text-cyan-200"
+            : "border-white/[0.08] text-slate-500 hover:text-slate-300"
+        )}
+      >
+        {t("personal")}
+      </button>
+      {orgOptions.map((org) => (
+        <button
+          key={org.id}
+          type="button"
+          aria-pressed={activeOrg?.id === org.id}
+          onClick={() => onSelectOrg(org)}
+          className={cn(
+            "rounded-lg border px-2.5 py-1 text-xs transition-colors",
+            activeOrg?.id === org.id
+              ? "border-cyan-500/30 bg-cyan-400/10 text-cyan-200"
+              : "border-white/[0.08] text-slate-500 hover:text-slate-300"
+          )}
+        >
+          <Building2 className="mr-1 inline h-3 w-3 -mt-0.5" />
+          {org.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // 我的索引：按 root 维度列出已索引项目，支持逐个删除。支持个人/组织租户
 // 切换；组织租户下成员角色隐藏删除按钮（仅组织所有者可删除）。
 function RootsSection({
@@ -2262,9 +2336,7 @@ function RootsSection({
   loading,
   error,
   deleteResult,
-  orgOptions,
   activeOrg,
-  onSelectOrg,
   canDelete,
   onRefresh,
   onDelete,
@@ -2273,9 +2345,7 @@ function RootsSection({
   loading: boolean;
   error: string | null;
   deleteResult: { success: boolean; message: string } | null;
-  orgOptions: { id: string; name: string }[];
   activeOrg: { id: string; name: string } | null;
-  onSelectOrg: (org: { id: string; name: string } | null) => void;
   canDelete: boolean;
   onRefresh: () => void;
   onDelete: (root: RelayRoot) => void;
@@ -2294,39 +2364,6 @@ function RootsSection({
       <p className="-mt-1 mb-3 text-[11px] text-slate-600">
         {t("eachBranchHasAnIndependentIndexView")}
       </p>
-
-      {orgOptions.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 mb-3">
-          <button
-            type="button"
-            onClick={() => onSelectOrg(null)}
-            className={cn(
-              "px-2.5 py-1 rounded-lg text-xs border transition-colors",
-              !activeOrg
-                ? "bg-cyan-400/10 text-cyan-200 border-cyan-500/30"
-                : "text-slate-500 border-white/[0.08] hover:text-slate-300"
-            )}
-          >
-            {t("personal")}
-          </button>
-          {orgOptions.map((org) => (
-            <button
-              key={org.id}
-              type="button"
-              onClick={() => onSelectOrg(org)}
-              className={cn(
-                "px-2.5 py-1 rounded-lg text-xs border transition-colors",
-                activeOrg?.id === org.id
-                  ? "bg-cyan-400/10 text-cyan-200 border-cyan-500/30"
-                  : "text-slate-500 border-white/[0.08] hover:text-slate-300"
-              )}
-            >
-              <Building2 className="w-3 h-3 inline mr-1 -mt-0.5" />
-              {org.name}
-            </button>
-          ))}
-        </div>
-      )}
 
       {activeOrg && !canDelete && roots !== null && (
         <p className="text-xs text-slate-500 mb-3">{t("onlyOrganizationOwnersCanDeleteOrganizationIndexes")}</p>
