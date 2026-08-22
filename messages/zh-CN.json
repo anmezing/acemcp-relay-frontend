@@ -719,6 +719,8 @@
     "resultsIncludeFilePathsSymbolsAndExact": "返回文件路径、符号名称和准确行号范围，帮助 Agent 直接找到需要查看或修改的位置。",
     "incrementalIndexing": "代码变化持续同步",
     "processesOnlyAddedAndChangedFilesRemoves": "新增、修改或删除代码后，LCE 会持续保持项目上下文最新，无需反复从头处理整个项目。",
+    "gitHistoryUnderstanding": "版本历史理解",
+    "readsGitStatusBranchesDiffsHistoryAndBlame": "查看当前工作区状态、分支差异、提交记录和逐行变更来源，帮助 Agent 理解代码的演进过程与修改上下文。",
     "multiLanguageSupport": "多语言代码支持",
     "supportsTypescriptJavascriptPythonGoRustJava": "覆盖 TypeScript/JavaScript、Python、Go、Rust、Java、C/C++、C#、PHP、Swift、Kotlin 等主流语言，并可统一索引常见配置与文档文件。",
     "symbolRelationshipGraph": "代码关系理解",

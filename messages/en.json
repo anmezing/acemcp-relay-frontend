@@ -719,6 +719,8 @@
     "resultsIncludeFilePathsSymbolsAndExact": "Returns file paths, symbols, and accurate line ranges so agents can go directly to the code that matters.",
     "incrementalIndexing": "Continuous Code Sync",
     "processesOnlyAddedAndChangedFilesRemoves": "Keeps project context current as code is added, changed, or deleted without repeatedly processing the whole project from scratch.",
+    "gitHistoryUnderstanding": "Version History Understanding",
+    "readsGitStatusBranchesDiffsHistoryAndBlame": "Reads working tree status, branch differences, commit history, and line-level origins so agents can understand how code evolved and the context behind changes.",
     "multiLanguageSupport": "Multi-language Support",
     "supportsTypescriptJavascriptPythonGoRustJava": "Supports TypeScript/JavaScript, Python, Go, Rust, Java, C/C++, C#, PHP, Swift, Kotlin, and common configuration and documentation files.",
     "symbolRelationshipGraph": "Code Relationship Understanding",

@@ -129,6 +129,10 @@ export default function Home() {
                 description={<I18nText id="processesOnlyAddedAndChangedFilesRemoves" />}
               />
               <FeatureCard
+                title={<I18nText id="gitHistoryUnderstanding" />}
+                description={<I18nText id="readsGitStatusBranchesDiffsHistoryAndBlame" />}
+              />
+              <FeatureCard
                 title={<I18nText id="multiLanguageSupport" />}
                 description={<I18nText id="supportsTypescriptJavascriptPythonGoRustJava" />}
               />
@@ -144,12 +148,10 @@ export default function Home() {
                 title={<I18nText id="bugLocation" />}
                 description={<I18nText id="combinesNaturalLanguageRetrievalExactTermsAnd" />}
               />
-              <div className="md:col-span-2">
-                <FeatureCard
-                  title={<I18nText id="codeGroundedPromptEnhancement" />}
-                  description={<I18nText id="enhancesNaturalLanguageCodingRequestsWithRetrievedCodeContext" />}
-                />
-              </div>
+              <FeatureCard
+                title={<I18nText id="codeGroundedPromptEnhancement" />}
+                description={<I18nText id="enhancesNaturalLanguageCodingRequestsWithRetrievedCodeContext" />}
+              />
             </div>
           </section>
 
