@@ -773,8 +773,8 @@
     "gitStatusHistoryBlameAndChangeReview": "Git status, history, blame, and change review run locally and are not sent to the cloud.",
     "typescriptJavascriptSymbolGraphsPreferBoundedCompiler": "TypeScript/JavaScript symbol graphs prefer bounded compiler projects. Files outside the compilation budget fall back to AST or heuristic facts with coverage and confidence labels.",
     "theServerRejectsEnvFilesKeysBinaries": "LCE follows Git ignore rules and excludes common key files, dependencies, build output, and binaries. Review ordinary source files for hard-coded sensitive values before use.",
-    "theFrontendAndAdminConsoleAreBased": "The frontend and admin console are based on the open-source work by",
-    "withThanks": ". With thanks.",
+    "theFrontendAndAdminConsoleAreBased": "LCE's frontend and admin console are built as a derivative of the",
+    "withThanks": " open-source project. With thanks.",
     "feedbackAndContact": "Feedback and contact: WeChat",
     "copyrightNotice": "© 2026 anmezing / LCE. All rights reserved."
   }

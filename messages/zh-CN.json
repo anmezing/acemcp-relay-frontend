@@ -773,8 +773,8 @@
     "gitStatusHistoryBlameAndChangeReview": "Git 状态、历史、blame 与变更评审由 LCE 在本地执行，不经过云端",
     "typescriptJavascriptSymbolGraphsPreferBoundedCompiler": "TypeScript/JavaScript 符号图优先使用有界编译项目；超出编译预算或无法解析的文件会降级为 AST/启发式事实，并在结果中标注 coverage 与 confidence",
     "theServerRejectsEnvFilesKeysBinaries": "LCE 会自动遵循 Git 忽略规则，并排除常见密钥文件、依赖、构建产物和二进制文件；普通源码中硬编码的敏感信息仍需在使用前自行检查",
-    "theFrontendAndAdminConsoleAreBased": "本项目的前端与管理后台基于",
-    "withThanks": " 的开源实现构建，谨致谢意。",
+    "theFrontendAndAdminConsoleAreBased": "LCE的前端与管理后台基于",
+    "withThanks": " 的开源项目二开实现构建，谨致谢意。",
     "feedbackAndContact": "反馈与联系：微信",
     "copyrightNotice": "© 2026 anmezing / LCE。保留所有权利。"
   }
