@@ -1348,9 +1348,17 @@ export default function ConsolePage() {
                           </p>
                           <div className="space-y-2">
                             {(mcpConfigMode === "cloud" ? CLOUD_TOOLS : REMOTE_TOOLS).map((tool) => (
-                              <div key={tool.name} className="flex gap-3 p-3 bg-[#0a0f1a]/80 border border-white/[0.04] rounded-lg">
-                                <code className="text-cyan-400 text-xs font-mono shrink-0">{tool.name}</code>
+                              <div key={tool.name} className="grid gap-2 rounded-lg border border-white/[0.04] bg-[#0a0f1a]/80 p-3 sm:grid-cols-[minmax(180px,auto)_1fr_auto] sm:items-center sm:gap-3">
+                                <code className="break-all font-mono text-xs text-cyan-400">{tool.name}</code>
                                 <p className="text-slate-400 text-xs">{locale === "zh-CN" ? tool.desc : tool.descEn}</p>
+                                <span className={cn(
+                                  "w-fit rounded-md border px-2 py-1 text-[10px]",
+                                  tool.location === "local"
+                                    ? "border-emerald-500/20 bg-emerald-500/[0.06] text-emerald-300"
+                                    : "border-cyan-500/20 bg-cyan-500/[0.06] text-cyan-300",
+                                )}>
+                                  {tool.location === "local" ? t("localTool") : t("serverProvidedTool")}
+                                </span>
                               </div>
                             ))}
                           </div>

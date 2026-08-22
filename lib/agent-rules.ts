@@ -2,14 +2,14 @@
 // docs/contracts/cloud-protocol.json 的 cloudToolSurface 契约钉住
 // （见 lib/agent-rules.contract.test.ts），改名/增删必须三仓库同步。
 const SHARED_REMOTE_TOOLS = [
-  { name: "codebase-retrieval", desc: "语义检索项目代码上下文", descEn: "Semantic retrieval for project code context" },
-  { name: "codebase_symbol_graph", desc: "符号调用关系与依赖分析", descEn: "Symbol calls and dependency analysis" },
-  { name: "codebase_enhance_prompt", desc: "基于真实代码上下文增强任务提示词", descEn: "Enhance tasks with verified repository context" },
+  { name: "codebase-retrieval", location: "server", desc: "融合语义、关键词和精确术语，召回带文件路径与行号的相关代码", descEn: "Retrieve relevant code with file paths and line ranges using semantic, keyword, and exact-term search" },
+  { name: "codebase_symbol_graph", location: "server", desc: "查询符号定义、引用、调用链、导入依赖、相关测试和影响范围", descEn: "Query definitions, references, call chains, imports, related tests, and impact" },
+  { name: "codebase_enhance_prompt", location: "server", desc: "结合已索引的真实代码，将自然语言任务整理为目标、约束和验证步骤", descEn: "Ground a natural-language task in indexed code and produce goals, constraints, and verification steps" },
 ] as const;
 
 export const NPM_LOCAL_TOOLS = [
-  { name: "codebase_git_context", desc: "Git 状态、diff、提交历史、blame", descEn: "Git status, diffs, history, and blame" },
-  { name: "codebase_review_changes", desc: "变更评审与检索计划", descEn: "Change review and retrieval planning" },
+  { name: "codebase_git_context", location: "local", desc: "读取当前工作区的 Git 状态、diff、提交历史、blame 与分支上下文", descEn: "Read Git status, diffs, history, blame, and branch context from the current workspace" },
+  { name: "codebase_review_changes", location: "local", desc: "基于本地变更生成风险、检索计划和测试计划，可按需联动云端检索", descEn: "Review local changes for risks, retrieval plans, and test plans, with optional cloud retrieval" },
 ] as const;
 
 export const CLOUD_TOOLS = [
@@ -19,7 +19,7 @@ export const CLOUD_TOOLS = [
 
 export const REMOTE_TOOLS = [
   ...SHARED_REMOTE_TOOLS,
-  { name: "codebase_index", desc: "首次与增量建立项目代码索引", descEn: "Initial and incremental project indexing" },
+  { name: "codebase_index", location: "server", desc: "远程 HTTP 模式下显式执行首次索引和增量索引", descEn: "Explicitly run initial and incremental indexing in Remote HTTP mode" },
 ] as const;
 
 export const AGENT_RULES_CLOUD = `## 代码检索（LCE）

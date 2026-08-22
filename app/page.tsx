@@ -2,7 +2,7 @@ import { Header } from "@/components/Header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { AGENT_RULES_CLOUD, AGENT_RULES_CLOUD_EN, CLOUD_TOOLS, NPM_LOCAL_TOOLS } from "@/lib/agent-rules";
+import { AGENT_RULES_CLOUD, AGENT_RULES_CLOUD_EN, CLOUD_TOOLS } from "@/lib/agent-rules";
 import { buildCloudMcpConfigJson, buildCloudMcpConfigToml } from "@/lib/mcp-config";
 import { LceBrand } from "@/components/LceBrand";
 import { I18nText } from "@/components/I18nText";
@@ -165,7 +165,7 @@ export default async function Home() {
             </p>
             <div className="overflow-hidden rounded-lg border border-white/[0.06] bg-[#0d1424]/40">
               {CLOUD_TOOLS.map((tool, index) => {
-                const runsLocally = NPM_LOCAL_TOOLS.some((localTool) => localTool.name === tool.name);
+                const runsLocally = tool.location === "local";
                 return (
                   <div
                     key={tool.name}
@@ -195,6 +195,17 @@ export default async function Home() {
             </div>
             <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/[0.05] px-4 py-3 text-sm leading-relaxed text-amber-100/80">
               <I18nText id="withoutNpmClientToolWarning" />
+            </div>
+            <h3 className="mt-7 text-sm font-medium text-white"><I18nText id="connectionModeDifferences" /></h3>
+            <div className="mt-3 overflow-hidden rounded-lg border border-white/[0.06] bg-[#0d1424]/30">
+              <div className="grid gap-2 border-b border-white/[0.06] px-4 py-4 sm:grid-cols-[180px_1fr] sm:gap-4">
+                <p className="text-sm font-medium text-cyan-300"><I18nText id="npmClientMode" /></p>
+                <p className="text-sm leading-relaxed text-slate-400"><I18nText id="npmClientModeDescription" /></p>
+              </div>
+              <div className="grid gap-2 px-4 py-4 sm:grid-cols-[180px_1fr] sm:gap-4">
+                <p className="text-sm font-medium text-slate-300"><I18nText id="remoteHttpModeName" /></p>
+                <p className="text-sm leading-relaxed text-slate-400"><I18nText id="remoteHttpModeDescription" /></p>
+              </div>
             </div>
           </section>
 

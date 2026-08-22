@@ -69,6 +69,7 @@ describe("remote HTTP and npm client tool surfaces", () => {
     expect(CLOUD_TOOLS.filter(
       (tool) => !REMOTE_TOOLS.some((remoteTool) => remoteTool.name === tool.name),
     ).map((tool) => tool.name)).toEqual(NPM_LOCAL_TOOLS.map((tool) => tool.name));
+    expect(NPM_LOCAL_TOOLS.every((tool) => tool.location === "local")).toBe(true);
   });
 
   it("keeps all remote business tools in the remote list and rules", () => {
@@ -76,5 +77,6 @@ describe("remote HTTP and npm client tool surfaces", () => {
       expect(REMOTE_TOOLS.some((tool) => tool.name === name)).toBe(true);
       expect(AGENT_RULES_REMOTE).toContain(`\`${name}\``);
     }
+    expect(REMOTE_TOOLS.every((tool) => tool.location === "server")).toBe(true);
   });
 });
