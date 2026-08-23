@@ -233,6 +233,8 @@
     "accountAction": "账户操作",
     "logIn": "登录",
     "registrationHasBeenDisabledByAnAdministrator": "管理员已关闭新用户注册",
+    "checkingRegistrationAvailability": "正在确认是否开放新用户注册…",
+    "registrationStatusUnavailable": "暂时无法确认注册状态，新用户注册已停用，请稍后重试；已有账号仍可登录",
     "signUp": "注册",
     "registrationIsClosedExistingUsersCanStill": "当前未开放新用户注册，已有账号仍可登录",
     "displayName": "昵称",

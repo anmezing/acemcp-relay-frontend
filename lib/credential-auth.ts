@@ -3,6 +3,23 @@ export const MAX_PASSWORD_LENGTH = 128;
 
 export type CredentialMode = "login" | "register";
 
+export type RegistrationAvailability = "checking" | "open" | "closed" | "unavailable";
+
+export function registrationAvailabilityFromResponse(
+  responseOk: boolean,
+  payload: unknown,
+): Exclude<RegistrationAvailability, "checking"> {
+  if (
+    !responseOk ||
+    typeof payload !== "object" ||
+    payload === null ||
+    typeof (payload as { enabled?: unknown }).enabled !== "boolean"
+  ) {
+    return "unavailable";
+  }
+  return (payload as { enabled: boolean }).enabled ? "open" : "closed";
+}
+
 interface CredentialAuthError {
   code?: string;
   message?: string;

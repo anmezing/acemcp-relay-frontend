@@ -26,5 +26,6 @@ describe("registration status route", () => {
     mocks.getRegistrationLimit.mockResolvedValueOnce(null);
     const response = await GET();
     await expect(response.json()).resolves.toEqual({ enabled, count: 0, limit: null });
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store, max-age=0");
   });
 });

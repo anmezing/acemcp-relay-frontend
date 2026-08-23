@@ -1,10 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
   credentialAuthErrorMessage,
+  registrationAvailabilityFromResponse,
   validateCredentialFields,
 } from "./credential-auth";
 
 describe("credential auth form", () => {
+  it("fails registration availability closed when the status response is unusable", () => {
+    expect(registrationAvailabilityFromResponse(false, { enabled: true })).toBe("unavailable");
+    expect(registrationAvailabilityFromResponse(true, {})).toBe("unavailable");
+    expect(registrationAvailabilityFromResponse(true, { enabled: "false" })).toBe("unavailable");
+    expect(registrationAvailabilityFromResponse(true, null)).toBe("unavailable");
+  });
+
+  it("maps a valid registration status response", () => {
+    expect(registrationAvailabilityFromResponse(true, { enabled: true })).toBe("open");
+    expect(registrationAvailabilityFromResponse(true, { enabled: false })).toBe("closed");
+  });
+
   it("validates registration-only fields", () => {
     expect(validateCredentialFields({
       mode: "register",

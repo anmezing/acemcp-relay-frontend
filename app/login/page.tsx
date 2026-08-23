@@ -23,6 +23,8 @@ import { loginUrl, sanitizeCallbackUrl } from "@/lib/auth-redirect";
 import { LceBrand } from "@/components/LceBrand";
 import {
   credentialAuthErrorMessage,
+  registrationAvailabilityFromResponse,
+  type RegistrationAvailability,
   type CredentialMessage,
   type CredentialMode,
   validateCredentialFields,
@@ -112,32 +114,47 @@ function LoginContent() {
   const errorCallbackUrl = loginUrl(callbackUrl);
   const requestedMode: CredentialMode =
     params.get("mode") === "register" ? "register" : "login";
-  const [mode, setMode] = useState<CredentialMode>(requestedMode);
+  // Registration stays fail-closed until the status endpoint confirms it is open.
+  // A slow or failed H5 request must never expose the registration form.
+  const [mode, setMode] = useState<CredentialMode>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
-  const [registrationEnabled, setRegistrationEnabled] = useState<boolean | null>(null);
+  const [registrationAvailability, setRegistrationAvailability] =
+    useState<RegistrationAvailability>("checking");
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/registration", { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) return;
-        const payload = (await response.json()) as { enabled?: boolean };
-        if (!controller.signal.aborted && typeof payload.enabled === "boolean") {
-          setRegistrationEnabled(payload.enabled);
-          if (!payload.enabled) setMode("login");
+    void (async () => {
+      try {
+        const response = await fetch("/api/registration", {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        let payload: unknown;
+        try {
+          payload = await response.json();
+        } catch {
+          payload = null;
         }
-      })
-      .catch(() => {});
+        if (controller.signal.aborted) return;
+        const availability = registrationAvailabilityFromResponse(response.ok, payload);
+        setRegistrationAvailability(availability);
+        setMode(availability === "open" ? requestedMode : "login");
+      } catch {
+        if (controller.signal.aborted) return;
+        setRegistrationAvailability("unavailable");
+        setMode("login");
+      }
+    })();
     return () => controller.abort();
-  }, []);
+  }, [requestedMode]);
 
   const selectMode = (next: CredentialMode) => {
-    if (next === "register" && registrationEnabled === false) return;
+    if (next === "register" && registrationAvailability !== "open") return;
     setMode(next);
     setFormError("");
     setPassword("");
@@ -251,8 +268,16 @@ function LoginContent() {
               type="button"
               role="tab"
               aria-selected={mode === "register"}
-              disabled={registrationEnabled === false}
-              title={registrationEnabled === false ? t("registrationHasBeenDisabledByAnAdministrator") : undefined}
+              disabled={registrationAvailability !== "open"}
+              title={
+                registrationAvailability === "checking"
+                  ? t("checkingRegistrationAvailability")
+                  : registrationAvailability === "closed"
+                    ? t("registrationHasBeenDisabledByAnAdministrator")
+                    : registrationAvailability === "unavailable"
+                      ? t("registrationStatusUnavailable")
+                      : undefined
+              }
               onClick={() => selectMode("register")}
               className={cn(
                 "rounded-md text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40",
@@ -265,10 +290,27 @@ function LoginContent() {
             </button>
           </div>
 
-          {registrationEnabled === false && (
+          {registrationAvailability === "checking" && requestedMode === "register" && (
+            <p className="mb-4 flex items-center justify-center gap-2 text-center text-xs text-slate-400">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              {t("checkingRegistrationAvailability")}
+            </p>
+          )}
+
+          {registrationAvailability === "closed" && (
             <p className="mb-4 text-center text-xs text-amber-300/80">
               {t("registrationIsClosedExistingUsersCanStill")}
             </p>
+          )}
+
+          {registrationAvailability === "unavailable" && (
+            <div
+              role="alert"
+              className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-100"
+            >
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
+              <span className="font-light leading-relaxed">{t("registrationStatusUnavailable")}</span>
+            </div>
           )}
 
           {errorMessage && (
@@ -347,7 +389,7 @@ function LoginContent() {
             <Button
               type="submit"
               size="lg"
-              disabled={busy || (mode === "register" && registrationEnabled === false)}
+              disabled={busy || (mode === "register" && registrationAvailability !== "open")}
               className="w-full justify-center rounded-lg bg-cyan-500/90 text-slate-950 hover:bg-cyan-400"
             >
               {busy ? (

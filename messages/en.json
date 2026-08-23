@@ -233,6 +233,8 @@
     "accountAction": "Account action",
     "logIn": "Log in",
     "registrationHasBeenDisabledByAnAdministrator": "Registration has been disabled by an administrator",
+    "checkingRegistrationAvailability": "Checking whether new-user registration is available…",
+    "registrationStatusUnavailable": "Registration status is temporarily unavailable. New-user registration is disabled; please try again later. Existing users can still log in.",
     "signUp": "Sign up",
     "registrationIsClosedExistingUsersCanStill": "Registration is closed. Existing users can still log in.",
     "displayName": "Display name",
