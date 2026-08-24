@@ -17,7 +17,11 @@ concurrency:
 jobs:
   test-build:
     name: Typecheck, lint, test, and build
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     env:
       BETTER_AUTH_SECRET: build-only-7zF4xQ9mK2vN8pR6sT1wY5cH
