@@ -694,7 +694,7 @@
     "crossProjectContext": "Cross-project context",
     "lineLevelResults": "Precise location",
     "symbolGraph": "Code relationships",
-    "incrementalIndexingBadge": "Continuous sync",
+    "incrementalIndexingBadge": "Version history",
     "multiLanguage": "Multi-language",
     "changeAnalysis": "Change analysis",
     "promptEnhancementBadge": "Prompt enhancement",
@@ -773,7 +773,7 @@
     "theServerRejectsEnvFilesKeysBinaries": "LCE follows Git ignore rules and excludes common key files, dependencies, build output, and binaries. Review ordinary source files for hard-coded sensitive values before use.",
     "theFrontendAndAdminConsoleAreBased": "LCE's frontend and admin console are built as a derivative of the",
     "withThanks": " open-source project. With thanks.",
-    "feedbackAndContact": "Feedback and contact: WeChat",
+    "feedbackAndContact": "Feedback:",
     "copyrightNotice": "© 2026 anmezing / LCE. All rights reserved."
   }
 }

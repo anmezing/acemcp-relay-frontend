@@ -694,7 +694,7 @@
     "crossProjectContext": "跨项目理解",
     "lineLevelResults": "精准定位",
     "symbolGraph": "代码关系",
-    "incrementalIndexingBadge": "持续同步",
+    "incrementalIndexingBadge": "版本历史理解",
     "multiLanguage": "多语言支持",
     "changeAnalysis": "变更分析",
     "promptEnhancementBadge": "提示词增强",
@@ -773,7 +773,7 @@
     "theServerRejectsEnvFilesKeysBinaries": "LCE 会自动遵循 Git 忽略规则，并排除常见密钥文件、依赖、构建产物和二进制文件；普通源码中硬编码的敏感信息仍需在使用前自行检查",
     "theFrontendAndAdminConsoleAreBased": "LCE的前端与管理后台基于",
     "withThanks": " 的开源项目二开实现构建，谨致谢意。",
-    "feedbackAndContact": "反馈与联系：微信",
+    "feedbackAndContact": "反馈：",
     "copyrightNotice": "© 2026 anmezing / LCE。保留所有权利。"
   }
 }
