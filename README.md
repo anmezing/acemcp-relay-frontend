@@ -13,7 +13,7 @@ LCE 的前端控制台，用于管理 API Key、查看请求日志和用户排�
 
 ## 功能
 
-- **多方式 OAuth 登录** — 支持 LinuxDo / GitHub 单点登录；GitHub 登录会校验账号注册年龄，拒绝过新的账号
+- **多方式登录与邮箱验证** — 支持 LinuxDo / GitHub 单点登录；邮箱密码注册必须完成邮箱验证后才能登录；GitHub 登录会校验账号注册年龄，拒绝过新的账号
 - **API Key 管理** — 生成、查看、重置 API Key，支持一键复制
 - **请求日志** — 分页查看请求记录，包含方法、状态码、耗时、IP 等详情，支持自动刷新
 - **请求统计** — 展示成功/失败/总计请求数
@@ -61,6 +61,11 @@ cp .env.example .env.local
 | `AUTH_GITHUB_ID` | GitHub OAuth Client ID | 从 GitHub 获取 |
 | `AUTH_GITHUB_SECRET` | GitHub OAuth Client Secret | 从 GitHub 获取 |
 | `AUTH_GITHUB_MIN_ACCOUNT_AGE_DAYS` | GitHub 新注册用户最小账号年龄（天），留空或非法值默认 `365`，设为 `0` 关闭校验 | `365` |
+| `SMTP_HOST` | 邮箱验证 SMTP 主机；未配置时关闭邮箱密码注册 | - |
+| `SMTP_PORT` | SMTP 端口 | `587` |
+| `SMTP_SECURE` | 是否使用隐式 TLS；通常 465 端口使用 `true` | `false` |
+| `SMTP_USER` / `SMTP_PASSWORD` | SMTP 认证信息；必须同时填写或同时留空 | - |
+| `SMTP_FROM` | 验证邮件发件人地址 | `noreply@lcebot.com` |
 | `POSTGRES_HOST` | PostgreSQL 主机 | `localhost` |
 | `POSTGRES_PORT` | PostgreSQL 端口 | `5432` |
 | `POSTGRES_USER` | PostgreSQL 用户名 | `postgres` |

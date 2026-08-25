@@ -3,10 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   AGENT_RULES_CLOUD,
-  AGENT_RULES_REMOTE,
   CLOUD_TOOLS,
   NPM_LOCAL_TOOLS,
-  REMOTE_TOOLS,
 } from "@/lib/agent-rules";
 
 // 随仓提交的快照让独立 CI 也必须验证协议；缺文件会直接失败，不依赖
@@ -48,37 +46,25 @@ describe(
   }
 );
 
-describe("remote HTTP and npm client tool surfaces", () => {
+describe("npm client tool surface", () => {
   it("documents the two tools that require the npm client", () => {
     expect(NPM_LOCAL_TOOLS.map((tool) => tool.name)).toEqual([
       "codebase_git_context",
       "codebase_review_changes",
     ]);
-    expect(CLOUD_TOOLS.filter(
-      (tool) => !REMOTE_TOOLS.some((remoteTool) => remoteTool.name === tool.name),
-    ).map((tool) => tool.name)).toEqual(NPM_LOCAL_TOOLS.map((tool) => tool.name));
     expect(NPM_LOCAL_TOOLS.every((tool) => tool.location === "local")).toBe(true);
     expect(AGENT_RULES_CLOUD).not.toContain("（服务端）");
     expect(AGENT_RULES_CLOUD).not.toContain("（本地 npm 客户端）");
     expect(AGENT_RULES_CLOUD).not.toContain("npm 客户端");
-  });
-
-  it("keeps all remote business tools in the remote list and rules", () => {
-    for (const name of ["codebase-retrieval", "codebase_symbol_graph", "codebase_enhance_prompt", "codebase_index"]) {
-      expect(REMOTE_TOOLS.some((tool) => tool.name === name)).toBe(true);
-      expect(AGENT_RULES_REMOTE).toContain(`\`${name}\``);
-    }
-    expect(REMOTE_TOOLS.every((tool) => tool.location === "server")).toBe(true);
-    expect(AGENT_RULES_REMOTE).toContain("代码发生变化或切换分支后");
+    expect(AGENT_RULES_CLOUD).toContain("不要先用 grep、rg 或逐文件浏览");
+    expect(AGENT_RULES_CLOUD).not.toContain("如果不要先用");
   });
 
   it("tells agents exactly when and how to call prompt enhancement", () => {
-    for (const rules of [AGENT_RULES_CLOUD, AGENT_RULES_REMOTE]) {
-      expect(rules).toContain("当用户明确要求增强/优化提示词");
-      expect(rules).toContain("`prompt`");
-      expect(rules).toContain("`technical_terms`");
-      expect(rules).toContain("原始要求始终优先");
-      expect(rules).toContain("不要对每个普通任务自动调用");
-    }
+    expect(AGENT_RULES_CLOUD).toContain("当用户明确要求增强/优化提示词");
+    expect(AGENT_RULES_CLOUD).toContain("`prompt`");
+    expect(AGENT_RULES_CLOUD).toContain("`technical_terms`");
+    expect(AGENT_RULES_CLOUD).toContain("原始要求始终优先");
+    expect(AGENT_RULES_CLOUD).toContain("不要对每个普通任务自动调用");
   });
 });

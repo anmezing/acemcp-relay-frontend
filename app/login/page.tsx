@@ -23,6 +23,7 @@ import { loginUrl, sanitizeCallbackUrl } from "@/lib/auth-redirect";
 import { LceBrand } from "@/components/LceBrand";
 import {
   credentialAuthErrorMessage,
+  emailRegistrationEnabledFromResponse,
   registrationAvailabilityFromResponse,
   type RegistrationAvailability,
   type CredentialMessage,
@@ -123,8 +124,10 @@ function LoginContent() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
+  const [verificationSent, setVerificationSent] = useState(false);
   const [registrationAvailability, setRegistrationAvailability] =
     useState<RegistrationAvailability>("checking");
+  const [emailRegistrationEnabled, setEmailRegistrationEnabled] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -142,11 +145,13 @@ function LoginContent() {
         }
         if (controller.signal.aborted) return;
         const availability = registrationAvailabilityFromResponse(response.ok, payload);
+        setEmailRegistrationEnabled(emailRegistrationEnabledFromResponse(response.ok, payload));
         setRegistrationAvailability(availability);
         setMode(availability === "open" ? requestedMode : "login");
       } catch {
         if (controller.signal.aborted) return;
         setRegistrationAvailability("unavailable");
+        setEmailRegistrationEnabled(false);
         setMode("login");
       }
     })();
@@ -154,9 +159,10 @@ function LoginContent() {
   }, [requestedMode]);
 
   const selectMode = (next: CredentialMode) => {
-    if (next === "register" && registrationAvailability !== "open") return;
+    if (next === "register" && (registrationAvailability !== "open" || !emailRegistrationEnabled)) return;
     setMode(next);
     setFormError("");
+    setVerificationSent(false);
     setPassword("");
     setConfirmPassword("");
   };
@@ -177,6 +183,7 @@ function LoginContent() {
 
     setBusy(true);
     setFormError("");
+    setVerificationSent(false);
     try {
       const result = mode === "register"
         ? await authClient.signUp.email({
@@ -195,6 +202,13 @@ function LoginContent() {
       if (result.error) {
         const message = credentialAuthErrorMessage(result.error, mode);
         setFormError(t(message.key, message.values));
+        return;
+      }
+      if (mode === "register") {
+        setVerificationSent(true);
+        setMode("login");
+        setPassword("");
+        setConfirmPassword("");
         return;
       }
       window.location.assign(callbackUrl);
@@ -268,7 +282,7 @@ function LoginContent() {
               type="button"
               role="tab"
               aria-selected={mode === "register"}
-              disabled={registrationAvailability !== "open"}
+              disabled={registrationAvailability !== "open" || !emailRegistrationEnabled}
               title={
                 registrationAvailability === "checking"
                   ? t("checkingRegistrationAvailability")
@@ -276,6 +290,8 @@ function LoginContent() {
                     ? t("registrationHasBeenDisabledByAnAdministrator")
                     : registrationAvailability === "unavailable"
                       ? t("registrationStatusUnavailable")
+                      : !emailRegistrationEnabled
+                        ? t("emailRegistrationUnavailableUseOauth")
                       : undefined
               }
               onClick={() => selectMode("register")}
@@ -323,7 +339,25 @@ function LoginContent() {
             </div>
           )}
 
-          <form onSubmit={handleCredentialSubmit} className="space-y-3.5">
+          {verificationSent && (
+            <div
+              role="status"
+              className="mb-4 rounded-lg border border-cyan-500/25 bg-cyan-500/10 px-3 py-2.5 text-xs leading-relaxed text-cyan-100"
+            >
+              {t("verificationEmailSent")}
+            </div>
+          )}
+
+          {mode === "register" && !emailRegistrationEnabled && (
+            <div
+              role="status"
+              className="mb-4 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-xs leading-relaxed text-amber-100"
+            >
+              {t("emailRegistrationUnavailableUseOauth")}
+            </div>
+          )}
+
+          <form onSubmit={handleCredentialSubmit} className={cn("space-y-3.5", mode === "register" && !emailRegistrationEnabled && "hidden")}>
             {mode === "register" && (
               <label htmlFor="credential-name" className="block space-y-1.5">
                 <span className="text-xs text-slate-400">{t("displayName")}</span>
@@ -389,7 +423,7 @@ function LoginContent() {
             <Button
               type="submit"
               size="lg"
-              disabled={busy || (mode === "register" && registrationAvailability !== "open")}
+              disabled={busy || (mode === "register" && (registrationAvailability !== "open" || !emailRegistrationEnabled))}
               className="w-full justify-center rounded-lg bg-cyan-500/90 text-slate-950 hover:bg-cyan-400"
             >
               {busy ? (

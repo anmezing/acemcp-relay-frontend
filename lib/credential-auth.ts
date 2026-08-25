@@ -20,6 +20,18 @@ export function registrationAvailabilityFromResponse(
   return (payload as { enabled: boolean }).enabled ? "open" : "closed";
 }
 
+export function emailRegistrationEnabledFromResponse(
+  responseOk: boolean,
+  payload: unknown,
+): boolean {
+  return Boolean(
+    responseOk &&
+    typeof payload === "object" &&
+    payload !== null &&
+    (payload as { emailRegistrationEnabled?: unknown }).emailRegistrationEnabled === true
+  );
+}
+
 interface CredentialAuthError {
   code?: string;
   message?: string;
@@ -47,6 +59,9 @@ export interface CredentialMessage {
     | "emailAlreadyRegistered"
     | "incorrectEmailOrPassword"
     | "invalidEmail"
+    | "emailNotVerified"
+    | "emailVerificationUnavailable"
+    | "emailVerificationSent"
     | "githubAccountAgeUnknown"
     | "githubAccountTooYoung"
     | "registrationClosedExistingUsers"
@@ -96,6 +111,9 @@ export function credentialAuthErrorMessage(
   if (raw.includes("REGISTRATION_LIMIT_REACHED")) {
     return { key: "registrationCapacityReached" };
   }
+  if (raw.includes("EMAIL_PASSWORD_SIGN_UP_DISABLED")) {
+    return { key: "emailVerificationUnavailable" };
+  }
   if (raw.includes("USER_ALREADY_EXISTS")) {
     return { key: "emailAlreadyRegistered" };
   }
@@ -104,6 +122,12 @@ export function credentialAuthErrorMessage(
   }
   if (raw.includes("INVALID_EMAIL")) {
     return { key: "invalidEmail" };
+  }
+  if (raw.includes("EMAIL_NOT_VERIFIED")) {
+    return { key: "emailNotVerified" };
+  }
+  if (raw.includes("VERIFICATION_EMAIL_NOT_ENABLED") || raw.includes("EMAIL_VERIFICATION_UNAVAILABLE")) {
+    return { key: "emailVerificationUnavailable" };
   }
   if (raw.includes("PASSWORD_TOO_SHORT")) {
     return { key: "passwordMinimum", values: { count: MIN_PASSWORD_LENGTH } };

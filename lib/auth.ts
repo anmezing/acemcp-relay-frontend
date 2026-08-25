@@ -13,15 +13,33 @@ import {
 } from "@/lib/org-sync";
 import { getOrganizationMembershipLimit } from "@/lib/billing";
 import { authIpAddressOptions } from "@/lib/auth-ip";
+import { isEmailVerificationConfigured, sendAccountVerificationEmail } from "@/lib/email-verification";
+
+const credentialEmailVerificationEnabled = isEmailVerificationConfigured();
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
   emailAndPassword: {
     enabled: true,
+    disableSignUp: !credentialEmailVerificationEnabled,
     minPasswordLength: 8,
     maxPasswordLength: 128,
-    autoSignIn: true,
+    autoSignIn: false,
+    requireEmailVerification: true,
+  },
+  emailVerification: {
+    sendOnSignUp: true,
+    sendOnSignIn: true,
+    expiresIn: 60 * 60,
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendAccountVerificationEmail({
+        email: user.email,
+        name: user.name,
+        verificationUrl: url,
+      });
+    },
   },
   advanced: {
     ipAddress: authIpAddressOptions(process.env.BETTER_AUTH_TRUSTED_PROXIES),

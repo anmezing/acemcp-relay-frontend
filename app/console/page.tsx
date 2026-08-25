@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { buildCloudMcpConfigJson, buildCloudMcpConfigToml, buildMcpConfigJson, buildMcpConfigToml } from "@/lib/mcp-config";
+import { buildCloudMcpConfigJson, buildCloudMcpConfigToml } from "@/lib/mcp-config";
 import {
   Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github, Trash2, Mail,
   Key, FileText, User, Database, ScrollText, Building2, Users, Coins,
@@ -41,7 +41,7 @@ import { AdminSettingsTab } from "@/components/admin/AdminSettingsTab";
 import { AdminOrgsTab } from "@/components/admin/AdminOrgsTab";
 import { OrgTab } from "@/components/OrgTab";
 import { OrgKeysCards } from "@/components/OrgKeysCards";
-import { AGENT_RULES_CLOUD, AGENT_RULES_CLOUD_EN, AGENT_RULES_REMOTE, AGENT_RULES_REMOTE_EN } from "@/lib/agent-rules";
+import { AGENT_RULES_CLOUD, AGENT_RULES_CLOUD_EN } from "@/lib/agent-rules";
 import { UserModelConfigTab } from "@/components/UserModelConfigTab";
 import { PlansTab } from "@/components/PlansTab";
 import { AdminPlansTab } from "@/components/admin/AdminPlansTab";
@@ -399,18 +399,12 @@ export default function ConsolePage() {
   const { data: myOrgs } = authClient.useListOrganizations();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mcpConfigFormat, setMcpConfigFormat] = useState<"json" | "toml">("json");
-  const [mcpConfigMode, setMcpConfigMode] = useState<"cloud" | "remote">("cloud");
 
   const mcpConfig = useMemo(() => {
-    if (mcpConfigMode === "cloud") {
-      return mcpConfigFormat === "toml"
-        ? buildCloudMcpConfigToml(fullKey)
-        : buildCloudMcpConfigJson(fullKey);
-    }
     return mcpConfigFormat === "toml"
-      ? buildMcpConfigToml(fullKey)
-      : buildMcpConfigJson(fullKey);
-  }, [fullKey, mcpConfigFormat, mcpConfigMode]);
+      ? buildCloudMcpConfigToml(fullKey)
+      : buildCloudMcpConfigJson(fullKey);
+  }, [fullKey, mcpConfigFormat]);
 
   const generateAndCopyConfig = async () => {
     if (loading) return;
@@ -425,16 +419,9 @@ export default function ConsolePage() {
       setFullKey(key);
       await fetchKeyInfo();
 
-      let config: string;
-      if (mcpConfigMode === "cloud") {
-        config = mcpConfigFormat === "toml"
-          ? buildCloudMcpConfigToml(key)
-          : buildCloudMcpConfigJson(key);
-      } else {
-        config = mcpConfigFormat === "toml"
-          ? buildMcpConfigToml(key)
-          : buildMcpConfigJson(key);
-      }
+      const config = mcpConfigFormat === "toml"
+        ? buildCloudMcpConfigToml(key)
+        : buildCloudMcpConfigJson(key);
       await navigator.clipboard.writeText(config);
       markConfigCopied();
     } catch (error) {
@@ -1242,61 +1229,19 @@ export default function ConsolePage() {
                             <h3 className="text-white font-medium">{t("addMcpServer")}</h3>
                           </div>
 
-                          {/* Mode toggle: cloud / remote */}
-                          <div
-                            role="tablist"
-                            aria-label={t("mcpConnectionMode")}
-                            className="mb-3 grid grid-cols-2 rounded-lg border border-white/[0.08] bg-[#0a0f1a] p-1"
-                          >
-                            {[
-                              { value: "cloud" as const, label: t("cloudModeRecommended") },
-                              { value: "remote" as const, label: t("remoteHttpMode") },
-                            ].map((option) => (
-                              <button
-                                key={option.value}
-                                type="button"
-                                role="tab"
-                                aria-selected={mcpConfigMode === option.value}
-                                onClick={() => {
-                                  setMcpConfigMode(option.value);
-                                  resetConfigCopied();
-                                  setConfigError("");
-                                }}
-                                className={cn(
-                                  "min-h-9 rounded-md px-3 py-2 text-xs font-medium transition-colors",
-                                  mcpConfigMode === option.value
-                                    ? "bg-white/[0.08] text-white"
-                                    : "text-slate-500 hover:text-slate-300"
-                                )}
-                              >
-                                {option.label}
-                              </button>
-                            ))}
-                          </div>
-
-                          <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-                            {mcpConfigMode === "cloud"
-                              ? t("copyTheConfigurationIntoYourIdeNpx")
-                              : t("cursorClaudeCodeAndCodexCanConnect")}
+                          <p className="mb-4 text-sm leading-relaxed text-slate-400">
+                            {t("copyTheConfigurationIntoYourIdeNpx")}
                           </p>
-                          {mcpConfigMode === "remote" && (
-                            <div className="mb-4 flex gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.05] p-3 text-xs leading-relaxed text-amber-100/80">
-                              <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-                              <p>{t("remoteHttpModeWithoutNpmWarning")}</p>
-                            </div>
-                          )}
-                          {mcpConfigMode === "cloud" && (
-                            <div className="mb-4 rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] p-3 text-sm text-slate-400">
-                              <p className="text-slate-300">{t("optionalGlobalInstallation")}</p>
-                              <code className="mt-2 block overflow-x-auto whitespace-pre font-mono text-xs text-cyan-300">
-                                npm install -g @anmezing/lce-cloud@latest
-                              </code>
-                              <p className="mt-2 text-xs text-slate-500">
-                                {t("afterInstallationReplace")} <code className="text-slate-300">npx</code> {t("with")} {" "}
-                                <code className="text-slate-300">lce-cloud</code>{t("theDefaultNpxConfigurationNeedsNoInstallation")}
-                              </p>
-                            </div>
-                          )}
+                          <div className="mb-4 rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] p-3 text-sm text-slate-400">
+                            <p className="text-slate-300">{t("optionalGlobalInstallation")}</p>
+                            <code className="mt-2 block overflow-x-auto whitespace-pre font-mono text-xs text-cyan-300">
+                              npm install -g @anmezing/lce-cloud@latest
+                            </code>
+                            <p className="mt-2 text-xs text-slate-500">
+                              {t("afterInstallationReplace")} <code className="text-slate-300">npx</code> {t("with")} {" "}
+                              <code className="text-slate-300">lce-cloud</code>{t("theDefaultNpxConfigurationNeedsNoInstallation")}
+                            </p>
+                          </div>
 
                           {/* Format toggle: JSON / TOML */}
                           <div
@@ -1352,7 +1297,7 @@ export default function ConsolePage() {
                       </Card>
 
                       {/* Step 2: Agent rules */}
-                      <AgentRulesCard mode={mcpConfigMode} />
+                      <AgentRulesCard />
                     </div>
                   </TabsContent>
 
@@ -1725,7 +1670,7 @@ export default function ConsolePage() {
                             <IndexingProgress job={tenantStats.active_job} />
                           </div>
                         )}
-                        <p>{t("noIndexHasBeenCreated")}{mcpConfigMode === "cloud" ? t("startYourIdeAfterSetupTheFirst") : t("askYourCodingAgentToCallCodebase")}</p>
+                        <p>{t("noIndexHasBeenCreated")}{t("startYourIdeAfterSetupTheFirst")}</p>
                         <Button
                           variant="glass"
                           size="sm"
@@ -1865,7 +1810,7 @@ export default function ConsolePage() {
               disabled={loading}
               className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-white"
             >
-              {loading ? t("processing") : t("resetKey")}
+              {loading ? t("processing") : t("confirmResetKey")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2498,12 +2443,10 @@ function RootsSection({
 
 // 配置说明第 2 步：引导用户在 CLAUDE.md / AGENTS.md 中声明 LCE 使用规则
 // （只加 MCP 配置不保证代理会用，需要项目规则显式要求）
-function AgentRulesCard({ mode }: { mode: "cloud" | "remote" }) {
+function AgentRulesCard() {
   const locale = useLocale();
   const t = useTranslations("Console");
-  const snippet = mode === "cloud"
-    ? locale === "zh-CN" ? AGENT_RULES_CLOUD : AGENT_RULES_CLOUD_EN
-    : locale === "zh-CN" ? AGENT_RULES_REMOTE : AGENT_RULES_REMOTE_EN;
+  const snippet = locale === "zh-CN" ? AGENT_RULES_CLOUD : AGENT_RULES_CLOUD_EN;
   const { copied, trigger: markCopied } = useCopyFeedback();
   const copyRules = async () => {
     try {

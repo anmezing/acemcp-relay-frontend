@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   credentialAuthErrorMessage,
+  emailRegistrationEnabledFromResponse,
   registrationAvailabilityFromResponse,
   validateCredentialFields,
 } from "./credential-auth";
@@ -16,6 +17,13 @@ describe("credential auth form", () => {
   it("maps a valid registration status response", () => {
     expect(registrationAvailabilityFromResponse(true, { enabled: true })).toBe("open");
     expect(registrationAvailabilityFromResponse(true, { enabled: false })).toBe("closed");
+  });
+
+  it("fails email registration closed unless the server explicitly confirms SMTP readiness", () => {
+    expect(emailRegistrationEnabledFromResponse(true, { emailRegistrationEnabled: true })).toBe(true);
+    expect(emailRegistrationEnabledFromResponse(true, { emailRegistrationEnabled: false })).toBe(false);
+    expect(emailRegistrationEnabledFromResponse(true, {})).toBe(false);
+    expect(emailRegistrationEnabledFromResponse(false, { emailRegistrationEnabled: true })).toBe(false);
   });
 
   it("validates registration-only fields", () => {
@@ -59,5 +67,17 @@ describe("credential auth form", () => {
       { code: "INVALID_EMAIL_OR_PASSWORD" },
       "login"
     )).toEqual({ key: "incorrectEmailOrPassword" });
+    expect(credentialAuthErrorMessage(
+      { code: "EMAIL_NOT_VERIFIED" },
+      "login"
+    )).toEqual({ key: "emailNotVerified" });
+    expect(credentialAuthErrorMessage(
+      { message: "EMAIL_VERIFICATION_UNAVAILABLE" },
+      "register"
+    )).toEqual({ key: "emailVerificationUnavailable" });
+    expect(credentialAuthErrorMessage(
+      { code: "EMAIL_PASSWORD_SIGN_UP_DISABLED" },
+      "register"
+    )).toEqual({ key: "emailVerificationUnavailable" });
   });
 });
