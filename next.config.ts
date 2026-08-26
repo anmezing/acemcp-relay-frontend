@@ -18,6 +18,11 @@ const standaloneOutput =
 
 const nextConfig: NextConfig = {
   ...(standaloneOutput ? { output: "standalone" as const } : {}),
+  // browserslist 只作用于应用代码，node_modules 默认不降级。intl-messageformat
+  // （next-intl 的依赖）发布的是带 class static block 的产物，该语法在 Safari
+  // 16.4 以下会在解析期抛 SyntaxError，整个 chunk 不执行、React 无法水合，页面
+  // 只剩 SSR 内容与原生链接可用。必须显式转译它。
+  transpilePackages: ["intl-messageformat"],
   images: {
     remotePatterns: [
       {
