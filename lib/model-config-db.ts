@@ -1,4 +1,4 @@
-import pool, { deleteModelConfigCache } from "@/lib/db";
+import pool, { deleteModelConfigCache, initDB } from "@/lib/db";
 import { encryptModelConfig, type UserModelConfig } from "@/lib/model-config-crypto";
 
 export interface UserModelConfigRow {
@@ -8,6 +8,7 @@ export interface UserModelConfigRow {
 export async function getUserModelConfigRow(
   userId: string
 ): Promise<UserModelConfigRow | null> {
+  await initDB();
   const client = await pool.connect();
   try {
     const result = await client.query(
@@ -21,6 +22,7 @@ export async function getUserModelConfigRow(
 }
 
 export async function saveUserModelConfig(userId: string, config: UserModelConfig) {
+  await initDB();
   const enc = encryptModelConfig(config);
   const client = await pool.connect();
   try {
@@ -38,6 +40,7 @@ export async function saveUserModelConfig(userId: string, config: UserModelConfi
 }
 
 export async function resetUserModelConfig(userId: string) {
+  await initDB();
   const client = await pool.connect();
   try {
     await client.query(`DELETE FROM user_model_configs WHERE user_id = $1`, [userId]);
@@ -48,6 +51,7 @@ export async function resetUserModelConfig(userId: string) {
 }
 
 export async function countUserModelConfigs(): Promise<number> {
+  await initDB();
   const client = await pool.connect();
   try {
     const result = await client.query(`SELECT COUNT(*) AS count FROM user_model_configs`);
