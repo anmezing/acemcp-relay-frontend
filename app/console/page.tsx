@@ -399,12 +399,13 @@ export default function ConsolePage() {
   const { data: myOrgs } = authClient.useListOrganizations();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mcpConfigFormat, setMcpConfigFormat] = useState<"json" | "toml">("json");
+  const [mcpRepoPath, setMcpRepoPath] = useState("");
 
   const mcpConfig = useMemo(() => {
     return mcpConfigFormat === "toml"
-      ? buildCloudMcpConfigToml(fullKey)
-      : buildCloudMcpConfigJson(fullKey);
-  }, [fullKey, mcpConfigFormat]);
+      ? buildCloudMcpConfigToml(fullKey, mcpRepoPath)
+      : buildCloudMcpConfigJson(fullKey, mcpRepoPath);
+  }, [fullKey, mcpConfigFormat, mcpRepoPath]);
 
   const generateAndCopyConfig = async () => {
     if (loading) return;
@@ -420,8 +421,8 @@ export default function ConsolePage() {
       await fetchKeyInfo();
 
       const config = mcpConfigFormat === "toml"
-        ? buildCloudMcpConfigToml(key)
-        : buildCloudMcpConfigJson(key);
+        ? buildCloudMcpConfigToml(key, mcpRepoPath)
+        : buildCloudMcpConfigJson(key, mcpRepoPath);
       await navigator.clipboard.writeText(config);
       markConfigCopied();
     } catch (error) {
@@ -1232,6 +1233,26 @@ export default function ConsolePage() {
                           <p className="mb-4 text-sm leading-relaxed text-slate-400">
                             {t("copyTheConfigurationIntoYourIdeNpx")}
                           </p>
+                          <div className="mb-4">
+                            <Label htmlFor="mcp-repo-path" className="mb-2 block text-xs text-slate-400">
+                              {t("mcpProjectRoot")}
+                            </Label>
+                            <input
+                              id="mcp-repo-path"
+                              value={mcpRepoPath}
+                              onChange={(event) => {
+                                setMcpRepoPath(event.target.value);
+                                resetConfigCopied();
+                              }}
+                              placeholder={t("mcpProjectRootPlaceholder")}
+                              className="h-10 w-full rounded-md border border-white/[0.08] bg-[#0a0f1a] px-3 text-sm text-slate-200 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-500/40"
+                              spellCheck={false}
+                              autoComplete="off"
+                            />
+                            <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                              {t("mcpProjectRootHelp")}
+                            </p>
+                          </div>
                           <div className="mb-4 rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] p-3 text-sm text-slate-400">
                             <p className="text-slate-300">{t("optionalGlobalInstallation")}</p>
                             <code className="mt-2 block overflow-x-auto whitespace-pre font-mono text-xs text-cyan-300">
@@ -1250,8 +1271,8 @@ export default function ConsolePage() {
                             className="mb-3 grid grid-cols-2 rounded-lg border border-white/[0.08] bg-[#0a0f1a] p-1"
                           >
                             {[
-                              { value: "json" as const, label: "Cursor / Claude Code" },
-                              { value: "toml" as const, label: "Codex" },
+                              { value: "json" as const, label: t("genericJsonConfig") },
+                              { value: "toml" as const, label: t("genericTomlConfig") },
                             ].map((option) => (
                               <button
                                 key={option.value}

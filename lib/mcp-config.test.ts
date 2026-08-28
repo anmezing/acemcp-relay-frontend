@@ -34,5 +34,26 @@ describe("MCP config", () => {
       expect(toml).toContain('"@anmezing/lce-cloud@latest"');
       expect(toml).toContain('"sk-test"');
     });
+
+    it("adds an explicit project root for MCP clients without roots/list", () => {
+      const windowsPath = "D:\\code\\project with spaces";
+      const config = JSON.parse(buildCloudMcpConfigJson("sk-test", windowsPath));
+      expect(config.mcpServers.lce.args).toEqual([
+        "-y",
+        "@anmezing/lce-cloud@latest",
+        "--key",
+        "sk-test",
+        "--repo",
+        windowsPath,
+      ]);
+
+      const toml = buildCloudMcpConfigToml("sk-test", windowsPath);
+      expect(toml).toContain('"--repo", "D:\\\\code\\\\project with spaces"');
+    });
+
+    it("omits blank project roots", () => {
+      const config = JSON.parse(buildCloudMcpConfigJson("sk-test", "   "));
+      expect(config.mcpServers.lce.args).not.toContain("--repo");
+    });
   });
 });

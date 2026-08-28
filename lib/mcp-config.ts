@@ -5,13 +5,20 @@ const CLOUD_PACKAGE = "@anmezing/lce-cloud@latest";
 
 // ── Cloud Mode (stdio, 推荐) ──────────────────────────────────
 
-export function buildCloudMcpConfigJson(apiKey: string | null): string {
+function cloudArgs(apiKey: string | null, repoPath?: string): string[] {
+  const args = ["-y", CLOUD_PACKAGE, "--key", apiKey || KEY_PLACEHOLDER];
+  const normalizedRepoPath = repoPath?.trim();
+  if (normalizedRepoPath) args.push("--repo", normalizedRepoPath);
+  return args;
+}
+
+export function buildCloudMcpConfigJson(apiKey: string | null, repoPath?: string): string {
   return JSON.stringify(
     {
       mcpServers: {
         lce: {
           command: "npx",
-          args: ["-y", CLOUD_PACKAGE, "--key", apiKey || KEY_PLACEHOLDER],
+          args: cloudArgs(apiKey, repoPath),
         },
       },
     },
@@ -24,10 +31,11 @@ function tomlString(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
-export function buildCloudMcpConfigToml(apiKey: string | null): string {
+export function buildCloudMcpConfigToml(apiKey: string | null, repoPath?: string): string {
+  const args = cloudArgs(apiKey, repoPath).map(tomlString).join(", ");
   return [
     `[mcp_servers.lce]`,
     `command = "npx"`,
-    `args = ["-y", ${tomlString(CLOUD_PACKAGE)}, "--key", ${tomlString(apiKey || KEY_PLACEHOLDER)}]`,
+    `args = [${args}]`,
   ].join("\n");
 }
