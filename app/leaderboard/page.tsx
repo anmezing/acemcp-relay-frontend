@@ -71,7 +71,7 @@ export default function LeaderboardPage() {
       const url = dateStr
         ? `/api/leaderboard?date=${dateStr}`
         : "/api/leaderboard";
-      const res = await fetch(url, { signal });
+      const res = await fetch(url, { signal, cache: "no-store" });
       if (res.ok) {
         const json = await res.json();
         if (signal?.aborted) return;
@@ -179,7 +179,7 @@ export default function LeaderboardPage() {
         <div className="text-center mb-8">
           <Trophy className="w-12 h-12 text-amber-400 mx-auto mb-4" />
           <h1 className="text-2xl font-semibold text-white mb-2">{t("dailyLeaderboard")}</h1>
-          <p className="text-slate-400 text-sm mb-4">{t("updatedEvery30Minutes")}</p>
+          <p className="text-slate-400 text-sm mb-4">{t("liveCodeRetrievalRequests")}</p>
 
           {/* 日期选择器 - Segment 风格 */}
           <div className="flex justify-center">

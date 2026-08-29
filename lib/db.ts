@@ -1170,27 +1170,59 @@ export async function getHealthCheckStats(days: number = 7): Promise<{
 }
 
 // Leaderboard functions
+const LEADERBOARD_TIMEZONE = "Asia/Shanghai";
+const LEADERBOARD_REQUEST_PATH = "/mcp/tools/call/codebase-retrieval";
+
 export interface LeaderboardEntry {
   rank: number;
   user_id: string;
   user_name: string;
-  request_count: number;
+  request_count: number | string;
+}
+
+export function getShanghaiDateString(now = new Date()): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    timeZone: LEADERBOARD_TIMEZONE,
+  }).format(now);
+}
+
+export function isValidLeaderboardDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 export async function getLeaderboard(dateStr?: string): Promise<LeaderboardEntry[]> {
+  const targetDate = dateStr || getShanghaiDateString();
+  if (!isValidLeaderboardDate(targetDate)) {
+    throw new RangeError("leaderboard date must use YYYY-MM-DD");
+  }
+
   const client = await pool.connect();
   try {
-    // Calculate today's date in Asia/Shanghai timezone if not provided
-    const targetDate = dateStr || new Intl.DateTimeFormat('sv-SE', {
-      timeZone: 'Asia/Shanghai'
-    }).format(new Date());
-
+    // request_logs is the source of truth. Querying it directly means the refresh
+    // button sees completed retrievals immediately instead of rereading the
+    // relay's old 30-minute leaderboard snapshot.
     const result = await client.query(
-      `SELECT l.rank, l.user_id, l.request_count, u.name as user_name
-       FROM leaderboard l
-       LEFT JOIN "user" u ON l.user_id = u.id
-       WHERE l.date_str = $1
-       ORDER BY l.rank ASC
+      `WITH ranked AS (
+         SELECT
+           rl.user_id,
+           u.name AS user_name,
+           COUNT(*)::bigint AS request_count,
+           ROW_NUMBER() OVER (
+             ORDER BY COUNT(*) DESC, rl.user_id ASC
+           )::int AS rank
+         FROM request_logs rl
+         INNER JOIN "user" u ON u.id = rl.user_id
+         WHERE rl.request_path = '${LEADERBOARD_REQUEST_PATH}'
+           AND rl.status_code = 200
+           AND rl.request_timestamp >= ($1::date::timestamp AT TIME ZONE '${LEADERBOARD_TIMEZONE}')
+           AND rl.request_timestamp < (($1::date + 1)::timestamp AT TIME ZONE '${LEADERBOARD_TIMEZONE}')
+         GROUP BY rl.user_id, u.name
+       )
+       SELECT rank, user_id, user_name, request_count
+       FROM ranked
+       ORDER BY rank ASC
        LIMIT 10`,
       [targetDate]
     );

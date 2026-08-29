@@ -211,7 +211,7 @@
     "status": "Status",
     "refreshLeaderboard": "Refresh leaderboard",
     "dailyLeaderboard": "Daily Leaderboard",
-    "updatedEvery30Minutes": "Updated every 30 minutes",
+    "liveCodeRetrievalRequests": "Live code-retrieval requests (excluding initialization and other calls)",
     "noRankingDataYet": "No ranking data yet",
     "you": "You",
     "requests": "requests"
