@@ -94,6 +94,17 @@ function parseKeyInput(value: string): string[] {
   return [...new Set(value.split(/\r?\n/).map((key) => key.trim()).filter(Boolean))];
 }
 
+function modelConfigPatch(kind: ModelKind, form: ModelForm) {
+  const keys = parseKeyInput(form[kind].apiKey);
+  return {
+    [kind]: {
+      ...form[kind],
+      apiKey: keys[0] ?? "",
+      apiKeys: keys,
+    },
+  };
+}
+
 function Field({ label, children, hint }: {
   label: string;
   children: React.ReactNode;
@@ -130,7 +141,7 @@ function KeyPoolInput({ value, onChange, placeholder, disabled = false }: {
             disabled={disabled}
             autoComplete="new-password"
             value={key}
-        placeholder={index === 0 ? placeholder : "API Key"}
+            placeholder={index === 0 ? placeholder : "API Key"}
             onChange={(event) => update(index, event.target.value)}
             className={cn(inputClass, disabled && "cursor-not-allowed text-slate-600")}
           />
@@ -170,7 +181,7 @@ export function AdminModelsTab() {
   const [view, setView] = useState<ModelView | null>(null);
   const [form, setForm] = useState<ModelForm | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [savingKind, setSavingKind] = useState<ModelKind | null>(null);
   const [notice, setNotice] = useState("");
   const [noticeOk, setNoticeOk] = useState(false);
   const [modelsLoading, setModelsLoading] = useState<ModelKind | null>(null);
@@ -178,6 +189,7 @@ export function AdminModelsTab() {
   const [rerankModels, setRerankModels] = useState<string[]>([]);
   const [promptEnhancerModels, setPromptEnhancerModels] = useState<string[]>([]);
   const [confirmReset, setConfirmReset] = useState(false);
+  const busy = savingKind !== null;
 
   const load = useCallback(async (signal?: AbortSignal, clearNotice = true) => {
     try {
@@ -301,98 +313,93 @@ export function AdminModelsTab() {
     }
   }, [form, updateEmbeddings, updatePromptEnhancer, updateRerank, t]);
 
-  const submit = useCallback(async (confirmEmbeddingReset: boolean) => {
+  const submit = useCallback(async (kind: ModelKind, confirmEmbeddingReset: boolean) => {
     if (!form) return;
-    setBusy(true);
+    setSavingKind(kind);
     setNotice("");
     try {
       const response = await fetch("/api/admin/model-config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          config: {
-            embeddings: {
-              ...form.embeddings,
-              apiKey: parseKeyInput(form.embeddings.apiKey)[0] ?? "",
-              apiKeys: parseKeyInput(form.embeddings.apiKey),
-            },
-            rerank: {
-              ...form.rerank,
-              apiKey: parseKeyInput(form.rerank.apiKey)[0] ?? "",
-              apiKeys: parseKeyInput(form.rerank.apiKey),
-            },
-            promptEnhancer: {
-              ...form.promptEnhancer,
-              apiKey: parseKeyInput(form.promptEnhancer.apiKey)[0] ?? "",
-              apiKeys: parseKeyInput(form.promptEnhancer.apiKey),
-            },
-          },
+          section: kind,
+          config: modelConfigPatch(kind, form),
           confirmEmbeddingReset,
         }),
       });
       const data = await response.json().catch(() => ({}));
-      if (response.status === 409 && data.requiresEmbeddingReset) {
+      if (kind === "embeddings" && response.status === 409 && data.requiresEmbeddingReset) {
         setConfirmReset(true);
         return;
       }
       if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      if (!data.config) throw new Error(t("invalidModelConfigurationResponse"));
       setConfirmReset(false);
-      await load(undefined, false);
+      const savedView = data.config as ModelView;
+      const savedForm = toForm(savedView);
+      setView(savedView);
+      setForm((current) => {
+        if (!current) return current;
+        if (kind === "embeddings") return { ...current, embeddings: savedForm.embeddings };
+        if (kind === "rerank") return { ...current, rerank: savedForm.rerank };
+        return { ...current, promptEnhancer: savedForm.promptEnhancer };
+      });
+      if (kind === "embeddings") setEmbeddingModels([]);
+      if (kind === "rerank") setRerankModels([]);
+      if (kind === "promptEnhancer") setPromptEnhancerModels([]);
+      const section = kind === "embeddings" ? "Embedding" : kind === "rerank" ? "Rerank" : t("promptEnhancement");
       setNotice(data.embeddingChanged
         ? t("configurationSavedAndOldIndexesClearedExisting")
-        : t("modelConfigurationSavedAndAppliedImmediately"));
+        : t("sectionConfigurationSavedAndAppliedImmediately", { section }));
       setNoticeOk(true);
     } catch (error) {
       setNotice(t("failedToSave", {p0: error instanceof Error ? error.message : String(error)}));
       setNoticeOk(false);
     } finally {
-      setBusy(false);
+      setSavingKind(null);
     }
-  }, [form, load, t]);
+  }, [form, t]);
 
-  const validationError = useMemo(() => {
-    if (!form) return "";
+  const validationErrors = useMemo<Record<ModelKind, string>>(() => {
+    const empty = { embeddings: "", rerank: "", promptEnhancer: "" };
+    if (!form) return empty;
     const embeddingKeys = parseKeyInput(form.embeddings.apiKey);
     const rerankKeys = parseKeyInput(form.rerank.apiKey);
     const promptEnhancerKeys = parseKeyInput(form.promptEnhancer.apiKey);
-    if (!form.embeddings.baseUrl.trim()) return t("enterTheEmbeddingBaseUrl");
-    if (embeddingKeys.length === 0 && !canReuseEmbeddingKey) return t("enterAnEmbeddingApiKey");
-    if (embeddingKeys.length > 100) return t("theEmbeddingKeyPoolSupportsUpTo");
-    if (form.embeddings.provider !== "voyage" && embeddingKeys.length > 1) {
-      return t("onlyVoyageEmbeddingSupportsMultipleKeys");
-    }
-    if (!form.embeddings.model.trim()) return form.embeddings.provider === "openai-compatible"
-      ? t("loadAndSelectAnEmbeddingModel")
-      : t("selectAnEmbeddingModel");
-    if (!Number.isSafeInteger(form.embeddings.dimensions) || form.embeddings.dimensions <= 0) {
-      return t("enterAValidEmbeddingIndexDimension");
-    }
-    if (form.embeddings.dimensions !== CLOUD_INDEX_DIMENSIONS) {
-      return t("cloudIndexesCurrentlyUseDimensionsChangingThe", {p0: CLOUD_INDEX_DIMENSIONS});
-    }
-    if (
-      form.embeddings.provider === "voyage" &&
-      form.embeddings.outputDimension !== undefined &&
-      form.embeddings.outputDimension !== form.embeddings.dimensions
-    ) {
-      return t("voyageOutputDimensionsMustMatchTheIndex");
-    }
-    if (!form.rerank.baseUrl.trim()) return t("enterTheRerankBaseUrl");
-    if (rerankKeys.length === 0 && !canReuseRerankKey) return t("enterARerankApiKey");
-    if (rerankKeys.length > 100) return t("theRerankKeyPoolSupportsUpTo");
-    if (form.rerank.provider !== "voyage" && rerankKeys.length > 1) {
-      return t("onlyVoyageRerankSupportsMultipleKeys");
-    }
-    if (!form.rerank.model.trim()) return form.rerank.provider === "siliconflow-compatible"
-      ? t("loadAndSelectARerankModel")
-      : t("selectOrEnterARerankModel");
-    if (form.promptEnhancer.enabled) {
+    const embeddings = (() => {
+      if (!form.embeddings.baseUrl.trim()) return t("enterTheEmbeddingBaseUrl");
+      if (embeddingKeys.length === 0 && !canReuseEmbeddingKey) return t("enterAnEmbeddingApiKey");
+      if (embeddingKeys.length > 100) return t("theEmbeddingKeyPoolSupportsUpTo");
+      if (form.embeddings.provider !== "voyage" && embeddingKeys.length > 1) return t("onlyVoyageEmbeddingSupportsMultipleKeys");
+      if (!form.embeddings.model.trim()) return form.embeddings.provider === "openai-compatible"
+        ? t("loadAndSelectAnEmbeddingModel")
+        : t("selectAnEmbeddingModel");
+      if (!Number.isSafeInteger(form.embeddings.dimensions) || form.embeddings.dimensions <= 0) return t("enterAValidEmbeddingIndexDimension");
+      if (form.embeddings.dimensions !== CLOUD_INDEX_DIMENSIONS) return t("cloudIndexesCurrentlyUseDimensionsChangingThe", {p0: CLOUD_INDEX_DIMENSIONS});
+      if (form.embeddings.provider === "voyage" && form.embeddings.outputDimension !== undefined && form.embeddings.outputDimension !== form.embeddings.dimensions) {
+        return t("voyageOutputDimensionsMustMatchTheIndex");
+      }
+      return "";
+    })();
+    const rerank = (() => {
+      if (!form.rerank.baseUrl.trim()) return t("enterTheRerankBaseUrl");
+      if (rerankKeys.length === 0 && !canReuseRerankKey) return t("enterARerankApiKey");
+      if (rerankKeys.length > 100) return t("theRerankKeyPoolSupportsUpTo");
+      if (form.rerank.provider !== "voyage" && rerankKeys.length > 1) return t("onlyVoyageRerankSupportsMultipleKeys");
+      if (!form.rerank.model.trim()) return form.rerank.provider === "siliconflow-compatible"
+        ? t("loadAndSelectARerankModel")
+        : t("selectOrEnterARerankModel");
+      return "";
+    })();
+    const promptEnhancer = (() => {
+      if (!form.promptEnhancer.enabled) return "";
       if (!form.promptEnhancer.baseUrl.trim()) return t("enterThePromptEnhancerBaseUrl");
       if (promptEnhancerKeys.length === 0 && !canReusePromptEnhancerKey) return t("enterAPromptEnhancerApiKey");
       if (promptEnhancerKeys.length > 100) return t("thePromptEnhancerKeyPoolSupportsUpTo");
       if (!form.promptEnhancer.model.trim()) return t("enterOrSelectAPromptEnhancerModel");
-    }
-    return "";
+      return "";
+    })();
+    return { embeddings, rerank, promptEnhancer };
   }, [canReuseEmbeddingKey, canReusePromptEnhancerKey, canReuseRerankKey, form, t]);
 
   if (loading) return <Skeleton className="h-72 rounded-xl bg-white/[0.06]" />;
@@ -571,6 +578,20 @@ export function AdminModelsTab() {
                 )}
               </Field>
             </div>
+            <div className="flex flex-col items-start gap-2 border-t border-white/[0.06] pt-4">
+              {validationErrors.embeddings && <p className="text-xs text-amber-400">{validationErrors.embeddings}</p>}
+              <Button
+                type="button"
+                variant="glass"
+                size="sm"
+                onClick={() => void submit("embeddings", false)}
+                disabled={busy || modelsLoading !== null || Boolean(validationErrors.embeddings)}
+                className="text-xs text-cyan-400"
+              >
+                {savingKind === "embeddings" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                {t("saveEmbeddingConfiguration")}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -692,6 +713,20 @@ export function AdminModelsTab() {
                 )}
               </Field>
             </div>
+            <div className="flex flex-col items-start gap-2 border-t border-white/[0.06] pt-4">
+              {validationErrors.rerank && <p className="text-xs text-amber-400">{validationErrors.rerank}</p>}
+              <Button
+                type="button"
+                variant="glass"
+                size="sm"
+                onClick={() => void submit("rerank", false)}
+                disabled={busy || modelsLoading !== null || Boolean(validationErrors.rerank)}
+                className="text-xs text-cyan-400"
+              >
+                {savingKind === "rerank" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                {t("saveRerankConfiguration")}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -804,6 +839,20 @@ export function AdminModelsTab() {
                 </datalist>
               </Field>
             </div>
+            <div className="flex flex-col items-start gap-2 border-t border-white/[0.06] pt-4">
+              {validationErrors.promptEnhancer && <p className="text-xs text-amber-400">{validationErrors.promptEnhancer}</p>}
+              <Button
+                type="button"
+                variant="glass"
+                size="sm"
+                onClick={() => void submit("promptEnhancer", false)}
+                disabled={busy || modelsLoading !== null || Boolean(validationErrors.promptEnhancer)}
+                className="text-xs text-cyan-400"
+              >
+                {savingKind === "promptEnhancer" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                {t("savePromptEnhancerConfiguration")}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -813,18 +862,6 @@ export function AdminModelsTab() {
           {notice}
         </p>
       )}
-      {!notice && validationError && <p className="text-xs text-amber-400">{validationError}</p>}
-
-      <Button
-        variant="glass"
-        size="sm"
-        onClick={() => void submit(false)}
-        disabled={busy || modelsLoading !== null || Boolean(validationError)}
-        className="text-xs text-cyan-400"
-      >
-        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-        {t("savePlatformConfiguration")}
-      </Button>
 
       <AlertDialog open={confirmReset} onOpenChange={(open) => !busy && setConfirmReset(open)}>
         <AlertDialogContent className="border-white/[0.08] bg-[#0d1424]">
@@ -843,10 +880,10 @@ export function AdminModelsTab() {
             </AlertDialogCancel>
             <AlertDialogAction
               disabled={busy}
-              onClick={() => void submit(true)}
+              onClick={() => void submit("embeddings", true)}
               className="bg-red-500/90 text-white hover:bg-red-500"
             >
-              {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {savingKind === "embeddings" && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               {t("clearOldIndexesAndSave")}
             </AlertDialogAction>
           </AlertDialogFooter>

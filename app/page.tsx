@@ -162,10 +162,16 @@ export default function Home() {
               <StepCard step={1} title={<I18nText id="signUpAndGetAnApiKey" />}>
                 <I18nText id="openTheConsoleAndGenerateAnApi" />
               </StepCard>
-              <StepCard step={2} title={<I18nText id="addTheMcpConfiguration" />}>
+              <StepCard step={2} title={<I18nText id="optionalInstallTheClientInAdvance" />}>
+                <code className="mb-2 block w-fit rounded-md border border-cyan-500/15 bg-cyan-500/[0.05] px-3 py-2 font-mono text-sm text-cyan-300">
+                  npm install -g @anmezing/lce-cloud@latest
+                </code>
+                <I18nText id="globalInstallationAvoidsRepeatedPackageResolution" />
+              </StepCard>
+              <StepCard step={3} title={<I18nText id="addTheMcpConfiguration" />}>
                 <I18nText id="addTheMcpConfigurationToYourIde" />
               </StepCard>
-              <StepCard step={3} title={<I18nText id="startSearching" />}>
+              <StepCard step={4} title={<I18nText id="startSearching" />}>
                 <I18nText id="afterSetupYourCodingAgentCanCall" />
               </StepCard>
             </div>

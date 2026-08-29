@@ -67,12 +67,18 @@ describe("admin model config routes", () => {
 
   it("reads live config and forwards writes with console authentication", async () => {
     expect((await GET()).status).toBe(200);
-    const response = await POST(request(JSON.stringify({ config: { embeddings: {}, rerank: {} } })));
+    const patch = {
+      section: "promptEnhancer",
+      config: { promptEnhancer: { enabled: true, model: "gpt-5-mini" } },
+      confirmEmbeddingReset: false,
+    };
+    const response = await POST(request(JSON.stringify(patch)));
     expect(response.status).toBe(200);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][1]).toMatchObject({
       method: "POST",
       headers: { "X-LCE-Console-Token": "console-token", "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
     });
     expect(headers).toHaveBeenCalled();
   });
