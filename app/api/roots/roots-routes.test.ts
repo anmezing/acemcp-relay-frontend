@@ -86,6 +86,14 @@ describe("GET /api/roots", () => {
         indexed_at: "2026-08-09T00:00:00Z",
         file_count: 10,
         total_size_bytes: 2048,
+        index_available: true,
+        index_state: "building",
+        index_phase: "uploading",
+        indexed_files: 4,
+        total_files: 12,
+        progress_percent: 33,
+        sync_revision: "def",
+        sync_cloud_revision: 4,
       },
     ];
     fetchMock.mockResolvedValue(relayResponse(200, { roots }));

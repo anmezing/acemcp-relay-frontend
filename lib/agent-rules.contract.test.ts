@@ -67,4 +67,11 @@ describe("npm client tool surface", () => {
     expect(AGENT_RULES_CLOUD).toContain("原始要求始终优先");
     expect(AGENT_RULES_CLOUD).toContain("不要对每个普通任务自动调用");
   });
+
+  it("tells agents to report index state without sending users to the console", () => {
+    expect(AGENT_RULES_CLOUD).toContain("`codebase_index_status`");
+    expect(AGENT_RULES_CLOUD).toContain("`repo_path`");
+    expect(AGENT_RULES_CLOUD).toContain("`root_id`");
+    expect(AGENT_RULES_CLOUD).toContain("不要要求用户打开控制台确认");
+  });
 });

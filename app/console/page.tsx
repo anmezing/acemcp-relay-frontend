@@ -52,6 +52,13 @@ import { LceBrand } from "@/components/LceBrand";
 import { authProviderLabel } from "@/lib/auth-provider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useLocale, useTranslations } from "next-intl";
+import {
+  hasBuildingIndexRoot,
+  resolveIndexPollingPolicy,
+  resolveRootIndexCounts,
+  resolveRootIndexProgress,
+  resolveRootIndexState,
+} from "@/lib/index-root-status";
 
 type Tab =
   | "keys" | "plans" | "docs" | "profile" | "model-config" | "team"
@@ -211,6 +218,20 @@ interface RelayRoot {
   indexed_at: string;
   file_count: number;
   total_size_bytes: number;
+  // “当前是否有可检索快照”和“最近同步任务状态”是两个维度。已有快照时，
+  // 后续增量构建失败不会让旧快照突然变成不可用。
+  index_available?: boolean;
+  sync_revision?: string;
+  sync_cloud_revision?: number;
+  // Relay 返回的最近一次索引任务快照。索引尚未发布时也会有 root 记录，
+  // 因此状态字段不能从 indexed_at 是否为空推断。
+  index_state?: string;
+  index_phase?: string;
+  indexed_files?: number;
+  total_files?: number;
+  failed_files?: number;
+  progress_percent?: number;
+  index_error?: string;
 }
 
 function isActiveIndexJob(value: unknown): value is ActiveIndexJob {
@@ -241,7 +262,18 @@ function isRelayRoot(value: unknown): value is RelayRoot {
     typeof root.indexed_at === "string" &&
     typeof root.cloud_revision === "number" &&
     typeof root.file_count === "number" &&
-    typeof root.total_size_bytes === "number"
+    typeof root.total_size_bytes === "number" &&
+    (root.index_available === undefined || typeof root.index_available === "boolean") &&
+    (root.sync_revision === undefined || typeof root.sync_revision === "string") &&
+    (root.sync_cloud_revision === undefined ||
+      (typeof root.sync_cloud_revision === "number" && Number.isFinite(root.sync_cloud_revision))) &&
+    (root.index_state === undefined || typeof root.index_state === "string") &&
+    (root.index_phase === undefined || typeof root.index_phase === "string") &&
+    (root.indexed_files === undefined || (typeof root.indexed_files === "number" && Number.isFinite(root.indexed_files))) &&
+    (root.total_files === undefined || (typeof root.total_files === "number" && Number.isFinite(root.total_files))) &&
+    (root.failed_files === undefined || (typeof root.failed_files === "number" && Number.isFinite(root.failed_files))) &&
+    (root.progress_percent === undefined || (typeof root.progress_percent === "number" && Number.isFinite(root.progress_percent))) &&
+    (root.index_error === undefined || typeof root.index_error === "string")
   );
 }
 
@@ -395,6 +427,7 @@ export default function ConsolePage() {
   const [rootsOrg, setRootsOrg] = useState<IndexOrganizationContext | null>(null);
   const rootsOrgRef = useRef<IndexOrganizationContext | null>(null);
   const rootsLoadingRef = useRef(false);
+  const indexPollInFlightRef = useRef(false);
   const [rootsOrgRole, setRootsOrgRole] = useState<"owner" | "member" | null>(null);
   const { data: myOrgs } = authClient.useListOrganizations();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -733,18 +766,32 @@ export default function ConsolePage() {
     return () => window.clearTimeout(timeoutId);
   }, [activeTab, session, roots, fetchRoots]);
 
-  // 索引统计轮询：仅在索引管理页且页面可见时进行；有构建任务时缩短到
-  // 5 秒并同时刷新索引列表，否则 30 秒兜底刷新
-  const hasActiveJob = Boolean(tenantStats?.active_job);
+  // 索引状态轮询：仅在索引管理页且页面可见时进行；有构建任务时缩短到
+  // 5 秒，否则 30 秒。两种频率都必须刷新根列表：任务可能在两个统计轮询
+  // 之间快速完成或失败，仅依赖 active_job 会永久漏掉这次状态变化。
+  const hasActiveJob = Boolean(tenantStats?.active_job) || hasBuildingIndexRoot(roots);
+  const {
+    intervalMs: indexPollingIntervalMs,
+    refreshStats: pollIndexStats,
+    refreshRoots: pollIndexRoots,
+  } = resolveIndexPollingPolicy(hasActiveJob);
   useEffect(() => {
     if (activeTab !== "index" || !session) return;
 
-    const intervalMs = hasActiveJob ? 5000 : 30000;
     let intervalId: number | null = null;
 
-    const tick = () => {
-      void fetchTenantStats(true, rootsOrgRef.current);
-      if (hasActiveJob) void fetchRoots(true, rootsOrgRef.current);
+    const tick = async () => {
+      if (indexPollInFlightRef.current) return;
+      indexPollInFlightRef.current = true;
+      try {
+        const orgContext = rootsOrgRef.current;
+        await Promise.all([
+          ...(pollIndexStats ? [fetchTenantStats(true, orgContext)] : []),
+          ...(pollIndexRoots ? [fetchRoots(true, orgContext)] : []),
+        ]);
+      } finally {
+        indexPollInFlightRef.current = false;
+      }
     };
     const stop = () => {
       if (intervalId !== null) {
@@ -752,21 +799,31 @@ export default function ConsolePage() {
         intervalId = null;
       }
     };
-    const sync = () => {
+    const sync = (refreshNow = false) => {
       if (document.visibilityState === "visible") {
-        if (intervalId === null) intervalId = window.setInterval(tick, intervalMs);
+        if (refreshNow) void tick();
+        if (intervalId === null) intervalId = window.setInterval(tick, indexPollingIntervalMs);
       } else {
         stop();
       }
     };
+    const handleVisibilityChange = () => sync(true);
 
     sync();
-    document.addEventListener("visibilitychange", sync);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       stop();
-      document.removeEventListener("visibilitychange", sync);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [activeTab, session, hasActiveJob, fetchTenantStats, fetchRoots]);
+  }, [
+    activeTab,
+    session,
+    indexPollingIntervalMs,
+    pollIndexStats,
+    pollIndexRoots,
+    fetchTenantStats,
+    fetchRoots,
+  ]);
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -2246,6 +2303,78 @@ function IndexingProgress({ job }: { job: ActiveIndexJob }) {
   );
 }
 
+function RootIndexStatus({ root }: { root: RelayRoot }) {
+  const t = useTranslations("Console");
+  const state = resolveRootIndexState(root);
+  const progress = resolveRootIndexProgress(root);
+  const counts = resolveRootIndexCounts(root);
+  const indexAvailable = root.index_available ?? Boolean(root.indexed_at);
+  const stateLabel =
+    state === "building"
+      ? indexAvailable
+        ? t("indexStateUpdatingAvailable")
+        : t("indexStateBuilding")
+      : state === "failed"
+        ? indexAvailable
+          ? t("indexStateFailedAvailable")
+          : t("indexStateFailed")
+        : state === "superseded"
+          ? t("indexStateSuperseded")
+          : state === "ready"
+            ? t("indexStateReady")
+            : t("indexStateNotStarted");
+  const stateClass =
+    state === "building"
+      ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
+      : state === "failed"
+        ? indexAvailable
+          ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+          : "border-red-500/30 bg-red-500/10 text-red-300"
+        : state === "ready"
+          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+          : "border-white/[0.1] bg-white/[0.04] text-slate-400";
+  const showProgress = state === "building" || (state !== "ready" && progress > 0);
+
+  return (
+    <div className="mt-2 space-y-1.5" data-testid="root-index-status">
+      <div className="flex flex-wrap items-center gap-2 text-[11px]">
+        <Badge variant="outline" className={cn("border text-[10px]", stateClass)}>
+          {state === "building" && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+          {stateLabel}
+        </Badge>
+        {root.index_phase && state === "building" && (
+          <span className="text-slate-500">{root.index_phase}</span>
+        )}
+        {showProgress && counts.total > 0 && (
+          <span className="text-slate-500">
+            {counts.indexed.toLocaleString()}/{counts.total.toLocaleString()} {t("files")} · {progress}%
+          </span>
+        )}
+      </div>
+      {showProgress && counts.total > 0 && (
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all duration-500",
+              state === "failed"
+                ? indexAvailable
+                  ? "bg-amber-400"
+                  : "bg-red-400"
+                : "bg-gradient-to-r from-cyan-400 to-blue-500",
+            )}
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      )}
+      {root.index_error && state === "failed" && (
+        <p className={cn("text-[11px] leading-relaxed", indexAvailable ? "text-amber-300" : "text-red-300")}>
+          {root.index_error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function IndexContextSwitcher({
   orgOptions,
   activeOrg,
@@ -2387,8 +2516,11 @@ function RootsSection({
                         <span className="text-slate-700"> · </span>
                         {formatSizeBytes(group.entries[0].root.total_size_bytes)}
                         <span className="text-slate-700"> · </span>
-                        {t("lastIndexed")} {new Date(group.entries[0].root.indexed_at).toLocaleString(locale)}
+                        {group.entries[0].root.indexed_at
+                          ? `${t("lastIndexed")} ${new Date(group.entries[0].root.indexed_at).toLocaleString(locale)}`
+                          : t("notIndexedYet")}
                       </p>
+                      <RootIndexStatus root={group.entries[0].root} />
                     </div>
                     <Button
                       variant="ghost"
@@ -2396,7 +2528,7 @@ function RootsSection({
                       onClick={() => onDelete(group.entries[0].root)}
                       className={cn(
                         "shrink-0 text-slate-500 hover:text-red-400 hover:bg-red-500/10",
-                        !canDelete && "hidden"
+                        (!canDelete || !group.entries[0].root.indexed_at) && "hidden"
                       )}
                       aria-label={t("deleteTheIndexFor", {p0: group.entries[0].root.workspace_id})}
                     >
@@ -2433,9 +2565,12 @@ function RootsSection({
                               <span className="text-slate-700"> · </span>
                               {formatSizeBytes(root.total_size_bytes)}
                               <span className="text-slate-700"> · </span>
-                              {t("lastIndexed")} {new Date(root.indexed_at).toLocaleString(locale)}
+                              {root.indexed_at
+                                ? `${t("lastIndexed")} ${new Date(root.indexed_at).toLocaleString(locale)}`
+                                : t("notIndexedYet")}
                             </p>
                           </div>
+                          <RootIndexStatus root={root} />
                         </div>
                         <Button
                           variant="ghost"
@@ -2443,7 +2578,7 @@ function RootsSection({
                           onClick={() => onDelete(root)}
                           className={cn(
                             "shrink-0 text-slate-500 hover:text-red-400 hover:bg-red-500/10",
-                            !canDelete && "hidden"
+                            (!canDelete || !root.indexed_at) && "hidden"
                           )}
                           aria-label={t("deleteBranchIndex", { workspace: group.workspaceId, branch })}
                         >
