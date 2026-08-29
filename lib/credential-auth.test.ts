@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   credentialAuthErrorMessage,
   emailRegistrationEnabledFromResponse,
+  oauthAuthErrorMessage,
   registrationAvailabilityFromResponse,
   validateCredentialFields,
 } from "./credential-auth";
@@ -52,6 +53,19 @@ describe("credential auth form", () => {
       password: "short",
       confirmPassword: "",
     })).toBeNull();
+  });
+
+  it("maps OAuth registration gate errors to specific messages", () => {
+    expect(oauthAuthErrorMessage("REGISTRATION_DISABLED")).toEqual({
+      key: "registrationClosedExistingUsers",
+    });
+    expect(oauthAuthErrorMessage("REGISTRATION_LIMIT_REACHED")).toEqual({
+      key: "registrationCapacityReached",
+    });
+    expect(oauthAuthErrorMessage("GITHUB_ACCOUNT_TOO_YOUNG:365:12")).toEqual({
+      key: "githubAccountTooYoung",
+      values: { required: "365", actual: "12" },
+    });
   });
 
   it("maps Better Auth errors to translation keys", () => {

@@ -11,7 +11,8 @@ export function AdminSettingsTab() {
   const t = useTranslations("AdminSettings");
   const [registrationEnabled, setRegistrationEnabled] = useState<boolean | null>(null);
   const [registeredUsers, setRegisteredUsers] = useState(0);
-  const [limitDraft, setLimitDraft] = useState("");
+  const [remainingSlots, setRemainingSlots] = useState<number | null>(null);
+  const [slotsDraft, setSlotsDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -25,9 +26,11 @@ export function AdminSettingsTab() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (signal?.aborted) return;
+      const loadedSlots = data.registrationSlots ?? data.registrationLimit ?? null;
       setRegistrationEnabled(data.registrationEnabled);
       setRegisteredUsers(data.registeredUsers ?? 0);
-      setLimitDraft(data.registrationLimit == null ? "" : String(data.registrationLimit));
+      setRemainingSlots(loadedSlots);
+      setSlotsDraft(loadedSlots === null ? "" : String(loadedSlots));
       setError("");
     } catch {
       if (signal?.aborted) return;
@@ -68,17 +71,30 @@ export function AdminSettingsTab() {
     [t]
   );
 
-  const saveLimit = useCallback(async () => {
+  const saveSlots = useCallback(async () => {
     if (!registrationEnabled) return;
-    const value = limitDraft.trim() === "" ? null : Number(limitDraft);
-    if (value !== null && (!Number.isInteger(value) || value < 1)) { setNotice(t("enterAPositiveIntegerOrLeaveBlank")); return; }
+    const value = slotsDraft.trim() === "" ? null : Number(slotsDraft);
+    if (value !== null && (!Number.isSafeInteger(value) || value < 0)) {
+      setNotice(t("enterAPositiveIntegerOrLeaveBlank"));
+      return;
+    }
     setBusy(true);
     try {
-      const res = await fetch("/api/admin/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ registrationLimit: value }) });
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ registrationSlots: value }),
+      });
       if (!res.ok) throw new Error();
-      setLimitDraft(value === null ? "" : String(value)); setNotice(t("registrationLimitSaved"));
-    } catch { setNotice(t("failedToSaveTryAgain")); } finally { setBusy(false); }
-  }, [limitDraft, registrationEnabled, t]);
+      setRemainingSlots(value);
+      setSlotsDraft(value === null ? "" : String(value));
+      setNotice(t("registrationLimitSaved"));
+    } catch {
+      setNotice(t("failedToSaveTryAgain"));
+    } finally {
+      setBusy(false);
+    }
+  }, [slotsDraft, registrationEnabled, t]);
 
   if (registrationEnabled === null && !error) {
     return <Skeleton className="h-32 bg-white/[0.06] rounded-xl" />;
@@ -137,19 +153,23 @@ export function AdminSettingsTab() {
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-[220px] flex-1">
                 <h3 className="text-white text-sm font-medium">{t("registrationLimit")}</h3>
-                <p className="mt-1 text-slate-500 text-xs">{t("usersRegisteredNewRegistrationsAreRejectedWhen", {p0: registeredUsers})}</p>
+                <p className="mt-1 text-slate-500 text-xs">
+                  {remainingSlots === null
+                    ? t("usersRegisteredUnlimitedSlots", { p0: registeredUsers })
+                    : t("usersRegisteredRemainingSlots", { p0: registeredUsers, p1: remainingSlots })}
+                </p>
               </div>
               <div className="flex w-full items-center gap-2 sm:w-auto">
                 <input
                   aria-label={t("registrationLimit")}
                   disabled={busy}
-                  value={limitDraft}
-                  onChange={(event) => setLimitDraft(event.target.value)}
+                  value={slotsDraft}
+                  onChange={(event) => setSlotsDraft(event.target.value)}
                   placeholder={t("unlimited")}
                   inputMode="numeric"
                   className="h-8 w-28 rounded-md border border-white/10 bg-black/20 px-2 text-sm text-white disabled:cursor-not-allowed"
                 />
-                <Button variant="glass" size="sm" disabled={busy} onClick={saveLimit} className="h-8 min-w-[72px] text-xs">
+                <Button variant="glass" size="sm" disabled={busy} onClick={saveSlots} className="h-8 min-w-[72px] text-xs">
                   {t("saveLimit")}
                 </Button>
               </div>

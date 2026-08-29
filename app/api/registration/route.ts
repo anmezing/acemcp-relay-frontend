@@ -1,15 +1,27 @@
 import { NextResponse } from "next/server";
-import { countRegisteredUsers, getRegistrationLimit, isRegistrationDisabled } from "@/lib/db";
+import {
+  countRegisteredUsers,
+  getRegistrationRemainingSlots,
+  initRegistrationGate,
+  isRegistrationDisabled,
+} from "@/lib/db";
 import { isEmailVerificationConfigured } from "@/lib/email-verification";
 
 export async function GET() {
-  const [disabled, count, limit] = await Promise.all([isRegistrationDisabled(), countRegisteredUsers(), getRegistrationLimit()]);
+  await initRegistrationGate();
+  const [disabled, count, remainingSlots] = await Promise.all([
+    isRegistrationDisabled(),
+    countRegisteredUsers(),
+    getRegistrationRemainingSlots(),
+  ]);
   return NextResponse.json(
     {
-      enabled: !disabled && (limit === null || count < limit),
+      enabled: !disabled && (remainingSlots === null || remainingSlots > 0),
       emailRegistrationEnabled: isEmailVerificationConfigured(),
       count,
-      limit,
+      remainingSlots,
+      // Compatibility for clients deployed before registrationSlots was introduced.
+      limit: remainingSlots,
     },
     { headers: { "Cache-Control": "private, no-store, max-age=0" } },
   );

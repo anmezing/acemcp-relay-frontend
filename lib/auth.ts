@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { genericOAuth, organization } from "better-auth/plugins";
 import { Pool } from "pg";
-import { initDB, isRegistrationAtCapacity, isRegistrationDisabled } from "@/lib/db";
+import { initDB, initRegistrationGate, isRegistrationAtCapacity, isRegistrationDisabled } from "@/lib/db";
 import {
   onMemberAdded,
   onMemberLeft,
@@ -86,6 +86,9 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (user) => {
+          // 先安装数据库触发器：应用层检查负责友好报错，数据库触发器负责
+          // 与 user INSERT 同事务原子扣减，防止并发注册超发名额。
+          await initRegistrationGate();
           // 注册开关：user.create 只在新用户首次注册时触发，老用户登录不受影响
           if (await isRegistrationDisabled()) {
             throw new APIError("BAD_REQUEST", {

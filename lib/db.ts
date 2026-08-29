@@ -781,11 +781,195 @@ export async function isRegistrationDisabled(): Promise<boolean> {
   return (await getSystemSetting("registration_enabled")) === "false";
 }
 
-export async function getRegistrationLimit(): Promise<number | null> {
-  const raw = await getSystemSetting("registration_max_users");
-  if (!raw || raw.trim() === "0") return null;
+const REGISTRATION_REMAINING_SLOTS_KEY = "registration_remaining_slots";
+const LEGACY_REGISTRATION_MAX_USERS_KEY = "registration_max_users";
+let registrationGateInitialized = false;
+let registrationGateInitialization: Promise<void> | undefined;
+
+/**
+ * Install the database-side registration gate.
+ *
+ * The remaining-slot row is locked and decremented by a BEFORE INSERT trigger
+ * in the same transaction that creates the Better Auth user. That makes the
+ * quota authoritative under concurrent email/OAuth registrations; the
+ * application-level check only exists to return a friendlier error early.
+ */
+export function initRegistrationGate(): Promise<void> {
+  if (registrationGateInitialized) return Promise.resolve();
+  if (!registrationGateInitialization) {
+    registrationGateInitialization = initializeRegistrationGate().finally(() => {
+      registrationGateInitialization = undefined;
+    });
+  }
+  return registrationGateInitialization;
+}
+
+async function initializeRegistrationGate(): Promise<void> {
+  if (registrationGateInitialized) return;
+
+  const client = await pool.connect();
+  let migrationLockAcquired = false;
+  try {
+    await client.query(`
+      SELECT pg_advisory_lock(hashtext('acemcp:registration-gate-schema'))
+    `);
+    migrationLockAcquired = true;
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        key VARCHAR(64) PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // Better Auth owns the user table and may initialize it after an admin API
+    // request. Do not mark the gate initialized until the trigger is installed;
+    // a later user.create hook will retry.
+    const userTable = await client.query(`
+      SELECT to_regclass('public."user"') IS NOT NULL AS exists
+    `);
+    if (!userTable.rows[0]?.exists) return;
+
+    // One-time compatibility migration from the old total-user ceiling:
+    // remaining = max(old ceiling - users already registered, 0).
+    // A previously written new-style value always wins.
+    await client.query(
+      `WITH legacy AS (
+         SELECT CASE
+                  WHEN value ~ '^[0-9]+$' THEN value::numeric
+                  ELSE NULL
+                END AS max_users
+         FROM system_settings
+         WHERE key = $2
+       )
+       INSERT INTO system_settings (key, value)
+       SELECT $1,
+              GREATEST(legacy.max_users - totals.registered_users, 0)::text
+       FROM legacy
+       CROSS JOIN (
+         SELECT COUNT(*)::numeric AS registered_users FROM "user"
+       ) AS totals
+       WHERE legacy.max_users BETWEEN 1 AND 9007199254740991
+       ON CONFLICT (key) DO NOTHING`,
+      [REGISTRATION_REMAINING_SLOTS_KEY, LEGACY_REGISTRATION_MAX_USERS_KEY]
+    );
+    await client.query(
+      `DELETE FROM system_settings WHERE key = $1`,
+      [LEGACY_REGISTRATION_MAX_USERS_KEY]
+    );
+
+    await client.query(`
+      CREATE OR REPLACE FUNCTION enforce_registration_gate()
+      RETURNS TRIGGER AS $$
+      DECLARE
+        registration_state TEXT;
+        remaining_value TEXT;
+      BEGIN
+        SELECT value INTO registration_state
+        FROM system_settings
+        WHERE key = 'registration_enabled';
+
+        IF registration_state = 'false' THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'P0001',
+            MESSAGE = 'REGISTRATION_DISABLED';
+        END IF;
+
+        SELECT value INTO remaining_value
+        FROM system_settings
+        WHERE key = 'registration_remaining_slots'
+        FOR UPDATE;
+
+        IF NOT FOUND THEN
+          RETURN NEW;
+        END IF;
+
+        IF remaining_value !~ '^[0-9]+$' THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'P0001',
+            MESSAGE = 'REGISTRATION_QUOTA_INVALID';
+        END IF;
+
+        IF remaining_value::bigint <= 0 THEN
+          RAISE EXCEPTION USING
+            ERRCODE = 'P0001',
+            MESSAGE = 'REGISTRATION_LIMIT_REACHED';
+        END IF;
+
+        UPDATE system_settings
+        SET value = (remaining_value::bigint - 1)::text,
+            updated_at = NOW()
+        WHERE key = 'registration_remaining_slots';
+
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+    await client.query(`
+      DROP TRIGGER IF EXISTS user_registration_gate ON "user"
+    `);
+    await client.query(`
+      CREATE TRIGGER user_registration_gate
+      BEFORE INSERT ON "user"
+      FOR EACH ROW
+      EXECUTE FUNCTION enforce_registration_gate()
+    `);
+
+    registrationGateInitialized = true;
+  } finally {
+    if (migrationLockAcquired) {
+      await client
+        .query(`
+          SELECT pg_advisory_unlock(hashtext('acemcp:registration-gate-schema'))
+        `)
+        .catch(() => {});
+    }
+    client.release();
+  }
+}
+
+// null means unlimited; 0 means no new registrations remain.
+export async function getRegistrationRemainingSlots(): Promise<number | null> {
+  const raw = await getSystemSetting(REGISTRATION_REMAINING_SLOTS_KEY);
+  if (raw === null) return null;
+  if (!/^\d+$/.test(raw)) return 0;
   const value = Number(raw);
-  return Number.isInteger(value) && value > 0 ? value : null;
+  return Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+/** Reset the number of new registrations allowed from this save onward. */
+export async function setRegistrationRemainingSlots(slots: number | null): Promise<void> {
+  if (slots !== null && (!Number.isSafeInteger(slots) || slots < 0)) {
+    throw new RangeError("registration slots must be a non-negative safe integer or null");
+  }
+  await initRegistrationGate();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    if (slots === null) {
+      await client.query(
+        `DELETE FROM system_settings WHERE key IN ($1, $2)`,
+        [REGISTRATION_REMAINING_SLOTS_KEY, LEGACY_REGISTRATION_MAX_USERS_KEY]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO system_settings (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+        [REGISTRATION_REMAINING_SLOTS_KEY, String(slots)]
+      );
+      await client.query(
+        `DELETE FROM system_settings WHERE key = $1`,
+        [LEGACY_REGISTRATION_MAX_USERS_KEY]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export async function countRegisteredUsers(): Promise<number> {
@@ -797,8 +981,8 @@ export async function countRegisteredUsers(): Promise<number> {
 }
 
 export async function isRegistrationAtCapacity(): Promise<boolean> {
-  const limit = await getRegistrationLimit();
-  return limit !== null && (await countRegisteredUsers()) >= limit;
+  const remainingSlots = await getRegistrationRemainingSlots();
+  return remainingSlots !== null && remainingSlots <= 0;
 }
 
 export function maskApiKey(apiKey: string): string {

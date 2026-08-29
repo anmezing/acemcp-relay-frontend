@@ -38,6 +38,25 @@ interface CredentialAuthError {
   statusText?: string;
 }
 
+export function oauthAuthErrorMessage(raw: string | null): CredentialMessage | null {
+  if (!raw) return null;
+  const normalized = raw.toUpperCase();
+  if (normalized.startsWith("GITHUB_ACCOUNT_TOO_YOUNG:")) {
+    const [, required, actual] = raw.split(":");
+    if (actual === "unknown") {
+      return { key: "githubAccountAgeUnknown" };
+    }
+    return { key: "githubAccountTooYoung", values: { required, actual } };
+  }
+  if (normalized.includes("REGISTRATION_DISABLED")) {
+    return { key: "registrationClosedExistingUsers" };
+  }
+  if (normalized.includes("REGISTRATION_LIMIT_REACHED")) {
+    return { key: "registrationCapacityReached" };
+  }
+  return { key: "loginFailed" };
+}
+
 export interface CredentialFields {
   mode: CredentialMode;
   name: string;

@@ -24,9 +24,9 @@ import { LceBrand } from "@/components/LceBrand";
 import {
   credentialAuthErrorMessage,
   emailRegistrationEnabledFromResponse,
+  oauthAuthErrorMessage,
   registrationAvailabilityFromResponse,
   type RegistrationAvailability,
-  type CredentialMessage,
   type CredentialMode,
   validateCredentialFields,
 } from "@/lib/credential-auth";
@@ -37,20 +37,6 @@ import { useTranslations } from "next-intl";
 const INPUT_CLASS =
   "h-11 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 text-sm text-slate-100 outline-none transition-colors placeholder:text-slate-600 focus:border-cyan-500/45 focus:bg-white/[0.045] disabled:cursor-not-allowed disabled:opacity-60";
 
-function parseAuthError(raw: string | null): CredentialMessage | null {
-  if (!raw) return null;
-  if (raw.startsWith("GITHUB_ACCOUNT_TOO_YOUNG:")) {
-    const [, required, actual] = raw.split(":");
-    if (actual === "unknown") {
-      return { key: "githubAccountAgeUnknown" };
-    }
-    return { key: "githubAccountTooYoung", values: { required, actual } };
-  }
-  if (raw.includes("REGISTRATION_DISABLED")) {
-    return { key: "registrationClosedExistingUsers" };
-  }
-  return { key: "loginFailed" };
-}
 
 interface PasswordFieldProps {
   id: string;
@@ -107,7 +93,7 @@ function PasswordField({
 function LoginContent() {
   const t = useTranslations("Login");
   const params = useSearchParams();
-  const oauthErrorMessage = parseAuthError(params.get("error"));
+  const oauthErrorMessage = oauthAuthErrorMessage(params.get("error"));
   const oauthError = oauthErrorMessage
     ? t(oauthErrorMessage.key, oauthErrorMessage.values)
     : null;

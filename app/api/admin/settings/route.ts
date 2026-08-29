@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/admin";
-import { countRegisteredUsers, getRegistrationLimit, getSystemSetting, setSystemSetting } from "@/lib/db";
+import {
+  countRegisteredUsers,
+  getRegistrationRemainingSlots,
+  getSystemSetting,
+  initRegistrationGate,
+  setRegistrationRemainingSlots,
+  setSystemSetting,
+} from "@/lib/db";
 import { countUserModelConfigs } from "@/lib/model-config-db";
 import { modelConfigEnabled } from "@/lib/model-config-crypto";
 
@@ -9,16 +16,19 @@ export async function GET() {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
   try {
-    const registrationEnabled =
-      (await getSystemSetting("registration_enabled")) !== "false";
-    const registrationLimit = await getRegistrationLimit();
-    const registeredUsers = await countRegisteredUsers();
-    const customModelUsers = modelConfigEnabled()
-      ? await countUserModelConfigs().catch(() => 0)
-      : 0;
+    await initRegistrationGate();
+    const [registrationState, registrationSlots, registeredUsers, customModelUsers] =
+      await Promise.all([
+        getSystemSetting("registration_enabled"),
+        getRegistrationRemainingSlots(),
+        countRegisteredUsers(),
+        modelConfigEnabled() ? countUserModelConfigs().catch(() => 0) : 0,
+      ]);
     return NextResponse.json({
-      registrationEnabled,
-      registrationLimit,
+      registrationEnabled: registrationState !== "false",
+      registrationSlots,
+      // Rolling API compatibility: this field now carries remaining slots too.
+      registrationLimit: registrationSlots,
       registeredUsers,
       customRerank: { enabled: modelConfigEnabled(), userCount: customModelUsers },
     });
@@ -28,23 +38,59 @@ export async function GET() {
   }
 }
 
-// body: { registrationEnabled?: boolean; registrationLimit?: number | null }
+type AdminSettingsBody = {
+  registrationEnabled?: boolean;
+  registrationSlots?: number | null;
+  registrationLimit?: number | null;
+};
+
+// registrationSlots means how many NEW users may register after this save.
 export async function POST(request: NextRequest) {
   if (!(await requireAdminSession())) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  let body: { registrationEnabled?: boolean; registrationLimit?: number | null } = {};
+  let body: AdminSettingsBody = {};
   try {
-    body = await request.json();
-  } catch {}
-  if (body.registrationEnabled === undefined && body.registrationLimit === undefined) return NextResponse.json({ error: "missing setting" }, { status: 400 });
-  try {
-    if (body.registrationEnabled !== undefined) await setSystemSetting("registration_enabled", body.registrationEnabled ? "true" : "false");
-    if (body.registrationLimit !== undefined) {
-      if (body.registrationLimit !== null && (!Number.isInteger(body.registrationLimit) || body.registrationLimit < 1)) return NextResponse.json({ error: "invalid registrationLimit" }, { status: 400 });
-      await setSystemSetting("registration_max_users", body.registrationLimit === null ? "0" : String(body.registrationLimit));
+    const parsed: unknown = await request.json();
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      body = parsed as AdminSettingsBody;
     }
-    return NextResponse.json({ ok: true });
+  } catch {}
+
+  const hasSlots = Object.prototype.hasOwnProperty.call(body, "registrationSlots");
+  const hasLegacyLimit = Object.prototype.hasOwnProperty.call(body, "registrationLimit");
+  if (body.registrationEnabled === undefined && !hasSlots && !hasLegacyLimit) {
+    return NextResponse.json({ error: "missing setting" }, { status: 400 });
+  }
+  const registrationSlots = hasSlots ? body.registrationSlots : body.registrationLimit;
+  if (
+    (hasSlots || hasLegacyLimit) &&
+    registrationSlots !== null &&
+    (!Number.isSafeInteger(registrationSlots) || (registrationSlots ?? -1) < 0)
+  ) {
+    return NextResponse.json(
+      { error: "invalid registrationSlots" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    await initRegistrationGate();
+    if (body.registrationEnabled !== undefined) {
+      await setSystemSetting(
+        "registration_enabled",
+        body.registrationEnabled ? "true" : "false"
+      );
+    }
+    if (hasSlots || hasLegacyLimit) {
+      await setRegistrationRemainingSlots(registrationSlots ?? null);
+    }
+    return NextResponse.json({
+      ok: true,
+      ...(hasSlots || hasLegacyLimit
+        ? { registrationSlots, registrationLimit: registrationSlots }
+        : {}),
+    });
   } catch (error) {
     console.error("admin settings write failed:", error);
     return NextResponse.json({ error: "internal error" }, { status: 500 });
