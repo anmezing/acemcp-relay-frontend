@@ -54,6 +54,30 @@ export function hasBuildingIndexRoot(roots: readonly IndexRootStatusLike[] | nul
   return Boolean(roots?.some((root) => resolveRootIndexState(root) === "building"));
 }
 
+export interface RootsSectionVisibilityInput {
+  hasPublishedIndex: boolean;
+  rootCount: number;
+  loading: boolean;
+  hasError: boolean;
+  hasActionResult: boolean;
+}
+
+/**
+ * The published tenant snapshot and the latest root task are independent.
+ * A first indexing attempt can fail before a snapshot exists, in which case
+ * tenant-stats reports exists=false while /mcp/roots still returns the failed
+ * task that the user needs to inspect or dismiss.
+ */
+export function shouldShowRootsSection(input: RootsSectionVisibilityInput): boolean {
+  return (
+    input.hasPublishedIndex ||
+    input.rootCount > 0 ||
+    input.loading ||
+    input.hasError ||
+    input.hasActionResult
+  );
+}
+
 export interface IndexPollingPolicy {
   intervalMs: number;
   refreshStats: true;

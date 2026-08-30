@@ -6,6 +6,7 @@ import {
   resolveRootIndexActions,
   resolveRootIndexProgress,
   resolveRootIndexState,
+  shouldShowRootsSection,
 } from "./index-root-status";
 
 describe("index root status", () => {
@@ -90,5 +91,23 @@ describe("index root status", () => {
       refreshStats: true,
       refreshRoots: true,
     });
+  });
+
+  it("shows failed root tasks even before the tenant has a published index", () => {
+    expect(shouldShowRootsSection({
+      hasPublishedIndex: false,
+      rootCount: 1,
+      loading: false,
+      hasError: false,
+      hasActionResult: false,
+    })).toBe(true);
+
+    expect(shouldShowRootsSection({
+      hasPublishedIndex: false,
+      rootCount: 0,
+      loading: false,
+      hasError: false,
+      hasActionResult: false,
+    })).toBe(false);
   });
 });

@@ -65,6 +65,7 @@ import {
   resolveRootIndexCounts,
   resolveRootIndexProgress,
   resolveRootIndexState,
+  shouldShowRootsSection,
 } from "@/lib/index-root-status";
 import {
   resolveIndexFailurePresentation,
@@ -712,6 +713,13 @@ export default function ConsolePage() {
   const navigationReady = currentNavigationAccess !== null;
   const isAdmin = currentNavigationAccess?.isAdmin ?? false;
   const menuVisibility = currentNavigationAccess?.menuVisibility ?? DEFAULT_MENU_VISIBILITY;
+  const showRootsSection = shouldShowRootsSection({
+    hasPublishedIndex: tenantStats?.exists === true,
+    rootCount: roots?.length ?? 0,
+    loading: rootsLoading,
+    hasError: rootsError !== null,
+    hasActionResult: rootActionResult !== null,
+  });
 
   const sections = useMemo(
     () => navigationReady
@@ -1794,59 +1802,6 @@ export default function ConsolePage() {
                           {tenantStatsLoading ? t("refreshing") : t("refreshStats")}
                         </Button>
 
-                        {/* 我的索引 */}
-                        <RootsSection
-                          roots={roots}
-                          loading={rootsLoading}
-                          error={rootsError}
-                          actionResult={rootActionResult}
-                          activeOrg={rootsOrg}
-                          canManage={!rootsOrg || rootsOrgRole === "owner"}
-                          onRefresh={() => fetchRoots(false, rootsOrgRef.current)}
-                          onDismissFailure={(root) => {
-                            setRootActionResult(null);
-                            setRootPendingAction({ kind: "dismiss_failure", root });
-                          }}
-                          onDelete={(root) => {
-                            setRootActionResult(null);
-                            setRootPendingAction({ kind: "delete_index", root });
-                          }}
-                        />
-
-                        {/* Clear index */}
-                        <div className="mt-6 pt-6 border-t border-white/[0.06]">
-                          <h3 className="text-sm font-medium text-red-400 mb-3">{t("dangerZone")}</h3>
-                          <Card className="bg-red-500/[0.04] border-red-500/20">
-                            <CardContent className="p-4">
-                              <div className="flex items-center justify-between gap-4">
-                                <div className="min-w-0">
-                                  <p className="text-white text-sm font-medium">{t("clearRemoteIndexes")}</p>
-                                  <p className="text-slate-500 text-xs mt-1">
-                                    {t("deleteAllIndexedCodeAndRequestLogs")}
-                                  </p>
-                                </div>
-                                <Button
-                                  variant="warning"
-                                  size="sm"
-                                  onClick={() => setShowClearConfirm(true)}
-                                  disabled={clearLoading || (!!rootsOrg && rootsOrgRole !== "owner")}
-                                  className="shrink-0"
-                                >
-                                  <Trash2 className="w-4 h-4 mr-1" />
-                                  {clearLoading ? t("clearing") : t("clearIndexes")}
-                                </Button>
-                              </div>
-                              {clearResult && (
-                                <p className={cn(
-                                  "text-xs mt-3",
-                                  clearResult.success ? "text-green-400" : "text-red-400"
-                                )}>
-                                  {clearResult.message}
-                                </p>
-                              )}
-                            </CardContent>
-                          </Card>
-                        </div>
                       </div>
                     ) : tenantStats && !tenantStats.exists ? (
                       <div className="flex flex-col items-center py-8 text-center text-slate-500">
@@ -1871,6 +1826,64 @@ export default function ConsolePage() {
                       <div className="space-y-4">
                         <Skeleton className="h-32 w-full bg-white/[0.06]" />
                         <Skeleton className="h-20 w-full bg-white/[0.06]" />
+                      </div>
+                    )}
+
+                    {/* 根任务状态不依赖 tenantStats.exists。首次索引可能在发布快照前失败，
+                        此时统计为 exists=false，但仍必须展示 /mcp/roots 的失败记录。 */}
+                    {showRootsSection && (
+                      <RootsSection
+                        roots={roots}
+                        loading={rootsLoading}
+                        error={rootsError}
+                        actionResult={rootActionResult}
+                        activeOrg={rootsOrg}
+                        canManage={!rootsOrg || rootsOrgRole === "owner"}
+                        onRefresh={() => fetchRoots(false, rootsOrgRef.current)}
+                        onDismissFailure={(root) => {
+                          setRootActionResult(null);
+                          setRootPendingAction({ kind: "dismiss_failure", root });
+                        }}
+                        onDelete={(root) => {
+                          setRootActionResult(null);
+                          setRootPendingAction({ kind: "delete_index", root });
+                        }}
+                      />
+                    )}
+
+                    {tenantStats?.exists === true && (
+                      <div className="mt-6 pt-6 border-t border-white/[0.06]">
+                        <h3 className="text-sm font-medium text-red-400 mb-3">{t("dangerZone")}</h3>
+                        <Card className="bg-red-500/[0.04] border-red-500/20">
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="min-w-0">
+                                <p className="text-white text-sm font-medium">{t("clearRemoteIndexes")}</p>
+                                <p className="text-slate-500 text-xs mt-1">
+                                  {t("deleteAllIndexedCodeAndRequestLogs")}
+                                </p>
+                              </div>
+                              <Button
+                                variant="warning"
+                                size="sm"
+                                onClick={() => setShowClearConfirm(true)}
+                                disabled={clearLoading || (!!rootsOrg && rootsOrgRole !== "owner")}
+                                className="shrink-0"
+                              >
+                                <Trash2 className="w-4 h-4 mr-1" />
+                                {clearLoading ? t("clearing") : t("clearIndexes")}
+                              </Button>
+                            </div>
+                            {clearResult && (
+                              <p className={cn(
+                                "text-xs mt-3",
+                                clearResult.success ? "text-green-400" : "text-red-400"
+                              )}>
+                                {clearResult.message}
+                              </p>
+                            )}
+                          </CardContent>
+                        </Card>
                       </div>
                     )}
                   </TabsContent>
