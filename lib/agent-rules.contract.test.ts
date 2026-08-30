@@ -27,6 +27,29 @@ describe(
       return surface;
     }
 
+    it("钉住无成本重复索引结果", () => {
+      const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
+      expect(contract.schemaVersion).toBe("1.6");
+      expect(contract.codebaseIndex.startOutcomes).toEqual({
+        created: {
+          requiredFields: ["job"],
+          optionalFields: ["pending_files", "deleted_files"],
+          providerWork: "allowed",
+        },
+        unchanged: {
+          requiredFields: ["unchanged"],
+          providerWork: "forbidden",
+        },
+        busy: {
+          requiredFields: ["busy", "busy_reason", "retry_after_seconds"],
+          optionalFields: ["active_job"],
+          reasons: ["active_job", "rate_limited"],
+          providerWork: "forbidden",
+        },
+        busyRetryPolicy: "client_waits_without_consuming_failure_retry_budget",
+      });
+    });
+
     it("CLOUD_TOOLS 与契约 cloudToolSurface 完全一致", () => {
       const surface = loadSurface();
       const names = CLOUD_TOOLS.map((t) => t.name);
