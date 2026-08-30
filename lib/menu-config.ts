@@ -3,7 +3,8 @@ export const CONSOLE_MENU_CATALOG = [
   { id: "top-status", label: "状态监控", group: "顶部导航" },
   { id: "keys", label: "密钥管理", group: "我的" }, { id: "plans", label: "套餐订阅", group: "我的" },
   { id: "team", label: "组织", group: "我的" }, { id: "docs", label: "配置说明", group: "我的" },
-  { id: "model-config", label: "模型设置", group: "我的" }, { id: "profile", label: "用户信息", group: "我的" },
+  { id: "model-config", label: "模型设置", group: "我的" }, { id: "version", label: "当前版本", group: "我的" },
+  { id: "profile", label: "用户信息", group: "我的" },
   { id: "index", label: "索引管理", group: "数据" }, { id: "logs", label: "请求日志", group: "数据" },
   { id: "org", label: "组织概览", group: "管理" }, { id: "users", label: "用户管理", group: "管理" },
   { id: "call-stats", label: "调用统计", group: "管理" }, { id: "quota", label: "配额管理", group: "管理" },
@@ -13,7 +14,7 @@ export const CONSOLE_MENU_CATALOG = [
 ] as const;
 export const USER_MENU_IDS: ConsoleMenuId[] = [
   "top-console", "top-leaderboard", "top-status",
-  "keys", "plans", "team", "docs", "model-config", "profile", "index", "logs",
+  "keys", "plans", "team", "docs", "model-config", "version", "profile", "index", "logs",
 ];
 export type ConsoleMenuId = typeof CONSOLE_MENU_CATALOG[number]["id"];
 export const DEFAULT_MENU_VISIBILITY = Object.fromEntries(CONSOLE_MENU_CATALOG.map((item) => [item.id, true])) as Record<ConsoleMenuId, boolean>;

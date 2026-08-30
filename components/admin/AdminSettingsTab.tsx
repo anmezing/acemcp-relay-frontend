@@ -16,6 +16,13 @@ export function AdminSettingsTab() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [publishedClientVersion, setPublishedClientVersion] = useState<string | null>(null);
+  const [minimumClientVersion, setMinimumClientVersion] = useState<string | null>(null);
+  const [minimumClientVersionDraft, setMinimumClientVersionDraft] = useState("");
+  const [versionPolicyLoading, setVersionPolicyLoading] = useState(true);
+  const [versionPolicyBusy, setVersionPolicyBusy] = useState(false);
+  const [versionPolicyError, setVersionPolicyError] = useState("");
+  const [versionPolicyNotice, setVersionPolicyNotice] = useState("");
 
   // load 首个语句即 await，setState 均在 await 之后（满足
   // react-hooks/set-state-in-effect）；effect 发起的请求携带 AbortSignal，
@@ -45,6 +52,32 @@ export function AdminSettingsTab() {
     Promise.resolve().then(() => load(controller.signal));
     return () => controller.abort();
   }, [load]);
+
+  const loadVersionPolicy = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const res = await fetch("/api/client-version", { cache: "no-store", signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as { latestVersion?: unknown; minimumVersion?: unknown };
+      if (signal?.aborted) return;
+      const latest = typeof data.latestVersion === "string" ? data.latestVersion : null;
+      const minimum = typeof data.minimumVersion === "string" ? data.minimumVersion : null;
+      setPublishedClientVersion(latest);
+      setMinimumClientVersion(minimum);
+      setMinimumClientVersionDraft(minimum ?? "");
+      setVersionPolicyError("");
+    } catch {
+      if (signal?.aborted) return;
+      setVersionPolicyError(t("clientVersionPolicyLoadFailed"));
+    } finally {
+      if (!signal?.aborted) setVersionPolicyLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.resolve().then(() => loadVersionPolicy(controller.signal));
+    return () => controller.abort();
+  }, [loadVersionPolicy]);
 
   const toggle = useCallback(
     async (next: boolean) => {
@@ -95,6 +128,31 @@ export function AdminSettingsTab() {
       setBusy(false);
     }
   }, [slotsDraft, registrationEnabled, t]);
+
+  const saveMinimumClientVersion = useCallback(async () => {
+    setVersionPolicyBusy(true);
+    setVersionPolicyNotice("");
+    try {
+      const res = await fetch("/api/admin/client-version-policy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ minimumVersion: minimumClientVersionDraft.trim() || null }),
+      });
+      const body = await res.json().catch(() => ({})) as { minimumVersion?: unknown; error?: unknown };
+      if (!res.ok) {
+        throw new Error(typeof body.error === "string" ? body.error : `HTTP ${res.status}`);
+      }
+      const minimum = typeof body.minimumVersion === "string" ? body.minimumVersion : null;
+      setMinimumClientVersion(minimum);
+      setMinimumClientVersionDraft(minimum ?? "");
+      setVersionPolicyError("");
+      setVersionPolicyNotice(t("clientVersionPolicySaved"));
+    } catch {
+      setVersionPolicyNotice(t("clientVersionPolicySaveFailed"));
+    } finally {
+      setVersionPolicyBusy(false);
+    }
+  }, [minimumClientVersionDraft, t]);
 
   if (registrationEnabled === null && !error) {
     return <Skeleton className="h-32 bg-white/[0.06] rounded-xl" />;
@@ -177,6 +235,46 @@ export function AdminSettingsTab() {
           </CardContent>
         </Card>
       )}
+
+      <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
+        <CardContent className="p-4">
+          <div className="flex flex-wrap items-start gap-3">
+            <div className="min-w-[240px] flex-1">
+              <h3 className="text-white text-sm font-medium">{t("minimumClientVersion")}</h3>
+              <p className="mt-1 text-slate-500 text-xs leading-5">
+                {t("minimumClientVersionDescription")}
+              </p>
+              <p className="mt-2 text-[11px] text-slate-600">
+                {t("publishedClientVersion", { version: publishedClientVersion ? `v${publishedClientVersion}` : t("temporarilyUnavailable") })}
+                {minimumClientVersion ? ` · ${t("currentlyEnforced", { version: `v${minimumClientVersion}` })}` : ` · ${t("notEnforced")}`}
+              </p>
+              {versionPolicyError && <p className="mt-2 text-xs text-red-400">{versionPolicyError}</p>}
+              {versionPolicyNotice && (
+                <p className={cn("mt-2 text-xs", /已保存|saved/i.test(versionPolicyNotice) ? "text-emerald-400" : "text-red-400")}>{versionPolicyNotice}</p>
+              )}
+            </div>
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              <input
+                aria-label={t("minimumClientVersion")}
+                disabled={versionPolicyLoading || versionPolicyBusy}
+                value={minimumClientVersionDraft}
+                onChange={(event) => setMinimumClientVersionDraft(event.target.value)}
+                placeholder={t("minimumClientVersionPlaceholder")}
+                className="h-8 w-36 rounded-md border border-white/10 bg-black/20 px-2 font-mono text-sm text-white disabled:cursor-not-allowed"
+              />
+              <Button
+                variant="glass"
+                size="sm"
+                disabled={versionPolicyLoading || versionPolicyBusy}
+                onClick={saveMinimumClientVersion}
+                className="h-8 min-w-[72px] text-xs"
+              >
+                {versionPolicyBusy ? t("saving") : t("saveMinimumVersion")}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <p className="text-slate-600 text-[10px]">
         {t("otherSystemSettingsIncludingDefaultDailyRequest")}
