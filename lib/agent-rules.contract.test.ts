@@ -29,7 +29,7 @@ describe(
 
     it("钉住无成本重复索引结果", () => {
       const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
-      expect(contract.schemaVersion).toBe("1.6");
+      expect(contract.schemaVersion).toBe("1.7");
       expect(contract.codebaseIndex.startOutcomes).toEqual({
         created: {
           requiredFields: ["job"],
@@ -47,6 +47,19 @@ describe(
           providerWork: "forbidden",
         },
         busyRetryPolicy: "client_waits_without_consuming_failure_retry_budget",
+      });
+    });
+
+    it("钉住客户端版本来源、最低版本策略与升级命令", () => {
+      const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
+      expect(contract.clientCompatibility).toMatchObject({
+        package: "@anmezing/lce-cloud",
+        latestVersionSource: "npm_dist_tag_latest",
+        minimumVersionSource: "relay_persistent_runtime_policy_with_env_bootstrap",
+        minimumVersionAdminConfigurable: true,
+        indexStartRequiresClientVersionWhenMinimumConfigured: true,
+        upgradeCommand: "npm install -g @anmezing/lce-cloud@latest",
+        restartRequiredAfterUpgrade: true,
       });
     });
 

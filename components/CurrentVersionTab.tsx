@@ -12,7 +12,7 @@ interface VersionData {
   packageName: string;
   latestVersion: string | null;
   minimumVersion: string | null;
-  latestVersionSource: "npm" | "relay" | null;
+  latestVersionSource: "npm" | null;
   indexClientVersionRequired: boolean;
   upgradeCommand: string;
   warnings: string[];

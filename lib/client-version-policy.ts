@@ -10,14 +10,13 @@ const CLIENT_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 export interface RelayClientVersionPolicy {
   packageName: string;
-  relayLatestVersion: string | null;
   minimumVersion: string | null;
   indexClientVersionRequired: boolean;
 }
 
 export interface ClientVersionSummary extends RelayClientVersionPolicy {
   latestVersion: string | null;
-  latestVersionSource: "npm" | "relay" | null;
+  latestVersionSource: "npm" | null;
   warnings: string[];
 }
 
@@ -59,7 +58,6 @@ export async function fetchRelayClientVersionPolicy(): Promise<RelayClientVersio
     packageName: typeof body.package === "string" && body.package.trim()
       ? body.package.trim()
       : LCE_CLOUD_PACKAGE,
-    relayLatestVersion: optionalVersion(body.latest_version),
     minimumVersion: optionalVersion(body.minimum_version),
     indexClientVersionRequired: body.index_client_version_required === true,
   };
@@ -74,16 +72,14 @@ export async function getClientVersionSummary(): Promise<ClientVersionSummary> {
     ? policyResult.value
     : {
         packageName: LCE_CLOUD_PACKAGE,
-        relayLatestVersion: null,
         minimumVersion: null,
         indexClientVersionRequired: false,
       };
   const publishedVersion = publishedResult.status === "fulfilled" ? publishedResult.value : null;
-  const latestVersion = publishedVersion ?? policy.relayLatestVersion;
   return {
     ...policy,
-    latestVersion,
-    latestVersionSource: publishedVersion ? "npm" : policy.relayLatestVersion ? "relay" : null,
+    latestVersion: publishedVersion,
+    latestVersionSource: publishedVersion ? "npm" : null,
     warnings: [
       ...(publishedResult.status === "rejected" ? ["npm_registry_unavailable"] : []),
       ...(policyResult.status === "rejected" ? ["relay_policy_unavailable"] : []),
@@ -112,7 +108,6 @@ export async function saveRelayMinimumClientVersion(minimumVersion: string | nul
     packageName: typeof body.package === "string" && body.package.trim()
       ? body.package.trim()
       : LCE_CLOUD_PACKAGE,
-    relayLatestVersion: optionalVersion(body.latest_version),
     minimumVersion: optionalVersion(body.minimum_version),
     indexClientVersionRequired: body.index_client_version_required === true,
   };

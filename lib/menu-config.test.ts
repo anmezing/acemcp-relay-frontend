@@ -17,6 +17,7 @@ describe("menu visibility", () => {
 
   it("only exposes ordinary-user menus to the administrator editor", () => {
     expect(USER_MENU_IDS).toContain("plans");
+    expect(USER_MENU_IDS).toContain("version");
     expect(USER_MENU_IDS).not.toContain("users");
     expect(USER_MENU_IDS).not.toContain("system-settings");
   });

@@ -15,6 +15,9 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
+  if (!Object.prototype.hasOwnProperty.call(body, "minimumVersion")) {
+    return NextResponse.json({ error: "minimumVersion is required" }, { status: 400 });
+  }
   if (body.minimumVersion !== null && typeof body.minimumVersion !== "string") {
     return NextResponse.json({ error: "invalid minimumVersion" }, { status: 400 });
   }
