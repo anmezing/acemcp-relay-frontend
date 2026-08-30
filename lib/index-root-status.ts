@@ -29,6 +29,27 @@ export function resolveRootIndexCounts(
   };
 }
 
+
+export interface IndexRootActions {
+  canDismissFailure: boolean;
+  canDeleteIndex: boolean;
+}
+
+export function resolveRootIndexActions(
+  root: IndexRootStatusLike,
+  canManage: boolean,
+): IndexRootActions {
+  if (!canManage) {
+    return { canDismissFailure: false, canDeleteIndex: false };
+  }
+  const state = resolveRootIndexState(root);
+  const indexAvailable = root.index_available ?? Boolean(root.indexed_at);
+  return {
+    canDismissFailure: state === "failed",
+    canDeleteIndex: indexAvailable && state !== "building",
+  };
+}
+
 export function hasBuildingIndexRoot(roots: readonly IndexRootStatusLike[] | null): boolean {
   return Boolean(roots?.some((root) => resolveRootIndexState(root) === "building"));
 }

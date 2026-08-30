@@ -1,0 +1,127 @@
+export type IndexFailureCode =
+  | "heartbeat_timeout"
+  | "upstream_bad_gateway"
+  | "provider_billing"
+  | "provider_rate_limited"
+  | "repository_file_limit"
+  | "repository_file_size_limit"
+  | "index_quota_exceeded"
+  | "provider_authentication"
+  | "network_unavailable"
+  | "index_failed";
+
+export type IndexFailureOrigin =
+  | "relay"
+  | "remote_index"
+  | "provider"
+  | "client"
+  | "network"
+  | "unknown";
+
+export type IndexRecoveryCode =
+  | "restart_client"
+  | "retry_after_service_recovers"
+  | "fix_provider_billing"
+  | "retry_later"
+  | "reduce_repository"
+  | "wait_for_quota_reset"
+  | "fix_credentials"
+  | "inspect_logs";
+
+export interface IndexFailureLike {
+  index_error?: string;
+  index_error_code?: string;
+  index_error_origin?: string;
+  index_recovery?: string;
+}
+
+export interface IndexFailurePresentation {
+  code: IndexFailureCode;
+  origin: IndexFailureOrigin;
+  recovery: IndexRecoveryCode;
+  rawDetail: string;
+}
+
+const failureCodes = new Set<IndexFailureCode>([
+  "heartbeat_timeout",
+  "upstream_bad_gateway",
+  "provider_billing",
+  "provider_rate_limited",
+  "repository_file_limit",
+  "repository_file_size_limit",
+  "index_quota_exceeded",
+  "provider_authentication",
+  "network_unavailable",
+  "index_failed",
+]);
+const failureOrigins = new Set<IndexFailureOrigin>([
+  "relay",
+  "remote_index",
+  "provider",
+  "client",
+  "network",
+  "unknown",
+]);
+const recoveryCodes = new Set<IndexRecoveryCode>([
+  "restart_client",
+  "retry_after_service_recovers",
+  "fix_provider_billing",
+  "retry_later",
+  "reduce_repository",
+  "wait_for_quota_reset",
+  "fix_credentials",
+  "inspect_logs",
+]);
+
+function includesAny(value: string, needles: readonly string[]): boolean {
+  return needles.some((needle) => value.includes(needle));
+}
+
+function classifyLegacyFailure(detail: string): Omit<IndexFailurePresentation, "rawDetail"> {
+  const lower = detail.trim().toLowerCase();
+  if (includesAny(lower, ["heartbeat timed out", "heartbeat timeout"])) {
+    return { code: "heartbeat_timeout", origin: "relay", recovery: "restart_client" };
+  }
+  if (includesAny(lower, ["remote-index 502", "bad gateway", "cloudflare", "origin web server returned"])) {
+    return { code: "upstream_bad_gateway", origin: "remote_index", recovery: "retry_after_service_recovers" };
+  }
+  if (includesAny(lower, ["payment required", "insufficient balance", "insufficient credit", "余额不足", "欠费", "billing", "remote-index 402"])) {
+    return { code: "provider_billing", origin: "provider", recovery: "fix_provider_billing" };
+  }
+  if (includesAny(lower, ["too many requests", "rate limit", "rate-limit", "remote-index 429"])) {
+    return { code: "provider_rate_limited", origin: "provider", recovery: "retry_later" };
+  }
+  if (includesAny(lower, ["manifest exceeds", "unreadable file list exceeds", "too many files", "file count limit", "maximum file count", "100,000 files", "100000 files", "文件数量", "文件数超过"])) {
+    return { code: "repository_file_limit", origin: "client", recovery: "reduce_repository" };
+  }
+  if (includesAny(lower, ["manifest file size is invalid", "file exceeds the", "byte limit", "file too large", "file size limit", "maximum file size", "512 kib", "524288", "文件大小超过", "单文件过大"])) {
+    return { code: "repository_file_size_limit", origin: "client", recovery: "reduce_repository" };
+  }
+  if (includesAny(lower, ["quota exceeded", "quota exhausted", "配额不足", "配额已用尽", "超出配额"])) {
+    return { code: "index_quota_exceeded", origin: "relay", recovery: "wait_for_quota_reset" };
+  }
+  if (includesAny(lower, ["unauthorized", "invalid api key", "invalid token", "authentication failed", "remote-index 401", "remote-index 403"])) {
+    return { code: "provider_authentication", origin: "provider", recovery: "fix_credentials" };
+  }
+  if (includesAny(lower, ["connection refused", "connection reset", "network is unreachable", "no such host", "i/o timeout", "context deadline exceeded", "unexpected eof", "socket hang up"])) {
+    return { code: "network_unavailable", origin: "network", recovery: "restart_client" };
+  }
+  return { code: "index_failed", origin: "unknown", recovery: "inspect_logs" };
+}
+
+export function resolveIndexFailurePresentation(root: IndexFailureLike): IndexFailurePresentation {
+  const rawDetail = root.index_error?.trim() ?? "";
+  const fallback = classifyLegacyFailure(rawDetail);
+  return {
+    code: failureCodes.has(root.index_error_code as IndexFailureCode)
+      ? (root.index_error_code as IndexFailureCode)
+      : fallback.code,
+    origin: failureOrigins.has(root.index_error_origin as IndexFailureOrigin)
+      ? (root.index_error_origin as IndexFailureOrigin)
+      : fallback.origin,
+    recovery: recoveryCodes.has(root.index_recovery as IndexRecoveryCode)
+      ? (root.index_recovery as IndexRecoveryCode)
+      : fallback.recovery,
+    rawDetail,
+  };
+}

@@ -19,6 +19,7 @@ LCE 的前端控制台，用于管理 API Key、查看请求日志和用户排�
 - **请求统计** — 展示成功/失败/总计请求数
 - **每日排行榜** — 实时统计代码检索与提示词增强调用量 Top 10，不计入索引请求，支持日期切换查看历史数据
 - **MCP 配置文档** — 提供 Auggie CLI 安装指引与 MCP 配置模板
+- **索引失败排查** — 区分失败记录清理与云端快照删除，并提供重新建立索引的恢复流程；详见 [`docs/cloud-index-troubleshooting.md`](docs/cloud-index-troubleshooting.md)
 
 ## 项目结构
 

@@ -13,7 +13,8 @@ import {
 import {
   Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github, Trash2, Mail,
   Key, FileText, User, Database, ScrollText, Building2, Users, Coins,
-  Gauge, Cpu, Settings, Terminal, Shield, ChevronDown, CreditCard, Package
+  Gauge, Cpu, Settings, Terminal, Shield, ChevronDown, CreditCard, Package,
+  CircleX, AlertTriangle, BookOpen
 } from "lucide-react";
 
 // shadcn/ui components
@@ -60,10 +61,17 @@ import { useLocale, useTranslations } from "next-intl";
 import {
   hasBuildingIndexRoot,
   resolveIndexPollingPolicy,
+  resolveRootIndexActions,
   resolveRootIndexCounts,
   resolveRootIndexProgress,
   resolveRootIndexState,
 } from "@/lib/index-root-status";
+import {
+  resolveIndexFailurePresentation,
+  type IndexFailureCode,
+  type IndexFailureOrigin,
+  type IndexRecoveryCode,
+} from "@/lib/index-failure";
 
 type Tab =
   | "keys" | "plans" | "docs" | "profile" | "model-config" | "version" | "team"
@@ -238,7 +246,48 @@ interface RelayRoot {
   failed_files?: number;
   progress_percent?: number;
   index_error?: string;
+  index_error_code?: string;
+  index_error_origin?: string;
+  index_recovery?: string;
 }
+
+type RootManagementAction = {
+  kind: "dismiss_failure" | "delete_index";
+  root: RelayRoot;
+};
+
+const INDEX_FAILURE_TITLE_KEYS: Record<IndexFailureCode, string> = {
+  heartbeat_timeout: "indexFailureHeartbeatTimeout",
+  upstream_bad_gateway: "indexFailureUpstreamBadGateway",
+  provider_billing: "indexFailureProviderBilling",
+  provider_rate_limited: "indexFailureProviderRateLimited",
+  repository_file_limit: "indexFailureRepositoryFileLimit",
+  repository_file_size_limit: "indexFailureRepositoryFileSizeLimit",
+  index_quota_exceeded: "indexFailureQuotaExceeded",
+  provider_authentication: "indexFailureProviderAuthentication",
+  network_unavailable: "indexFailureNetworkUnavailable",
+  index_failed: "indexFailureUnknown",
+};
+
+const INDEX_FAILURE_ORIGIN_KEYS: Record<IndexFailureOrigin, string> = {
+  relay: "indexFailureOriginRelay",
+  remote_index: "indexFailureOriginRemoteIndex",
+  provider: "indexFailureOriginProvider",
+  client: "indexFailureOriginClient",
+  network: "indexFailureOriginNetwork",
+  unknown: "indexFailureOriginUnknown",
+};
+
+const INDEX_RECOVERY_KEYS: Record<IndexRecoveryCode, string> = {
+  restart_client: "indexRecoveryRestartClient",
+  retry_after_service_recovers: "indexRecoveryServiceRecovers",
+  fix_provider_billing: "indexRecoveryFixProviderBilling",
+  retry_later: "indexRecoveryRetryLater",
+  reduce_repository: "indexRecoveryReduceRepository",
+  wait_for_quota_reset: "indexRecoveryWaitForQuotaReset",
+  fix_credentials: "indexRecoveryFixCredentials",
+  inspect_logs: "indexRecoveryInspectLogs",
+};
 
 function isActiveIndexJob(value: unknown): value is ActiveIndexJob {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -279,7 +328,10 @@ function isRelayRoot(value: unknown): value is RelayRoot {
     (root.total_files === undefined || (typeof root.total_files === "number" && Number.isFinite(root.total_files))) &&
     (root.failed_files === undefined || (typeof root.failed_files === "number" && Number.isFinite(root.failed_files))) &&
     (root.progress_percent === undefined || (typeof root.progress_percent === "number" && Number.isFinite(root.progress_percent))) &&
-    (root.index_error === undefined || typeof root.index_error === "string")
+    (root.index_error === undefined || typeof root.index_error === "string") &&
+    (root.index_error_code === undefined || typeof root.index_error_code === "string") &&
+    (root.index_error_origin === undefined || typeof root.index_error_origin === "string") &&
+    (root.index_recovery === undefined || typeof root.index_recovery === "string")
   );
 }
 
@@ -426,9 +478,9 @@ export default function ConsolePage() {
   const [roots, setRoots] = useState<RelayRoot[] | null>(null);
   const [rootsLoading, setRootsLoading] = useState(false);
   const [rootsError, setRootsError] = useState<string | null>(null);
-  const [rootPendingDelete, setRootPendingDelete] = useState<RelayRoot | null>(null);
-  const [deleteRootLoading, setDeleteRootLoading] = useState(false);
-  const [deleteRootResult, setDeleteRootResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [rootPendingAction, setRootPendingAction] = useState<RootManagementAction | null>(null);
+  const [rootActionLoading, setRootActionLoading] = useState(false);
+  const [rootActionResult, setRootActionResult] = useState<{ success: boolean; message: string } | null>(null);
   // 索引上下文：null = 个人租户；组织时按组织密钥查询，删除权限依 orgRole
   const [rootsOrg, setRootsOrg] = useState<IndexOrganizationContext | null>(null);
   const rootsOrgRef = useRef<IndexOrganizationContext | null>(null);
@@ -590,41 +642,48 @@ export default function ConsolePage() {
     }
   }, [t]);
 
-  const handleDeleteRoot = useCallback(async () => {
-    if (!rootPendingDelete) return;
-    setDeleteRootLoading(true);
-    setDeleteRootResult(null);
+  const handleRootManagementAction = useCallback(async () => {
+    if (!rootPendingAction) return;
+    const { kind, root } = rootPendingAction;
+    const dismissing = kind === "dismiss_failure";
+    setRootActionLoading(true);
+    setRootActionResult(null);
     try {
-      const res = await fetch("/api/roots/delete", {
+      const res = await fetch(dismissing ? "/api/roots/dismiss-failure" : "/api/roots/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          root_id: rootPendingDelete.root_id,
+          root_id: root.root_id,
           ...(rootsOrg ? { org_id: rootsOrg.id } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setDeleteRootResult({
+        setRootActionResult({
           success: true,
-          message: t("indexDeleted", { count: data.deleted_files ?? 0 }),
+          message: dismissing
+            ? t("indexFailureDismissed", { count: data.dismissed_jobs ?? 0 })
+            : t("indexDeleted", { count: data.deleted_files ?? 0 }),
         });
         await Promise.all([fetchRoots(false, rootsOrg), fetchTenantStats(false, rootsOrg)]);
       } else if (res.status === 409) {
-        setDeleteRootResult({
+        setRootActionResult({
           success: false,
           message: data.error || t("projectIsBeingIndexed"),
         });
       } else {
-        setDeleteRootResult({ success: false, message: data.error || t("deleteFailed") });
+        setRootActionResult({
+          success: false,
+          message: data.error || (dismissing ? t("dismissFailureFailed") : t("deleteFailed")),
+        });
       }
     } catch {
-      setDeleteRootResult({ success: false, message: t("networkError") });
+      setRootActionResult({ success: false, message: t("networkError") });
     } finally {
-      setDeleteRootLoading(false);
-      setRootPendingDelete(null);
+      setRootActionLoading(false);
+      setRootPendingAction(null);
     }
-  }, [rootPendingDelete, rootsOrg, fetchRoots, fetchTenantStats, t]);
+  }, [rootPendingAction, rootsOrg, fetchRoots, fetchTenantStats, t]);
 
   const fetchNavigationAccess = useCallback(async (userId: string, signal?: AbortSignal) => {
     const [adminResult, menuResult] = await Promise.allSettled([
@@ -1632,7 +1691,7 @@ export default function ConsolePage() {
                         setTenantStats(null);
                         setTenantStatsError(null);
                         setRootsError(null);
-                        setDeleteRootResult(null);
+                        setRootActionResult(null);
                         void Promise.all([
                           fetchRoots(false, org),
                           fetchTenantStats(false, org),
@@ -1740,13 +1799,17 @@ export default function ConsolePage() {
                           roots={roots}
                           loading={rootsLoading}
                           error={rootsError}
-                          deleteResult={deleteRootResult}
+                          actionResult={rootActionResult}
                           activeOrg={rootsOrg}
-                          canDelete={!rootsOrg || rootsOrgRole === "owner"}
+                          canManage={!rootsOrg || rootsOrgRole === "owner"}
                           onRefresh={() => fetchRoots(false, rootsOrgRef.current)}
+                          onDismissFailure={(root) => {
+                            setRootActionResult(null);
+                            setRootPendingAction({ kind: "dismiss_failure", root });
+                          }}
                           onDelete={(root) => {
-                            setDeleteRootResult(null);
-                            setRootPendingDelete(root);
+                            setRootActionResult(null);
+                            setRootPendingAction({ kind: "delete_index", root });
                           }}
                         />
 
@@ -1985,22 +2048,31 @@ export default function ConsolePage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Delete root confirm dialog */}
+      {/* Root failure cleanup / cloud index deletion confirmation */}
       <AlertDialog
-        open={rootPendingDelete !== null}
+        open={rootPendingAction !== null}
         onOpenChange={(open) => {
-          if (!open) setRootPendingDelete(null);
+          if (!open) setRootPendingAction(null);
         }}
       >
         <AlertDialogContent className="bg-[#0d1424] border-white/[0.08]">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">{t("deleteProjectIndex")}</AlertDialogTitle>
+            <AlertDialogTitle className="text-white">
+              {rootPendingAction?.kind === "dismiss_failure"
+                ? t("dismissIndexFailureTitle")
+                : t("deleteProjectIndex")}
+            </AlertDialogTitle>
             <AlertDialogDescription className="text-slate-400">
-              {rootPendingDelete
-                ? t("confirmDeleteProjectIndex", {
-                    workspace: rootPendingDelete.workspace_id,
-                    branch: rootBranchLabel(rootPendingDelete) || t("defaultBranch"),
-                  })
+              {rootPendingAction
+                ? rootPendingAction.kind === "dismiss_failure"
+                  ? t("confirmDismissIndexFailure", {
+                      workspace: rootPendingAction.root.workspace_id,
+                      branch: rootBranchLabel(rootPendingAction.root) || t("defaultBranch"),
+                    })
+                  : t("confirmDeleteProjectIndex", {
+                      workspace: rootPendingAction.root.workspace_id,
+                      branch: rootBranchLabel(rootPendingAction.root) || t("defaultBranch"),
+                    })
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -2009,11 +2081,20 @@ export default function ConsolePage() {
               {t("cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDeleteRoot}
-              disabled={deleteRootLoading}
-              className="bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-white"
+              onClick={handleRootManagementAction}
+              disabled={rootActionLoading}
+              className={cn(
+                "border text-white",
+                rootPendingAction?.kind === "dismiss_failure"
+                  ? "border-amber-500/30 bg-amber-500/20 hover:bg-amber-500/30"
+                  : "border-red-500/30 bg-red-500/20 hover:bg-red-500/30",
+              )}
             >
-              {deleteRootLoading ? t("deleting") : t("deleteIndex")}
+              {rootActionLoading
+                ? t("processing")
+                : rootPendingAction?.kind === "dismiss_failure"
+                  ? t("dismissFailureRecord")
+                  : t("deleteIndex")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2410,11 +2491,35 @@ function RootIndexStatus({ root }: { root: RelayRoot }) {
           />
         </div>
       )}
-      {root.index_error && state === "failed" && (
-        <p className={cn("text-[11px] leading-relaxed", indexAvailable ? "text-amber-300" : "text-red-300")}>
-          {root.index_error}
-        </p>
-      )}
+      {state === "failed" && (() => {
+        const failure = resolveIndexFailurePresentation(root);
+        return (
+          <div className={cn(
+            "rounded-md border px-2.5 py-2 text-[11px] leading-relaxed",
+            indexAvailable
+              ? "border-amber-500/20 bg-amber-500/[0.06] text-amber-200"
+              : "border-red-500/20 bg-red-500/[0.06] text-red-200",
+          )}>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">{t(INDEX_FAILURE_TITLE_KEYS[failure.code])}</span>
+              <Badge variant="outline" className="border-white/[0.1] bg-black/10 text-[9px] text-slate-400">
+                {t(INDEX_FAILURE_ORIGIN_KEYS[failure.origin])}
+              </Badge>
+            </div>
+            <p className="mt-1 text-slate-400">{t(INDEX_RECOVERY_KEYS[failure.recovery])}</p>
+            {failure.rawDetail && (
+              <details className="mt-1.5 text-slate-500">
+                <summary className="cursor-pointer select-none hover:text-slate-300">
+                  {t("viewRawIndexError")}
+                </summary>
+                <pre className="mt-1 max-h-28 overflow-auto whitespace-pre-wrap break-all rounded bg-black/20 p-2 font-mono text-[10px] text-slate-400">
+                  {failure.rawDetail}
+                </pre>
+              </details>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -2468,25 +2573,76 @@ function IndexContextSwitcher({
   );
 }
 
-// 我的索引：按 root 维度列出已索引项目，支持逐个删除。支持个人/组织租户
-// 切换；组织租户下成员角色隐藏删除按钮（仅组织所有者可删除）。
+function RootManagementButtons({
+  root,
+  canManage,
+  compact = false,
+  onDismissFailure,
+  onDelete,
+}: {
+  root: RelayRoot;
+  canManage: boolean;
+  compact?: boolean;
+  onDismissFailure: (root: RelayRoot) => void;
+  onDelete: (root: RelayRoot) => void;
+}) {
+  const t = useTranslations("Console");
+  const actions = resolveRootIndexActions(root, canManage);
+  if (!actions.canDismissFailure && !actions.canDeleteIndex) return null;
+
+  return (
+    <div className={cn("flex shrink-0 items-center gap-1", compact && "flex-col items-end sm:flex-row")}>
+      {actions.canDismissFailure && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onDismissFailure(root)}
+          className="h-8 px-2 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
+          aria-label={t("dismissFailureFor", { workspace: root.workspace_id, branch: rootBranchLabel(root) })}
+        >
+          <CircleX className="mr-1 h-3.5 w-3.5" />
+          <span className="text-[11px]">{t("dismissFailureRecord")}</span>
+        </Button>
+      )}
+      {actions.canDeleteIndex && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onDelete(root)}
+          className="h-8 w-8 p-0 text-slate-500 hover:bg-red-500/10 hover:text-red-400"
+          aria-label={t("deleteBranchIndex", {
+            workspace: root.workspace_id,
+            branch: rootBranchLabel(root) || t("defaultBranch"),
+          })}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// 我的索引：按 root 维度列出索引状态，支持清理失败记录和逐个删除云端快照。
+// 支持个人/组织租户切换；组织租户下成员角色隐藏管理操作（仅 owner 可操作）。
 function RootsSection({
   roots,
   loading,
   error,
-  deleteResult,
+  actionResult,
   activeOrg,
-  canDelete,
+  canManage,
   onRefresh,
+  onDismissFailure,
   onDelete,
 }: {
   roots: RelayRoot[] | null;
   loading: boolean;
   error: string | null;
-  deleteResult: { success: boolean; message: string } | null;
+  actionResult: { success: boolean; message: string } | null;
   activeOrg: { id: string; name: string } | null;
-  canDelete: boolean;
+  canManage: boolean;
   onRefresh: () => void;
+  onDismissFailure: (root: RelayRoot) => void;
   onDelete: (root: RelayRoot) => void;
 }) {
   const locale = useLocale();
@@ -2504,18 +2660,38 @@ function RootsSection({
         {t("eachBranchHasAnIndependentIndexView")}
       </p>
 
-      {activeOrg && !canDelete && roots !== null && (
+      <details className="mb-3 rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] px-3 py-2.5 text-xs text-slate-400">
+        <summary className="flex cursor-pointer list-none items-center gap-2 font-medium text-cyan-300">
+          <BookOpen className="h-3.5 w-3.5" />
+          {t("indexTroubleshootingTitle")}
+        </summary>
+        <div className="mt-2 space-y-2 border-t border-white/[0.05] pt-2">
+          <ol className="list-decimal space-y-1 pl-4">
+            <li>{t("indexTroubleshootingStepFix")}</li>
+            <li>{t("indexTroubleshootingStepRestart")}</li>
+            <li>{t("indexTroubleshootingStepKeepOpen")}</li>
+            <li>{t("indexTroubleshootingStepCheck")}</li>
+          </ol>
+          <p className="flex items-start gap-1.5 text-amber-300/90">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            {t("indexTroubleshootingRetryNote")}
+          </p>
+          <p className="text-slate-500">{t("indexTroubleshootingCleanupNote")}</p>
+        </div>
+      </details>
+
+      {activeOrg && !canManage && roots !== null && (
         <p className="text-xs text-slate-500 mb-3">{t("onlyOrganizationOwnersCanDeleteOrganizationIndexes")}</p>
       )}
 
-      {deleteResult && (
+      {actionResult && (
         <p
           className={cn(
             "text-xs mb-3",
-            deleteResult.success ? "text-green-400" : "text-red-400"
+            actionResult.success ? "text-green-400" : "text-red-400"
           )}
         >
-          {deleteResult.message}
+          {actionResult.message}
         </p>
       )}
 
@@ -2566,18 +2742,12 @@ function RootsSection({
                       </p>
                       <RootIndexStatus root={group.entries[0].root} />
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onDelete(group.entries[0].root)}
-                      className={cn(
-                        "shrink-0 text-slate-500 hover:text-red-400 hover:bg-red-500/10",
-                        (!canDelete || !group.entries[0].root.indexed_at) && "hidden"
-                      )}
-                      aria-label={t("deleteTheIndexFor", {p0: group.entries[0].root.workspace_id})}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <RootManagementButtons
+                      root={group.entries[0].root}
+                      canManage={canManage}
+                      onDismissFailure={onDismissFailure}
+                      onDelete={onDelete}
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -2616,18 +2786,13 @@ function RootsSection({
                           </div>
                           <RootIndexStatus root={root} />
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onDelete(root)}
-                          className={cn(
-                            "shrink-0 text-slate-500 hover:text-red-400 hover:bg-red-500/10",
-                            (!canDelete || !root.indexed_at) && "hidden"
-                          )}
-                          aria-label={t("deleteBranchIndex", { workspace: group.workspaceId, branch })}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <RootManagementButtons
+                          root={root}
+                          canManage={canManage}
+                          compact
+                          onDismissFailure={onDismissFailure}
+                          onDelete={onDelete}
+                        />
                       </div>
                     ))}
                   </div>

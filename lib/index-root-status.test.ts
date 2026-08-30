@@ -3,6 +3,7 @@ import {
   hasBuildingIndexRoot,
   resolveIndexPollingPolicy,
   resolveRootIndexCounts,
+  resolveRootIndexActions,
   resolveRootIndexProgress,
   resolveRootIndexState,
 } from "./index-root-status";
@@ -46,6 +47,36 @@ describe("index root status", () => {
     expect(resolveRootIndexState(root)).toBe("failed");
     expect(resolveRootIndexProgress(root)).toBe(37);
     expect(hasBuildingIndexRoot([root])).toBe(false);
+  });
+
+
+  it("exposes cleanup and deletion as distinct actions", () => {
+    expect(resolveRootIndexActions({ index_state: "failed", file_count: 0 }, true)).toEqual({
+      canDismissFailure: true,
+      canDeleteIndex: false,
+    });
+    expect(resolveRootIndexActions({
+      index_state: "failed",
+      index_available: true,
+      indexed_at: "2026-08-29T00:00:00Z",
+      file_count: 25,
+    }, true)).toEqual({
+      canDismissFailure: true,
+      canDeleteIndex: true,
+    });
+    expect(resolveRootIndexActions({
+      index_state: "building",
+      index_available: true,
+      indexed_at: "2026-08-29T00:00:00Z",
+      file_count: 25,
+    }, true)).toEqual({
+      canDismissFailure: false,
+      canDeleteIndex: false,
+    });
+    expect(resolveRootIndexActions({ index_state: "ready", index_available: true, file_count: 25 }, false)).toEqual({
+      canDismissFailure: false,
+      canDeleteIndex: false,
+    });
   });
 
   it("keeps root status polling enabled even when no active job is observed", () => {

@@ -25,7 +25,8 @@ import { auth } from "@/lib/auth";
 import { getApiKey } from "@/lib/db";
 import { ensureOrgApiKey, getMemberRole } from "@/lib/org-db";
 import { GET } from "./route";
-import { POST } from "./delete/route";
+import { POST as deleteRoot } from "./delete/route";
+import { POST as dismissRootFailure } from "./dismiss-failure/route";
 
 const getSession = vi.mocked(auth.api.getSession);
 const getApiKeyMock = vi.mocked(getApiKey);
@@ -56,8 +57,8 @@ function rootsRequest(orgId?: string) {
   return new NextRequest(url);
 }
 
-function deleteRequest(body: unknown) {
-  return new Request("http://localhost/api/roots/delete", {
+function rootActionRequest(path: "delete" | "dismiss-failure", body: unknown) {
+  return new Request(`http://localhost/api/roots/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: typeof body === "string" ? body : JSON.stringify(body),
@@ -173,7 +174,7 @@ describe("POST /api/roots/delete", () => {
   it("转发 root_id 并透传删除结果", async () => {
     fetchMock.mockResolvedValue(relayResponse(200, { deleted: true, deleted_files: 42 }));
 
-    const res = await POST(deleteRequest({ root_id: "root-1" }));
+    const res = await deleteRoot(rootActionRequest("delete", { root_id: "root-1" }));
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ deleted: true, deleted_files: 42 });
@@ -184,7 +185,7 @@ describe("POST /api/roots/delete", () => {
   });
 
   it("缺少 root_id 返回 400 且不请求 relay", async () => {
-    const res = await POST(deleteRequest({}));
+    const res = await deleteRoot(rootActionRequest("delete", {}));
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "缺少 root_id" });
@@ -192,7 +193,7 @@ describe("POST /api/roots/delete", () => {
   });
 
   it("body 非法 JSON 返回 400", async () => {
-    const res = await POST(deleteRequest("not-json{"));
+    const res = await deleteRoot(rootActionRequest("delete", "not-json{"));
 
     expect(res.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -201,7 +202,7 @@ describe("POST /api/roots/delete", () => {
   it("未登录返回 401", async () => {
     loginAs(null);
 
-    const res = await POST(deleteRequest({ root_id: "root-1" }));
+    const res = await deleteRoot(rootActionRequest("delete", { root_id: "root-1" }));
 
     expect(res.status).toBe(401);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -210,7 +211,7 @@ describe("POST /api/roots/delete", () => {
   it("有运行中任务时透传 409 与错误信息", async () => {
     fetchMock.mockResolvedValue(relayResponse(409, { error: "索引任务进行中" }));
 
-    const res = await POST(deleteRequest({ root_id: "root-1" }));
+    const res = await deleteRoot(rootActionRequest("delete", { root_id: "root-1" }));
 
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: "索引任务进行中" });
@@ -219,7 +220,7 @@ describe("POST /api/roots/delete", () => {
   it("上游错误无 error 字段时使用兜底文案", async () => {
     fetchMock.mockResolvedValue(relayResponse(500, {}));
 
-    const res = await POST(deleteRequest({ root_id: "root-1" }));
+    const res = await deleteRoot(rootActionRequest("delete", { root_id: "root-1" }));
 
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: "删除失败" });
@@ -228,7 +229,7 @@ describe("POST /api/roots/delete", () => {
   it("组织索引：member 角色删除返回 403（仅 owner 可删）", async () => {
     getMemberRoleMock.mockResolvedValue("member");
 
-    const res = await POST(deleteRequest({ root_id: "root-1", org_id: "org-1" }));
+    const res = await deleteRoot(rootActionRequest("delete", { root_id: "root-1", org_id: "org-1" }));
 
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ error: "仅组织所有者可删除组织索引" });
@@ -238,7 +239,7 @@ describe("POST /api/roots/delete", () => {
   it("组织索引：非成员删除返回 403", async () => {
     getMemberRoleMock.mockResolvedValue(null);
 
-    const res = await POST(deleteRequest({ root_id: "root-1", org_id: "org-1" }));
+    const res = await deleteRoot(rootActionRequest("delete", { root_id: "root-1", org_id: "org-1" }));
 
     expect(res.status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -248,7 +249,7 @@ describe("POST /api/roots/delete", () => {
     getMemberRoleMock.mockResolvedValue("owner");
     fetchMock.mockResolvedValue(relayResponse(200, { deleted: true }));
 
-    const res = await POST(deleteRequest({ root_id: "root-1", org_id: "org-1" }));
+    const res = await deleteRoot(rootActionRequest("delete", { root_id: "root-1", org_id: "org-1" }));
 
     expect(res.status).toBe(200);
     expect(ensureOrgApiKeyMock).toHaveBeenCalledWith("user-1", "org-1", "owner");
@@ -256,5 +257,64 @@ describe("POST /api/roots/delete", () => {
     expect(init.headers.Authorization).toBe("Bearer sk-org");
     // relay 只收 root_id（org 归属由密钥的 org_id 决定）
     expect(JSON.parse(init.body)).toEqual({ root_id: "root-1" });
+  });
+});
+
+describe("POST /api/roots/dismiss-failure", () => {
+  it("转发 root_id 并透传清理结果", async () => {
+    fetchMock.mockResolvedValue(relayResponse(200, { dismissed: true, dismissed_jobs: 2 }));
+
+    const res = await dismissRootFailure(rootActionRequest("dismiss-failure", { root_id: "root-1" }));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ dismissed: true, dismissed_jobs: 2 });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain("/mcp/dismiss-root-failure");
+    expect(JSON.parse(init.body)).toEqual({ root_id: "root-1" });
+    expect(init.headers.Authorization).toBe("Bearer sk-test");
+  });
+
+  it("缺少 root_id 返回 400", async () => {
+    const res = await dismissRootFailure(rootActionRequest("dismiss-failure", {}));
+
+    expect(res.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("运行中任务冲突时透传 409", async () => {
+    fetchMock.mockResolvedValue(relayResponse(409, { error: "索引任务进行中" }));
+
+    const res = await dismissRootFailure(rootActionRequest("dismiss-failure", { root_id: "root-1" }));
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "索引任务进行中" });
+  });
+
+  it("组织 member 无权清理失败记录", async () => {
+    getMemberRoleMock.mockResolvedValue("member");
+
+    const res = await dismissRootFailure(rootActionRequest("dismiss-failure", {
+      root_id: "root-1",
+      org_id: "org-1",
+    }));
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "仅组织所有者可清理组织索引失败记录" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("组织 owner 使用组织密钥清理失败记录", async () => {
+    getMemberRoleMock.mockResolvedValue("owner");
+    fetchMock.mockResolvedValue(relayResponse(200, { dismissed: true, dismissed_jobs: 1 }));
+
+    const res = await dismissRootFailure(rootActionRequest("dismiss-failure", {
+      root_id: "root-1",
+      org_id: "org-1",
+    }));
+
+    expect(res.status).toBe(200);
+    expect(ensureOrgApiKeyMock).toHaveBeenCalledWith("user-1", "org-1", "owner");
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers.Authorization).toBe("Bearer sk-org");
   });
 });
