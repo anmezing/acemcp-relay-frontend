@@ -211,7 +211,7 @@
     "status": "Status",
     "refreshLeaderboard": "Refresh leaderboard",
     "dailyLeaderboard": "Daily Leaderboard",
-    "liveMcpToolRequests": "Live successful MCP tool calls (excluding initialization, tool listing, and other protocol traffic)",
+    "liveLeaderboardRequests": "Live successful code retrieval and prompt-enhancement calls (excluding indexing)",
     "noRankingDataYet": "No ranking data yet",
     "you": "You",
     "requests": "requests"

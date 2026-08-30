@@ -1171,7 +1171,13 @@ export async function getHealthCheckStats(days: number = 7): Promise<{
 
 // Leaderboard functions
 const LEADERBOARD_TIMEZONE = "Asia/Shanghai";
-const LEADERBOARD_REQUEST_PATH_PATTERN = "/mcp/tools/call/%";
+const LEADERBOARD_REQUEST_PATHS = [
+  "/mcp/tools/call/codebase-retrieval",
+  "/mcp/tools/call/codebase_enhance_prompt",
+] as const;
+const LEADERBOARD_REQUEST_PATHS_SQL = LEADERBOARD_REQUEST_PATHS.map(
+  (path) => `'${path}'`
+).join(", ");
 
 export interface LeaderboardEntry {
   rank: number;
@@ -1200,9 +1206,9 @@ export async function getLeaderboard(dateStr?: string): Promise<LeaderboardEntry
 
   const client = await pool.connect();
   try {
-    // request_logs is the source of truth. Count successful MCP tool calls directly
-    // so indexing, retrieval, symbol graph, and prompt enhancement requests all
-    // appear immediately while protocol traffic such as initialize/tools/list does not.
+    // request_logs is the source of truth. Only retrieval and prompt-enhancement
+    // calls represent leaderboard usage; indexing, status polling, symbol-graph,
+    // and protocol traffic are intentionally excluded.
     const result = await client.query(
       `WITH ranked AS (
          SELECT
@@ -1214,7 +1220,7 @@ export async function getLeaderboard(dateStr?: string): Promise<LeaderboardEntry
            )::int AS rank
          FROM request_logs rl
          INNER JOIN "user" u ON u.id = rl.user_id
-         WHERE rl.request_path LIKE '${LEADERBOARD_REQUEST_PATH_PATTERN}'
+         WHERE rl.request_path IN (${LEADERBOARD_REQUEST_PATHS_SQL})
            AND rl.status_code = 200
            AND rl.request_timestamp >= ($1::date::timestamp AT TIME ZONE '${LEADERBOARD_TIMEZONE}')
            AND rl.request_timestamp < (($1::date + 1)::timestamp AT TIME ZONE '${LEADERBOARD_TIMEZONE}')

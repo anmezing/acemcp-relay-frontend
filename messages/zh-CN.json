@@ -211,7 +211,7 @@
     "status": "状态监控",
     "refreshLeaderboard": "刷新排行榜",
     "dailyLeaderboard": "每日排行榜",
-    "liveMcpToolRequests": "实时统计成功的 MCP 工具调用（不含初始化、工具列表等协议请求）",
+    "liveLeaderboardRequests": "实时统计代码检索与提示词增强的成功调用（不含索引请求）",
     "noRankingDataYet": "暂无排行数据",
     "you": "你",
     "requests": "次"

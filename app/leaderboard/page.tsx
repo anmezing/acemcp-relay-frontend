@@ -196,7 +196,7 @@ export default function LeaderboardPage() {
         <div className="text-center mb-8">
           <Trophy className="w-12 h-12 text-amber-400 mx-auto mb-4" />
           <h1 className="text-2xl font-semibold text-white mb-2">{t("dailyLeaderboard")}</h1>
-          <p className="text-slate-400 text-sm mb-4">{t("liveMcpToolRequests")}</p>
+          <p className="text-slate-400 text-sm mb-4">{t("liveLeaderboardRequests")}</p>
 
           {/* 日期选择器 - Segment 风格 */}
           <div className="flex justify-center">
