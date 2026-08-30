@@ -1,5 +1,6 @@
 export type IndexFailureCode =
   | "heartbeat_timeout"
+  | "embedding_space_changed"
   | "upstream_bad_gateway"
   | "provider_billing"
   | "provider_rate_limited"
@@ -20,6 +21,7 @@ export type IndexFailureOrigin =
 
 export type IndexRecoveryCode =
   | "restart_client"
+  | "reset_root"
   | "retry_after_service_recovers"
   | "fix_provider_billing"
   | "retry_later"
@@ -44,6 +46,7 @@ export interface IndexFailurePresentation {
 
 const failureCodes = new Set<IndexFailureCode>([
   "heartbeat_timeout",
+  "embedding_space_changed",
   "upstream_bad_gateway",
   "provider_billing",
   "provider_rate_limited",
@@ -64,6 +67,7 @@ const failureOrigins = new Set<IndexFailureOrigin>([
 ]);
 const recoveryCodes = new Set<IndexRecoveryCode>([
   "restart_client",
+  "reset_root",
   "retry_after_service_recovers",
   "fix_provider_billing",
   "retry_later",
@@ -81,6 +85,13 @@ function classifyLegacyFailure(detail: string): Omit<IndexFailurePresentation, "
   const lower = detail.trim().toLowerCase();
   if (includesAny(lower, ["heartbeat timed out", "heartbeat timeout"])) {
     return { code: "heartbeat_timeout", origin: "relay", recovery: "restart_client" };
+  }
+  if (includesAny(lower, [
+    "cloud embedding space changed",
+    "embedding space changed",
+    "clear the tenant root before starting a new index job",
+  ])) {
+    return { code: "embedding_space_changed", origin: "remote_index", recovery: "reset_root" };
   }
   if (includesAny(lower, ["remote-index 502", "bad gateway", "cloudflare", "origin web server returned"])) {
     return { code: "upstream_bad_gateway", origin: "remote_index", recovery: "retry_after_service_recovers" };

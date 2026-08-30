@@ -38,15 +38,17 @@ export interface IndexRootActions {
 export function resolveRootIndexActions(
   root: IndexRootStatusLike,
   canManage: boolean,
+  requiresRootReset = false,
 ): IndexRootActions {
   if (!canManage) {
     return { canDismissFailure: false, canDeleteIndex: false };
   }
   const state = resolveRootIndexState(root);
   const indexAvailable = root.index_available ?? Boolean(root.indexed_at);
+  const resetFailedRoot = state === "failed" && requiresRootReset;
   return {
-    canDismissFailure: state === "failed",
-    canDeleteIndex: indexAvailable && state !== "building",
+    canDismissFailure: state === "failed" && !resetFailedRoot,
+    canDeleteIndex: (indexAvailable || resetFailedRoot) && state !== "building",
   };
 }
 

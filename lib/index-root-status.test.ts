@@ -78,6 +78,14 @@ describe("index root status", () => {
       canDismissFailure: false,
       canDeleteIndex: false,
     });
+    expect(resolveRootIndexActions(
+      { index_state: "failed", index_available: false, file_count: 0 },
+      true,
+      true,
+    )).toEqual({
+      canDismissFailure: false,
+      canDeleteIndex: true,
+    });
   });
 
   it("keeps root status polling enabled even when no active job is observed", () => {

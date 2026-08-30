@@ -16,6 +16,16 @@ describe("index failure presentation", () => {
     });
   });
 
+  it("classifies an embedding-space change as requiring a full root reset", () => {
+    expect(resolveIndexFailurePresentation({
+      index_error: "LCE cloud index begin failed: cloud embedding space changed; clear the tenant root before starting a new index job",
+    })).toMatchObject({
+      code: "embedding_space_changed",
+      origin: "remote_index",
+      recovery: "reset_root",
+    });
+  });
+
   it("classifies legacy Cloudflare 502 responses", () => {
     expect(resolveIndexFailurePresentation({
       index_error: 'remote-index 502: {"title":"Error 502: Bad gateway","detail":"origin web server returned an invalid response"}',

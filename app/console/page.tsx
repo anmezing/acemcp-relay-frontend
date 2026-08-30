@@ -259,6 +259,7 @@ type RootManagementAction = {
 
 const INDEX_FAILURE_TITLE_KEYS: Record<IndexFailureCode, string> = {
   heartbeat_timeout: "indexFailureHeartbeatTimeout",
+  embedding_space_changed: "indexFailureEmbeddingSpaceChanged",
   upstream_bad_gateway: "indexFailureUpstreamBadGateway",
   provider_billing: "indexFailureProviderBilling",
   provider_rate_limited: "indexFailureProviderRateLimited",
@@ -281,6 +282,7 @@ const INDEX_FAILURE_ORIGIN_KEYS: Record<IndexFailureOrigin, string> = {
 
 const INDEX_RECOVERY_KEYS: Record<IndexRecoveryCode, string> = {
   restart_client: "indexRecoveryRestartClient",
+  reset_root: "indexRecoveryResetRoot",
   retry_after_service_recovers: "indexRecoveryServiceRecovers",
   fix_provider_billing: "indexRecoveryFixProviderBilling",
   retry_later: "indexRecoveryRetryLater",
@@ -2600,7 +2602,10 @@ function RootManagementButtons({
   onDelete: (root: RelayRoot) => void;
 }) {
   const t = useTranslations("Console");
-  const actions = resolveRootIndexActions(root, canManage);
+  const state = resolveRootIndexState(root);
+  const requiresRootReset =
+    state === "failed" && resolveIndexFailurePresentation(root).recovery === "reset_root";
+  const actions = resolveRootIndexActions(root, canManage, requiresRootReset);
   if (!actions.canDismissFailure && !actions.canDeleteIndex) return null;
 
   return (
@@ -2622,13 +2627,17 @@ function RootManagementButtons({
           variant="ghost"
           size="sm"
           onClick={() => onDelete(root)}
-          className="h-8 w-8 p-0 text-slate-500 hover:bg-red-500/10 hover:text-red-400"
+          className={cn(
+            "h-8 text-slate-500 hover:bg-red-500/10 hover:text-red-400",
+            requiresRootReset ? "px-2" : "w-8 p-0",
+          )}
           aria-label={t("deleteBranchIndex", {
             workspace: root.workspace_id,
             branch: rootBranchLabel(root) || t("defaultBranch"),
           })}
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2 className={cn("h-4 w-4", requiresRootReset && "mr-1")} />
+          {requiresRootReset && <span className="text-[11px]">{t("resetCloudIndex")}</span>}
         </Button>
       )}
     </div>
