@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { buildCloudMcpConfigJson, buildCloudMcpConfigToml } from "@/lib/mcp-config";
+import {
+  buildCloudMcpConfigJson,
+  buildCloudMcpConfigToml,
+  type McpLaunchMode,
+} from "@/lib/mcp-config";
 import {
   Copy, Eye, EyeOff, RefreshCw, Info, LogOut, Loader2, Github, Trash2, Mail,
   Key, FileText, User, Database, ScrollText, Building2, Users, Coins,
@@ -51,6 +55,7 @@ import { DEFAULT_MENU_VISIBILITY, normalizeMenuVisibility, ConsoleMenuId } from 
 import { LceBrand } from "@/components/LceBrand";
 import { authProviderLabel } from "@/lib/auth-provider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { CurrentVersionTab } from "@/components/CurrentVersionTab";
 import { useLocale, useTranslations } from "next-intl";
 import {
   hasBuildingIndexRoot,
@@ -61,7 +66,7 @@ import {
 } from "@/lib/index-root-status";
 
 type Tab =
-  | "keys" | "plans" | "docs" | "profile" | "model-config" | "team"
+  | "keys" | "plans" | "docs" | "profile" | "model-config" | "version" | "team"
   | "index" | "logs"
   | "org" | "users" | "call-stats" | "quota" | "admin-orgs" | "plans-admin" | "models"
   | "system-settings" | "system-logs" | "menu-admin";
@@ -87,6 +92,7 @@ const ALL_SECTIONS: SidebarSection[] = [
       { id: "team", icon: <Building2 className="w-4 h-4" /> },
       { id: "docs", icon: <FileText className="w-4 h-4" /> },
       { id: "model-config", icon: <Cpu className="w-4 h-4" /> },
+      { id: "version", icon: <Info className="w-4 h-4" /> },
       { id: "profile", icon: <User className="w-4 h-4" /> },
     ],
   },
@@ -432,13 +438,14 @@ export default function ConsolePage() {
   const { data: myOrgs } = authClient.useListOrganizations();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mcpConfigFormat, setMcpConfigFormat] = useState<"json" | "toml">("json");
+  const [mcpLaunchMode, setMcpLaunchMode] = useState<McpLaunchMode>("npx");
   const [mcpRepoPath, setMcpRepoPath] = useState("");
 
   const mcpConfig = useMemo(() => {
     return mcpConfigFormat === "toml"
-      ? buildCloudMcpConfigToml(fullKey, mcpRepoPath)
-      : buildCloudMcpConfigJson(fullKey, mcpRepoPath);
-  }, [fullKey, mcpConfigFormat, mcpRepoPath]);
+      ? buildCloudMcpConfigToml(fullKey, mcpRepoPath, mcpLaunchMode)
+      : buildCloudMcpConfigJson(fullKey, mcpRepoPath, mcpLaunchMode);
+  }, [fullKey, mcpConfigFormat, mcpLaunchMode, mcpRepoPath]);
 
   const generateAndCopyConfig = async () => {
     if (loading) return;
@@ -454,8 +461,8 @@ export default function ConsolePage() {
       await fetchKeyInfo();
 
       const config = mcpConfigFormat === "toml"
-        ? buildCloudMcpConfigToml(key, mcpRepoPath)
-        : buildCloudMcpConfigJson(key, mcpRepoPath);
+        ? buildCloudMcpConfigToml(key, mcpRepoPath, mcpLaunchMode)
+        : buildCloudMcpConfigJson(key, mcpRepoPath, mcpLaunchMode);
       await navigator.clipboard.writeText(config);
       markConfigCopied();
     } catch (error) {
@@ -1310,15 +1317,46 @@ export default function ConsolePage() {
                               {t("mcpProjectRootHelp")}
                             </p>
                           </div>
-                          <div className="mb-4 rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] p-3 text-sm text-slate-400">
-                            <p className="text-slate-300">{t("optionalGlobalInstallation")}</p>
-                            <code className="mt-2 block overflow-x-auto whitespace-pre font-mono text-xs text-cyan-300">
-                              npm install -g @anmezing/lce-cloud@latest
-                            </code>
-                            <p className="mt-2 text-xs text-slate-500">
-                              {t("afterInstallationReplace")} <code className="text-slate-300">npx</code> {t("with")} {" "}
-                              <code className="text-slate-300">lce-cloud</code>{t("theDefaultNpxConfigurationNeedsNoInstallation")}
+                          <div className="mb-4 rounded-lg border border-cyan-500/15 bg-cyan-500/[0.04] p-3">
+                            <p className="mb-2 text-xs text-slate-300">{t("mcpLaunchMode")}</p>
+                            <div
+                              role="radiogroup"
+                              aria-label={t("mcpLaunchMode")}
+                              className="grid gap-2 sm:grid-cols-2"
+                            >
+                              {([
+                                { value: "npx" as const, label: t("npxLaunchMode") },
+                                { value: "global" as const, label: t("globalLaunchMode") },
+                              ]).map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={mcpLaunchMode === option.value}
+                                  onClick={() => {
+                                    setMcpLaunchMode(option.value);
+                                    resetConfigCopied();
+                                    setConfigError("");
+                                  }}
+                                  className={cn(
+                                    "rounded-md border px-3 py-2 text-left text-xs transition-colors",
+                                    mcpLaunchMode === option.value
+                                      ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-200"
+                                      : "border-white/[0.08] bg-white/[0.02] text-slate-400 hover:border-white/[0.16] hover:text-slate-300",
+                                  )}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                            <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                              {mcpLaunchMode === "npx" ? t("npxLaunchModeHelp") : t("globalLaunchModeHelp")}
                             </p>
+                            {mcpLaunchMode === "global" && (
+                              <code className="mt-2 block overflow-x-auto whitespace-pre font-mono text-xs text-cyan-300">
+                                npm install -g @anmezing/lce-cloud@latest
+                              </code>
+                            )}
                           </div>
 
                           {/* Format toggle: JSON / TOML */}
@@ -1499,6 +1537,12 @@ export default function ConsolePage() {
                         </Button>
                       </div>
                     )}
+                  </TabsContent>
+
+                  {/* 当前客户端发布版本 */}
+                  <TabsContent value="version" className="animate-tab-fade-in m-0 flex-1 md:overflow-y-auto scrollbar-thin md:pr-2">
+                    <h2 className="text-lg font-medium text-white mb-6">{t("currentVersion")}</h2>
+                    <CurrentVersionTab />
                   </TabsContent>
 
                   {/* 用户信息 */}

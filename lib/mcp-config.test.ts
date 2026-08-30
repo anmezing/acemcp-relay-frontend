@@ -27,6 +27,23 @@ describe("MCP config", () => {
       ]);
     });
 
+    it("generates a config for an already-installed global client", () => {
+      const config = JSON.parse(buildCloudMcpConfigJson("sk-test", undefined, "global"));
+
+      expect(config).toEqual({
+        mcpServers: {
+          lce: {
+            command: "lce-cloud",
+            args: ["--key", "sk-test"],
+          },
+        },
+      });
+
+      const toml = buildCloudMcpConfigToml("sk-test", undefined, "global");
+      expect(toml).toContain('command = "lce-cloud"');
+      expect(toml).toContain('args = ["--key", "sk-test"]');
+    });
+
     it("generates TOML config", () => {
       const toml = buildCloudMcpConfigToml("sk-test");
 
@@ -49,6 +66,12 @@ describe("MCP config", () => {
 
       const toml = buildCloudMcpConfigToml("sk-test", windowsPath);
       expect(toml).toContain('"--repo", "D:\\\\code\\\\project with spaces"');
+
+      const globalConfig = JSON.parse(buildCloudMcpConfigJson("sk-test", windowsPath, "global"));
+      expect(globalConfig.mcpServers.lce).toEqual({
+        command: "lce-cloud",
+        args: ["--key", "sk-test", "--repo", windowsPath],
+      });
     });
 
     it("omits blank project roots", () => {
