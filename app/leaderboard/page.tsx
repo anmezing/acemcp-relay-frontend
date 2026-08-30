@@ -12,6 +12,8 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import type { AppLocale } from "@/i18n/config";
 import { useLocale, useTranslations } from "next-intl";
 
+const LEADERBOARD_REFRESH_INTERVAL_MS = 30_000;
+
 // 获取最近三天的日期选项（使用 Asia/Shanghai 时区）
 function getDateOptions(locale: AppLocale) {
   const options: { date: string; label: string }[] = [];
@@ -101,6 +103,21 @@ export default function LeaderboardPage() {
     return () => controller.abort();
   }, [session, selectedDate, load]);
 
+  useEffect(() => {
+    if (!session || selectedDate !== dateOptions[0]?.date) return;
+
+    // 当天排行榜直接读取请求日志；页面可见时每 30 秒静默刷新一次。
+    const refresh = () => {
+      if (document.visibilityState === "visible") void load(selectedDate);
+    };
+    const intervalId = window.setInterval(refresh, LEADERBOARD_REFRESH_INTERVAL_MS);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [session, selectedDate, dateOptions, load]);
+
   const handleDateChange = (date: string) => {
     setSelectedDate(date);
   };
@@ -179,7 +196,7 @@ export default function LeaderboardPage() {
         <div className="text-center mb-8">
           <Trophy className="w-12 h-12 text-amber-400 mx-auto mb-4" />
           <h1 className="text-2xl font-semibold text-white mb-2">{t("dailyLeaderboard")}</h1>
-          <p className="text-slate-400 text-sm mb-4">{t("liveCodeRetrievalRequests")}</p>
+          <p className="text-slate-400 text-sm mb-4">{t("liveMcpToolRequests")}</p>
 
           {/* 日期选择器 - Segment 风格 */}
           <div className="flex justify-center">

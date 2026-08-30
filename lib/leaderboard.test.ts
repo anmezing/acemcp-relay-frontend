@@ -56,7 +56,7 @@ describe("live leaderboard aggregation", () => {
     }
   );
 
-  it("aggregates completed retrieval logs directly instead of reading the snapshot table", async () => {
+  it("aggregates successful MCP tool calls directly instead of reading the snapshot table", async () => {
     await expect(getLeaderboard("2026-08-29")).resolves.toEqual([
       {
         rank: 1,
@@ -71,7 +71,8 @@ describe("live leaderboard aggregation", () => {
     const [sql, params] = mocks.query.mock.calls[0] as [string, unknown[]];
     expect(sql).toContain("FROM request_logs rl");
     expect(sql).not.toContain("FROM leaderboard");
-    expect(sql).toContain("/mcp/tools/call/codebase-retrieval");
+    expect(sql).toContain("rl.request_path LIKE '/mcp/tools/call/%'");
+    expect(sql).not.toContain("rl.request_path =");
     expect(sql).toContain("rl.status_code = 200");
     expect(sql).toContain("AT TIME ZONE 'Asia/Shanghai'");
     expect(sql).toContain("ROW_NUMBER()");
