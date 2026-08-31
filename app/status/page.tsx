@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { LceBrand } from "@/components/LceBrand";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useLocale, useTranslations } from "next-intl";
+import { CLIENT_RUNTIME_POLICY } from "@/lib/client-runtime-policy";
 
 interface HealthCheck {
   id: number;
@@ -67,7 +68,7 @@ export default function StatusPage() {
     setProbing(false);
     setLoading(true);
     try {
-      const res = await fetch("/api/health/history?limit=60");
+      const res = await fetch(`/api/health/history?limit=${CLIENT_RUNTIME_POLICY.healthHistoryLimit}`);
       if (res.ok) {
         const data: HistoryData = await res.json();
         setHistory(data.history);
@@ -91,13 +92,13 @@ export default function StatusPage() {
   // Poll for new result after nextCheckAt arrives (backend may still be probing)
   const waitForNewResult = useCallback(async () => {
     setProbing(true);
-    const maxAttempts = 12; // 12 * 5s = 60s max wait
+    const maxAttempts = CLIENT_RUNTIME_POLICY.healthResultPollAttempts;
     let attempt = 0;
 
     const poll = async () => {
       attempt++;
       try {
-        const res = await fetch("/api/health/history?limit=1");
+        const res = await fetch(`/api/health/history?limit=${CLIENT_RUNTIME_POLICY.healthLatestLimit}`);
         if (res.ok) {
           const data: HistoryData = await res.json();
           if (data.history.length > 0 && data.history[0].id !== lastCheckIdRef.current) {
@@ -110,7 +111,7 @@ export default function StatusPage() {
       } catch { /* ignore */ }
 
       if (attempt < maxAttempts) {
-        pollRef.current = setTimeout(poll, 5000);
+        pollRef.current = setTimeout(poll, CLIENT_RUNTIME_POLICY.healthResultPollMs);
       } else {
         // Give up waiting, just refresh whatever we have
         setProbing(false);
@@ -144,7 +145,7 @@ export default function StatusPage() {
           waitForNewResult();
         }
       }
-    }, 1000);
+    }, CLIENT_RUNTIME_POLICY.healthCountdownTickMs);
 
     return () => {
       if (countdownRef.current) clearInterval(countdownRef.current);
@@ -204,11 +205,11 @@ export default function StatusPage() {
         : "text-red-400"
     : "text-slate-400";
 
-  // History bars: always 60 slots, padded with null on the left (oldest→newest)
-  const TOTAL_BARS = 60;
+  // History bars follow the deployment-configured history window and are padded on the left (oldest→newest).
+  const totalBars = CLIENT_RUNTIME_POLICY.healthHistoryLimit;
   const reversed = [...history].reverse();
   const historyBars: (HealthCheck | null)[] = [
-    ...Array<null>(Math.max(0, TOTAL_BARS - reversed.length)).fill(null),
+    ...Array<null>(Math.max(0, totalBars - reversed.length)).fill(null),
     ...reversed,
   ];
 
@@ -386,7 +387,7 @@ export default function StatusPage() {
                   {historyBars.map((check, i) => {
                     const isSuccess = check?.status === "success";
                     const totalMs = check ? (check.codebaseRetrievalMs || 0) + (check.tcpPingMs || 0) : 0;
-                    const isSlow = isSuccess && totalMs > 5000;
+                    const isSlow = isSuccess && totalMs > CLIENT_RUNTIME_POLICY.healthSlowThresholdMs;
 
                     return (
                       <div
@@ -404,7 +405,7 @@ export default function StatusPage() {
                         onMouseEnter={() => {
                           setActiveBarIndex(i);
                           if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
-                          hoverTimerRef.current = setTimeout(() => setHoveredIndex(i), 120);
+                          hoverTimerRef.current = setTimeout(() => setHoveredIndex(i), CLIENT_RUNTIME_POLICY.hoverIntentMs);
                         }}
                         onMouseLeave={() => {
                           setActiveBarIndex(null);

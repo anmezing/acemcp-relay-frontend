@@ -67,6 +67,8 @@ import {
   resolveRootIndexState,
   shouldShowRootsSection,
 } from "@/lib/index-root-status";
+import { CLIENT_RUNTIME_POLICY } from "@/lib/client-runtime-policy";
+import { MILLISECONDS_PER_DAY } from "@/lib/time-policy";
 import {
   resolveIndexFailurePresentation,
   type IndexFailureCode,
@@ -189,7 +191,7 @@ interface UserInfo {
 }
 
 function githubAccountAgeDays(createdAt: string): number {
-  return Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000);
+  return Math.floor((Date.now() - new Date(createdAt).getTime()) / MILLISECONDS_PER_DAY);
 }
 
 interface KeyInfo {
@@ -260,6 +262,7 @@ type RootManagementAction = {
 const INDEX_FAILURE_TITLE_KEYS: Record<IndexFailureCode, string> = {
   heartbeat_timeout: "indexFailureHeartbeatTimeout",
   embedding_space_changed: "indexFailureEmbeddingSpaceChanged",
+  embedding_input_rejected: "indexFailureEmbeddingInputRejected",
   upstream_bad_gateway: "indexFailureUpstreamBadGateway",
   provider_billing: "indexFailureProviderBilling",
   provider_rate_limited: "indexFailureProviderRateLimited",
@@ -283,6 +286,7 @@ const INDEX_FAILURE_ORIGIN_KEYS: Record<IndexFailureOrigin, string> = {
 const INDEX_RECOVERY_KEYS: Record<IndexRecoveryCode, string> = {
   restart_client: "indexRecoveryRestartClient",
   reset_root: "indexRecoveryResetRoot",
+  fix_embedding_input: "indexRecoveryFixEmbeddingInput",
   retry_after_service_recovers: "indexRecoveryServiceRecovers",
   fix_provider_billing: "indexRecoveryFixProviderBilling",
   retry_later: "indexRecoveryRetryLater",
@@ -416,7 +420,7 @@ function isTenantStats(value: unknown): value is TenantStats {
 
 // 复制成功反馈：ref 存 timer id，重复点击先清旧 timer，卸载时清理（防
 // 卸载后 setState 与连点叠 timer）
-function useCopyFeedback(duration = 2000): {
+function useCopyFeedback(duration = CLIENT_RUNTIME_POLICY.noticeDurationMs): {
   copied: boolean;
   trigger: () => void;
   reset: () => void;
@@ -493,7 +497,7 @@ export default function ConsolePage() {
   const { data: myOrgs } = authClient.useListOrganizations();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mcpConfigFormat, setMcpConfigFormat] = useState<"json" | "toml">("json");
-  const [mcpLaunchMode, setMcpLaunchMode] = useState<McpLaunchMode>("npx");
+  const [mcpLaunchMode, setMcpLaunchMode] = useState<McpLaunchMode>("package-runner");
   const [mcpRepoPath, setMcpRepoPath] = useState("");
 
   const mcpConfig = useMemo(() => {
@@ -758,8 +762,8 @@ export default function ConsolePage() {
       // 第 1 页或强制刷新时获取统计数据
       const needStats = forceRefreshStats || page === 1;
       const url = needStats
-        ? `/api/logs?page=${page}&limit=20&withStats=true`
-        : `/api/logs?page=${page}&limit=20`;
+        ? `/api/logs?page=${page}&limit=${CLIENT_RUNTIME_POLICY.logsPageSize}&withStats=true`
+        : `/api/logs?page=${page}&limit=${CLIENT_RUNTIME_POLICY.logsPageSize}`;
 
       const res = await fetch(url);
       if (res.ok) {
@@ -784,10 +788,13 @@ export default function ConsolePage() {
     } catch (error) {
       console.error("获取请求日志失败:", error);
     } finally {
-      // 确保动画至少显示 300ms
+      // 确保加载反馈至少达到统一的可感知时长
       const elapsed = Date.now() - startTime;
-      if (elapsed < 300) {
-        await new Promise(resolve => setTimeout(resolve, 300 - elapsed));
+      if (elapsed < CLIENT_RUNTIME_POLICY.minimumLoadingFeedbackMs) {
+        await new Promise(resolve => setTimeout(
+          resolve,
+          CLIENT_RUNTIME_POLICY.minimumLoadingFeedbackMs - elapsed,
+        ));
       }
       setLogsLoading(false);
     }
@@ -826,7 +833,7 @@ export default function ConsolePage() {
 
     const intervalId = setInterval(() => {
       fetchLogs(1, true);  // 自动刷新回到第1页并获取统计
-    }, 5000);
+    }, CLIENT_RUNTIME_POLICY.logsAutoRefreshMs);
 
     return () => clearInterval(intervalId);
   }, [autoRefresh, activeTab, fetchLogs]);
@@ -843,7 +850,7 @@ export default function ConsolePage() {
   }, [activeTab, session, roots, fetchRoots]);
 
   // 索引状态轮询：仅在索引管理页且页面可见时进行；有构建任务时缩短到
-  // 5 秒，否则 30 秒。两种频率都必须刷新根列表：任务可能在两个统计轮询
+  // 使用集中运行策略中的活动/空闲频率。两种频率都必须刷新根列表：任务可能在两个统计轮询
   // 之间快速完成或失败，仅依赖 active_job 会永久漏掉这次状态变化。
   const hasActiveJob = Boolean(tenantStats?.active_job) || hasBuildingIndexRoot(roots);
   const {
@@ -1364,7 +1371,7 @@ export default function ConsolePage() {
                           </div>
 
                           <p className="mb-4 text-sm leading-relaxed text-slate-400">
-                            {t("copyTheConfigurationIntoYourIdeNpx")}
+                            {t("copyTheConfigurationIntoYourClient")}
                           </p>
                           <div className="mb-4">
                             <Label htmlFor="mcp-repo-path" className="mb-2 block text-xs text-slate-400">
@@ -1394,7 +1401,7 @@ export default function ConsolePage() {
                               className="grid gap-2 sm:grid-cols-2"
                             >
                               {([
-                                { value: "npx" as const, label: t("npxLaunchMode") },
+                                { value: "package-runner" as const, label: t("packageRunnerLaunchMode") },
                                 { value: "global" as const, label: t("globalLaunchMode") },
                               ]).map((option) => (
                                 <button
@@ -1419,13 +1426,8 @@ export default function ConsolePage() {
                               ))}
                             </div>
                             <p className="mt-2 text-xs leading-relaxed text-slate-500">
-                              {mcpLaunchMode === "npx" ? t("npxLaunchModeHelp") : t("globalLaunchModeHelp")}
+                              {mcpLaunchMode === "package-runner" ? t("packageRunnerLaunchModeHelp") : t("globalLaunchModeHelp")}
                             </p>
-                            {mcpLaunchMode === "global" && (
-                              <code className="mt-2 block overflow-x-auto whitespace-pre font-mono text-xs text-cyan-300">
-                                npm install -g @anmezing/lce-cloud@latest
-                              </code>
-                            )}
                           </div>
 
                           {/* Format toggle: JSON / TOML */}
@@ -1812,7 +1814,7 @@ export default function ConsolePage() {
                             <IndexingProgress job={tenantStats.active_job} />
                           </div>
                         )}
-                        <p>{t("noIndexHasBeenCreated")}{t("startYourIdeAfterSetupTheFirst")}</p>
+                        <p>{t("noIndexHasBeenCreated")}{t("startYourClientAfterSetup")}</p>
                         <Button
                           variant="glass"
                           size="sm"
@@ -2603,14 +2605,16 @@ function RootManagementButtons({
 }) {
   const t = useTranslations("Console");
   const state = resolveRootIndexState(root);
-  const requiresRootReset =
-    state === "failed" && resolveIndexFailurePresentation(root).recovery === "reset_root";
+  const failureRecovery =
+    state === "failed" ? resolveIndexFailurePresentation(root).recovery : undefined;
+  const requiresRootReset = failureRecovery === "reset_root";
+  const requiresInputRepair = failureRecovery === "fix_embedding_input";
   const actions = resolveRootIndexActions(root, canManage, requiresRootReset);
   if (!actions.canDismissFailure && !actions.canDeleteIndex) return null;
 
   return (
     <div className={cn("flex shrink-0 items-center gap-1", compact && "flex-col items-end sm:flex-row")}>
-      {actions.canDismissFailure && (
+      {actions.canDismissFailure && !requiresInputRepair && (
         <Button
           variant="ghost"
           size="sm"
@@ -2732,7 +2736,7 @@ function RootsSection({
         </div>
       ) : roots.length === 0 ? (
         <div className="rounded-lg border border-white/[0.04] bg-[#0a0f1a]/60 px-4 py-6 text-center text-xs text-slate-500">
-          {t("noIndexedProjectsYetConnectMcpIn")}
+          {t("noIndexedProjectsYetConnectMcp")}
         </div>
       ) : (
         <div className="space-y-2">
@@ -2828,8 +2832,7 @@ function RootsSection({
   );
 }
 
-// 配置说明第 2 步：引导用户在 CLAUDE.md / AGENTS.md 中声明 LCE 使用规则
-// （只加 MCP 配置不保证代理会用，需要项目规则显式要求）
+// 配置说明第 2 步：引导用户通过 Agent 支持的项目级规则机制启用 LCE
 function AgentRulesCard() {
   const locale = useLocale();
   const t = useTranslations("Console");
@@ -2851,10 +2854,7 @@ function AgentRulesCard() {
           <h3 className="text-white font-medium">{t("makeLceTheAgentSFirstChoice")}</h3>
         </div>
         <p className="text-slate-400 text-sm mb-4 leading-relaxed">
-          {t("addingAnMcpServerDoesNotGuarantee")} {" "}
-          <code className="text-cyan-400 text-xs">CLAUDE.md</code> /{" "}
-          <code className="text-cyan-400 text-xs">AGENTS.md</code>
-          {t("cursorUsersCanAlsoPutItIn")} <code className="text-cyan-400 text-xs">.cursor/rules</code>{t("soTheAgentUsesLceSemanticSearch")}
+          {t("addingAnMcpServerDoesNotGuarantee")}
         </p>
         <div className="relative group">
           <div className="bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-3 font-mono text-xs overflow-x-auto">

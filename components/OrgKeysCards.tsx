@@ -8,6 +8,7 @@ import { Building2, Copy, Crown, FileCode2 } from "lucide-react";
 import { buildCloudMcpConfigJson } from "@/lib/mcp-config";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
+import { CLIENT_RUNTIME_POLICY } from "@/lib/client-runtime-policy";
 
 interface KeyListItem {
   orgId: string | null;
@@ -54,7 +55,7 @@ export function OrgKeysCards() {
         delete next[orgId];
         return next;
       });
-    }, 2000);
+    }, CLIENT_RUNTIME_POLICY.noticeDurationMs);
   };
 
   const revealKey = async (orgId: string): Promise<string> => {

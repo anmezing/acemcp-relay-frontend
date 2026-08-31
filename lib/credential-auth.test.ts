@@ -3,6 +3,7 @@ import {
   credentialAuthErrorMessage,
   emailRegistrationEnabledFromResponse,
   oauthAuthErrorMessage,
+  passwordPolicyFromResponse,
   registrationAvailabilityFromResponse,
   validateCredentialFields,
 } from "./credential-auth";
@@ -27,14 +28,27 @@ describe("credential auth form", () => {
     expect(emailRegistrationEnabledFromResponse(false, { emailRegistrationEnabled: true })).toBe(false);
   });
 
-  it("validates registration-only fields", () => {
+  it("accepts only a coherent server password policy", () => {
+    expect(passwordPolicyFromResponse(true, {
+      passwordPolicy: { minLength: 12, maxLength: 64 },
+    })).toEqual({ minLength: 12, maxLength: 64 });
+    expect(passwordPolicyFromResponse(true, {
+      passwordPolicy: { minLength: 64, maxLength: 12 },
+    })).toBeNull();
+    expect(passwordPolicyFromResponse(false, {
+      passwordPolicy: { minLength: 12, maxLength: 64 },
+    })).toBeNull();
+  });
+
+  it("validates registration-only fields against the server policy", () => {
+    const policy = { minLength: 12, maxLength: 64 };
     expect(validateCredentialFields({
       mode: "register",
       name: "",
       email: "user@example.com",
       password: "password",
       confirmPassword: "password",
-    })).toEqual({ key: "enterDisplayName" });
+    }, policy)).toEqual({ key: "enterDisplayName" });
 
     expect(validateCredentialFields({
       mode: "register",
@@ -42,7 +56,31 @@ describe("credential auth form", () => {
       email: "user@example.com",
       password: "password",
       confirmPassword: "different",
-    })).toEqual({ key: "passwordsDoNotMatch" });
+    }, policy)).toEqual({ key: "passwordMinimum", values: { count: 12 } });
+
+    expect(validateCredentialFields({
+      mode: "register",
+      name: "User",
+      email: "user@example.com",
+      password: "a".repeat(65),
+      confirmPassword: "a".repeat(65),
+    }, policy)).toEqual({ key: "passwordMaximum", values: { count: 64 } });
+
+    expect(validateCredentialFields({
+      mode: "register",
+      name: "User",
+      email: "user@example.com",
+      password: "long-enough-password",
+      confirmPassword: "different-password",
+    }, policy)).toEqual({ key: "passwordsDoNotMatch" });
+
+    expect(validateCredentialFields({
+      mode: "register",
+      name: "User",
+      email: "user@example.com",
+      password: "long-enough-password",
+      confirmPassword: "long-enough-password",
+    })).toEqual({ key: "registrationStatusUnavailable" });
   });
 
   it("does not require registration fields when logging in", () => {
@@ -93,5 +131,15 @@ describe("credential auth form", () => {
       { code: "EMAIL_PASSWORD_SIGN_UP_DISABLED" },
       "register"
     )).toEqual({ key: "emailVerificationUnavailable" });
+    expect(credentialAuthErrorMessage(
+      { code: "PASSWORD_TOO_SHORT" },
+      "register",
+      { minLength: 12, maxLength: 64 },
+    )).toEqual({ key: "passwordMinimum", values: { count: 12 } });
+    expect(credentialAuthErrorMessage(
+      { code: "PASSWORD_TOO_LONG" },
+      "register",
+      { minLength: 12, maxLength: 64 },
+    )).toEqual({ key: "passwordMaximum", values: { count: 64 } });
   });
 });

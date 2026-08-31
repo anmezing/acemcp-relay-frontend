@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import nodemailer, { type Transporter } from "nodemailer";
+import { smtpRuntimePolicy, type SmtpRuntimePolicy } from "@/lib/server-runtime-config";
 
 export interface VerificationEmailInput {
   email: string;
@@ -65,13 +66,14 @@ function escapeHtml(value: string): string {
 let cachedTransporter: Transporter | null = null;
 let cachedTransportKey = "";
 
-function getTransporter(config: SmtpConfig): Transporter {
+function getTransporter(config: SmtpConfig, policy: SmtpRuntimePolicy): Transporter {
   const key = createHash("sha256").update(JSON.stringify({
     host: config.host,
     port: config.port,
     secure: config.secure,
     user: config.user ?? "",
     password: config.password ?? "",
+    policy,
   })).digest("hex");
   if (cachedTransporter && cachedTransportKey === key) return cachedTransporter;
   if (cachedTransporter) cachedTransporter.close();
@@ -81,11 +83,11 @@ function getTransporter(config: SmtpConfig): Transporter {
     port: config.port,
     secure: config.secure,
     pool: true,
-    maxConnections: 3,
-    maxMessages: 100,
-    connectionTimeout: 10_000,
-    greetingTimeout: 10_000,
-    socketTimeout: 20_000,
+    maxConnections: policy.maxConnections,
+    maxMessages: policy.maxMessages,
+    connectionTimeout: policy.connectionTimeoutMs,
+    greetingTimeout: policy.greetingTimeoutMs,
+    socketTimeout: policy.socketTimeoutMs,
     ...(config.user && config.password
       ? { auth: { user: config.user, pass: config.password } }
       : {}),
@@ -101,20 +103,21 @@ export async function sendAccountVerificationEmail(
   const config = smtpConfigFromEnv(env);
   if (!config) throw new Error("EMAIL_VERIFICATION_UNAVAILABLE");
 
+  const policy = smtpRuntimePolicy(env);
   const displayName = input.name?.trim() || "LCE 用户";
   const safeName = escapeHtml(displayName);
   const safeUrl = escapeHtml(input.verificationUrl);
-  await getTransporter(config).sendMail({
+  await getTransporter(config, policy).sendMail({
     from: config.from,
     to: input.email,
     subject: "验证你的 LCE 邮箱 / Verify your LCE email",
     text: [
       `${displayName}，你好：`,
-      "请打开下面的链接验证邮箱，验证完成后才能登录 LCE。链接 1 小时内有效：",
+      "请打开下面的链接验证邮箱，验证完成后才能登录 LCE。链接有效期由服务端策略控制：",
       input.verificationUrl,
       "",
       "If you did not create an LCE account, ignore this email.",
     ].join("\n"),
-    html: `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;color:#172033;line-height:1.6"><h2>验证你的 LCE 邮箱</h2><p>${safeName}，你好：</p><p>验证邮箱后即可登录 LCE。此链接 1 小时内有效。</p><p><a href="${safeUrl}" style="display:inline-block;padding:10px 18px;border-radius:8px;background:#06b6d4;color:#04121a;text-decoration:none;font-weight:600">验证邮箱</a></p><p style="font-size:12px;color:#64748b;word-break:break-all">${safeUrl}</p><hr style="border:0;border-top:1px solid #e2e8f0"><p style="font-size:12px;color:#64748b">If you did not create an LCE account, ignore this email.</p></body></html>`,
+    html: `<!doctype html><html><body style="font-family:system-ui,-apple-system,sans-serif;color:#172033;line-height:1.6"><h2>验证你的 LCE 邮箱</h2><p>${safeName}，你好：</p><p>验证邮箱后即可登录 LCE。链接有效期由服务端策略控制。</p><p><a href="${safeUrl}" style="display:inline-block;padding:10px 18px;border-radius:8px;background:#06b6d4;color:#04121a;text-decoration:none;font-weight:600">验证邮箱</a></p><p style="font-size:12px;color:#64748b;word-break:break-all">${safeUrl}</p><hr style="border:0;border-top:1px solid #e2e8f0"><p style="font-size:12px;color:#64748b">If you did not create an LCE account, ignore this email.</p></body></html>`,
   });
 }

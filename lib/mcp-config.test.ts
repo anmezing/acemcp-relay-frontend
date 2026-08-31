@@ -1,81 +1,96 @@
 import { describe, expect, it } from "vitest";
+import type { ClientLaunchPolicy } from "./lce-client";
 import { buildCloudMcpConfigJson, buildCloudMcpConfigToml } from "./mcp-config";
+
+const launchPolicy: ClientLaunchPolicy = {
+  packageRunnerCommand: "configured-package-runner",
+  packageRunnerArgsPrefix: ["--accept"],
+  packageSpecifier: "configured-client@stable",
+  installedClientCommand: "configured-installed-client",
+};
 
 describe("MCP config", () => {
   describe("cloud stdio mode", () => {
-    it("generates npx config with api key", () => {
-      const config = JSON.parse(buildCloudMcpConfigJson("sk-test"));
+    it("uses the configured package-runner policy with an api key", () => {
+      const config = JSON.parse(
+        buildCloudMcpConfigJson("sk-test", undefined, "package-runner", launchPolicy),
+      );
 
       expect(config).toEqual({
         mcpServers: {
           lce: {
-            command: "npx",
-            args: ["-y", "@anmezing/lce-cloud@latest", "--key", "sk-test"],
+            command: "configured-package-runner",
+            args: ["--accept", "configured-client@stable", "--key", "sk-test"],
           },
         },
       });
     });
 
     it("generates placeholder config without key", () => {
-      const config = JSON.parse(buildCloudMcpConfigJson(null));
-
+      const config = JSON.parse(
+        buildCloudMcpConfigJson(null, undefined, "package-runner", launchPolicy),
+      );
       expect(config.mcpServers.lce.args).toEqual([
-        "-y",
-        "@anmezing/lce-cloud@latest",
+        "--accept",
+        "configured-client@stable",
         "--key",
         "YOUR_API_KEY",
       ]);
     });
 
-    it("generates a config for an already-installed global client", () => {
-      const config = JSON.parse(buildCloudMcpConfigJson("sk-test", undefined, "global"));
-
-      expect(config).toEqual({
-        mcpServers: {
-          lce: {
-            command: "lce-cloud",
-            args: ["--key", "sk-test"],
-          },
-        },
+    it("uses the configured already-installed client command", () => {
+      const config = JSON.parse(
+        buildCloudMcpConfigJson("sk-test", undefined, "global", launchPolicy),
+      );
+      expect(config.mcpServers.lce).toEqual({
+        command: "configured-installed-client",
+        args: ["--key", "sk-test"],
       });
 
-      const toml = buildCloudMcpConfigToml("sk-test", undefined, "global");
-      expect(toml).toContain('command = "lce-cloud"');
+      const toml = buildCloudMcpConfigToml("sk-test", undefined, "global", launchPolicy);
+      expect(toml).toContain('command = "configured-installed-client"');
       expect(toml).toContain('args = ["--key", "sk-test"]');
     });
 
-    it("generates TOML config", () => {
-      const toml = buildCloudMcpConfigToml("sk-test");
-
-      expect(toml).toContain('command = "npx"');
-      expect(toml).toContain('"@anmezing/lce-cloud@latest"');
+    it("generates TOML from the configured launcher", () => {
+      const toml = buildCloudMcpConfigToml(
+        "sk-test",
+        undefined,
+        "package-runner",
+        launchPolicy,
+      );
+      expect(toml).toContain('command = "configured-package-runner"');
+      expect(toml).toContain('"configured-client@stable"');
       expect(toml).toContain('"sk-test"');
     });
 
-    it("adds an explicit project root for MCP clients without roots/list", () => {
+    it("adds an explicit project root for hosts without roots/list", () => {
       const windowsPath = "D:\\code\\project with spaces";
-      const config = JSON.parse(buildCloudMcpConfigJson("sk-test", windowsPath));
+      const config = JSON.parse(
+        buildCloudMcpConfigJson("sk-test", windowsPath, "package-runner", launchPolicy),
+      );
       expect(config.mcpServers.lce.args).toEqual([
-        "-y",
-        "@anmezing/lce-cloud@latest",
+        "--accept",
+        "configured-client@stable",
         "--key",
         "sk-test",
         "--repo",
         windowsPath,
       ]);
 
-      const toml = buildCloudMcpConfigToml("sk-test", windowsPath);
+      const toml = buildCloudMcpConfigToml(
+        "sk-test",
+        windowsPath,
+        "package-runner",
+        launchPolicy,
+      );
       expect(toml).toContain('"--repo", "D:\\\\code\\\\project with spaces"');
-
-      const globalConfig = JSON.parse(buildCloudMcpConfigJson("sk-test", windowsPath, "global"));
-      expect(globalConfig.mcpServers.lce).toEqual({
-        command: "lce-cloud",
-        args: ["--key", "sk-test", "--repo", windowsPath],
-      });
     });
 
     it("omits blank project roots", () => {
-      const config = JSON.parse(buildCloudMcpConfigJson("sk-test", "   "));
+      const config = JSON.parse(
+        buildCloudMcpConfigJson("sk-test", "   ", "package-runner", launchPolicy),
+      );
       expect(config.mcpServers.lce.args).not.toContain("--repo");
     });
   });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,9 +12,8 @@ interface VersionData {
   packageName: string;
   latestVersion: string | null;
   minimumVersion: string | null;
-  latestVersionSource: "npm" | null;
+  latestVersionSource: "registry" | null;
   indexClientVersionRequired: boolean;
-  upgradeCommand: string;
   warnings: string[];
 }
 
@@ -23,7 +22,6 @@ export function CurrentVersionTab() {
   const [data, setData] = useState<VersionData | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -47,17 +45,6 @@ export function CurrentVersionTab() {
     Promise.resolve().then(() => load(controller.signal));
     return () => controller.abort();
   }, [load]);
-
-  const copyUpgradeCommand = useCallback(async () => {
-    if (!data?.upgradeCommand) return;
-    try {
-      await navigator.clipboard.writeText(data.upgradeCommand);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setCopied(false);
-    }
-  }, [data]);
 
   if (loading && !data) {
     return <Skeleton className="h-56 rounded-xl bg-white/[0.06]" />;
@@ -85,7 +72,7 @@ export function CurrentVersionTab() {
               <span className="font-mono text-2xl text-cyan-400">
                 {data.latestVersion ? `v${data.latestVersion}` : t("temporarilyUnavailable")}
               </span>
-              {data.latestVersionSource === "npm" && <Badge variant="outline">npm latest</Badge>}
+              {data.latestVersionSource === "registry" && <Badge variant="outline">package registry</Badge>}
             </div>
             <p className="mt-2 text-xs text-slate-500">{data.packageName}</p>
           </CardContent>
@@ -104,20 +91,15 @@ export function CurrentVersionTab() {
       </div>
 
       <Card className="border-white/[0.06] bg-[#0a0f1a]/60">
-        <CardContent className="space-y-4 p-5">
+        <CardContent className="space-y-3 p-5">
           <div>
             <h3 className="text-sm font-medium text-white">{t("upgradeTitle")}</h3>
-            <p className="mt-1 text-xs leading-5 text-slate-500">{t("upgradeDescription")}</p>
-          </div>
-          <div className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-black/20 p-3">
-            <code className="min-w-0 flex-1 overflow-x-auto text-xs text-cyan-300">{data.upgradeCommand}</code>
-            <Button variant="glass" size="sm" onClick={copyUpgradeCommand} className="shrink-0">
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              <span className="ml-2">{copied ? t("copied") : t("copy")}</span>
-            </Button>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              {t("upgradeDescription", { packageName: data.packageName })}
+            </p>
           </div>
           <div className="space-y-1 text-xs leading-5 text-slate-500">
-            <p>{t("npxUpdateNote")}</p>
+            <p>{t("managedUpdateNote")}</p>
             <p>{t("cannotDetectRunningVersion")}</p>
           </div>
         </CardContent>

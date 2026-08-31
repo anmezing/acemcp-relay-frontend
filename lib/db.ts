@@ -1,14 +1,14 @@
 import { Pool, PoolClient } from "pg";
 import crypto from "crypto";
 import { createClient, RedisClientType } from "redis";
+import {
+  applicationTimeZone,
+  postgresConnectionOptions,
+  redisConnectionUrl,
+} from "@/lib/server-runtime-config";
+import { nextZonedDayBoundary, zonedDayKey } from "@/lib/time-policy";
 
-const pool = new Pool({
-  host: process.env.POSTGRES_HOST || "localhost",
-  port: parseInt(process.env.POSTGRES_PORT || "5432"),
-  user: process.env.POSTGRES_USER || "postgres",
-  password: process.env.POSTGRES_PASSWORD || "",
-  database: process.env.POSTGRES_DB || "postgres",
-});
+const pool = new Pool(postgresConnectionOptions());
 
 export default pool;
 
@@ -17,9 +17,7 @@ let redisClient: RedisClientType | null = null;
 
 async function getRedisClient(): Promise<RedisClientType> {
   if (!redisClient) {
-    const host = process.env.REDIS_HOST || "localhost";
-    const port = process.env.REDIS_PORT || "6379";
-    redisClient = createClient({ url: `redis://${host}:${port}` });
+    redisClient = createClient({ url: redisConnectionUrl() });
     redisClient.on("error", (err) => console.error("Redis error:", err));
     await redisClient.connect();
   }
@@ -33,24 +31,12 @@ export interface DailyQuotaUsage {
   resetAt: string;
 }
 
-function shanghaiQuotaWindow(now: Date): { day: string; resetAt: string } {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now);
-  const value = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((part) => part.type === type)?.value ?? "";
-  const year = Number(value("year"));
-  const month = Number(value("month"));
-  const dayOfMonth = Number(value("day"));
-  const resetAt = new Date(
-    Date.UTC(year, month - 1, dayOfMonth + 1, 0, 0, 0) - 8 * 60 * 60 * 1000
-  );
+const APPLICATION_TIMEZONE = applicationTimeZone();
+
+function quotaWindow(now: Date): { day: string; resetAt: string } {
   return {
-    day: `${String(year).padStart(4, "0")}${String(month).padStart(2, "0")}${String(dayOfMonth).padStart(2, "0")}`,
-    resetAt: resetAt.toISOString(),
+    day: zonedDayKey(now, APPLICATION_TIMEZONE),
+    resetAt: nextZonedDayBoundary(now, APPLICATION_TIMEZONE).toISOString(),
   };
 }
 
@@ -64,7 +50,7 @@ export async function getDailyQuotaUsage(
   tenantId: string,
   now = new Date()
 ): Promise<DailyQuotaUsage> {
-  const window = shanghaiQuotaWindow(now);
+  const window = quotaWindow(now);
   try {
     const redis = await getRedisClient();
     const [requests, indexBytes] = await redis.mGet([
@@ -1170,7 +1156,7 @@ export async function getHealthCheckStats(days: number = 7): Promise<{
 }
 
 // Leaderboard functions
-const LEADERBOARD_TIMEZONE = "Asia/Shanghai";
+const LEADERBOARD_TIMEZONE = APPLICATION_TIMEZONE;
 const LEADERBOARD_REQUEST_PATHS = [
   "/mcp/tools/call/codebase-retrieval",
   "/mcp/tools/call/codebase_enhance_prompt",
@@ -1186,7 +1172,7 @@ export interface LeaderboardEntry {
   request_count: number | string;
 }
 
-export function getShanghaiDateString(now = new Date()): string {
+export function getApplicationDateString(now = new Date()): string {
   return new Intl.DateTimeFormat("sv-SE", {
     timeZone: LEADERBOARD_TIMEZONE,
   }).format(now);
@@ -1199,7 +1185,7 @@ export function isValidLeaderboardDate(value: string): boolean {
 }
 
 export async function getLeaderboard(dateStr?: string): Promise<LeaderboardEntry[]> {
-  const targetDate = dateStr || getShanghaiDateString();
+  const targetDate = dateStr || getApplicationDateString();
   if (!isValidLeaderboardDate(targetDate)) {
     throw new RangeError("leaderboard date must use YYYY-MM-DD");
   }

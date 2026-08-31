@@ -9,6 +9,7 @@ import { Building2, Loader2 } from "lucide-react";
 import { loginUrl } from "@/lib/auth-redirect";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useTranslations } from "next-intl";
+import { CLIENT_RUNTIME_POLICY } from "@/lib/client-runtime-policy";
 
 // 邀请落地页：登录用户点击接受后，better-auth 建 member 记录，
 // afterAcceptInvitation hook 自动发组织密钥。
@@ -34,7 +35,7 @@ export default function AcceptInvitationPage({
       });
       if (error) throw new Error(error.message || t("failedToAcceptInvitation"));
       setDone(true);
-      setTimeout(() => router.push("/console"), 1200);
+      setTimeout(() => router.push("/console"), CLIENT_RUNTIME_POLICY.invitationRedirectMs);
     } catch (e) {
       setError(e instanceof Error ? e.message : t("failedToAcceptInvitationItMayHave"));
     } finally {

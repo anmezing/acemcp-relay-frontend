@@ -25,9 +25,11 @@ import {
   credentialAuthErrorMessage,
   emailRegistrationEnabledFromResponse,
   oauthAuthErrorMessage,
+  passwordPolicyFromResponse,
   registrationAvailabilityFromResponse,
   type RegistrationAvailability,
   type CredentialMode,
+  type CredentialPasswordPolicy,
   validateCredentialFields,
 } from "@/lib/credential-auth";
 import { cn } from "@/lib/utils";
@@ -114,6 +116,7 @@ function LoginContent() {
   const [registrationAvailability, setRegistrationAvailability] =
     useState<RegistrationAvailability>("checking");
   const [emailRegistrationEnabled, setEmailRegistrationEnabled] = useState(false);
+  const [passwordPolicy, setPasswordPolicy] = useState<CredentialPasswordPolicy | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -131,13 +134,18 @@ function LoginContent() {
         }
         if (controller.signal.aborted) return;
         const availability = registrationAvailabilityFromResponse(response.ok, payload);
+        const nextPasswordPolicy = passwordPolicyFromResponse(response.ok, payload);
+        const effectiveAvailability =
+          availability === "open" && !nextPasswordPolicy ? "unavailable" : availability;
         setEmailRegistrationEnabled(emailRegistrationEnabledFromResponse(response.ok, payload));
-        setRegistrationAvailability(availability);
-        setMode(availability === "open" ? requestedMode : "login");
+        setPasswordPolicy(nextPasswordPolicy);
+        setRegistrationAvailability(effectiveAvailability);
+        setMode(effectiveAvailability === "open" ? requestedMode : "login");
       } catch {
         if (controller.signal.aborted) return;
         setRegistrationAvailability("unavailable");
         setEmailRegistrationEnabled(false);
+        setPasswordPolicy(null);
         setMode("login");
       }
     })();
@@ -161,7 +169,7 @@ function LoginContent() {
       email,
       password,
       confirmPassword,
-    });
+    }, passwordPolicy);
     if (validationError) {
       setFormError(t(validationError.key, validationError.values));
       return;
@@ -186,7 +194,7 @@ function LoginContent() {
           });
 
       if (result.error) {
-        const message = credentialAuthErrorMessage(result.error, mode);
+        const message = credentialAuthErrorMessage(result.error, mode, passwordPolicy);
         setFormError(t(message.key, message.values));
         return;
       }
@@ -199,7 +207,7 @@ function LoginContent() {
       }
       window.location.assign(callbackUrl);
     } catch {
-      const message = credentialAuthErrorMessage(null, mode);
+      const message = credentialAuthErrorMessage(null, mode, passwordPolicy);
       setFormError(t(message.key, message.values));
     } finally {
       setBusy(false);

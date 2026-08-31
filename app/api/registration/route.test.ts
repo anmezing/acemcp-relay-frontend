@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   initRegistrationGate: vi.fn(),
@@ -28,6 +28,10 @@ describe("registration status route", () => {
     mocks.isEmailVerificationConfigured.mockReturnValue(true);
   });
 
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it.each([
     [false, true],
     [true, false],
@@ -39,6 +43,7 @@ describe("registration status route", () => {
     await expect(response.json()).resolves.toEqual({
       enabled,
       emailRegistrationEnabled: true,
+      passwordPolicy: { minLength: 8, maxLength: 128 },
       count: 0,
       remainingSlots: null,
       limit: null,
@@ -55,9 +60,23 @@ describe("registration status route", () => {
     await expect(response.json()).resolves.toEqual({
       enabled: true,
       emailRegistrationEnabled: true,
+      passwordPolicy: { minLength: 8, maxLength: 128 },
       count: 300,
       remainingSlots: 6,
       limit: 6,
+    });
+  });
+
+  it("returns the configured password policy instead of browser-owned limits", async () => {
+    vi.stubEnv("AUTH_MIN_PASSWORD_LENGTH", "12");
+    vi.stubEnv("AUTH_MAX_PASSWORD_LENGTH", "64");
+    mocks.isRegistrationDisabled.mockResolvedValueOnce(false);
+    mocks.countRegisteredUsers.mockResolvedValueOnce(0);
+    mocks.getRegistrationRemainingSlots.mockResolvedValueOnce(null);
+
+    const response = await GET();
+    await expect(response.json()).resolves.toMatchObject({
+      passwordPolicy: { minLength: 12, maxLength: 64 },
     });
   });
 
@@ -84,6 +103,7 @@ describe("registration status route", () => {
     await expect(response.json()).resolves.toEqual({
       enabled: true,
       emailRegistrationEnabled: false,
+      passwordPolicy: { minLength: 8, maxLength: 128 },
       count: 2,
       remainingSlots: 1000,
       limit: 1000,

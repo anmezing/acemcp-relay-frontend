@@ -1,4 +1,4 @@
-const MAX_MODELS = 500;
+import { modelDiscoveryResultLimit } from "@/lib/server-runtime-config";
 
 interface SiliconFlowModelsResponse {
   data?: Array<{ id?: unknown }>;
@@ -11,5 +11,5 @@ export function parseSiliconFlowRerankModels(payload: unknown): string[] {
     data
       .map((item) => (typeof item?.id === "string" ? item.id.trim() : ""))
       .filter(Boolean)
-  )].sort((a, b) => a.localeCompare(b)).slice(0, MAX_MODELS);
+  )].sort((a, b) => a.localeCompare(b)).slice(0, modelDiscoveryResultLimit());
 }

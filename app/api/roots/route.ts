@@ -4,8 +4,8 @@ import { auth } from "@/lib/auth";
 import { getApiKey, initDB } from "@/lib/db";
 import { ensureOrgApiKey, getMemberRole } from "@/lib/org-db";
 import { getRelayConsoleHeaders } from "@/lib/relay-console";
+import { relayUrl } from "@/lib/server-runtime-config";
 
-const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
 
 // 谁能调：登录用户。?orgId= 时须为该组织成员（403），用组织密钥查询
 // 组织租户的索引；缺省用个人密钥查个人租户。
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       apiKey = keyRecord.api_key;
     }
 
-    const res = await fetch(`${RELAY_URL}/mcp/roots`, {
+    const res = await fetch(relayUrl("/mcp/roots"), {
       headers: getRelayConsoleHeaders(apiKey),
     });
 

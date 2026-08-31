@@ -12,7 +12,7 @@ vi.mock("@/lib/auth", () => ({
 }));
 vi.mock("@/lib/db", () => ({
   getLeaderboard: mocks.getLeaderboard,
-  getShanghaiDateString: vi.fn(() => "2026-08-29"),
+  getApplicationDateString: vi.fn(() => "2026-08-29"),
   isValidLeaderboardDate: vi.fn(
     (value: string) => value === "2026-08-29" || value === "2026-08-28"
   ),
