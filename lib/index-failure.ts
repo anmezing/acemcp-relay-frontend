@@ -121,7 +121,16 @@ function classifyLegacyFailure(detail: string): Omit<IndexFailurePresentation, "
   if (includesAny(lower, ["manifest file size is invalid", "file exceeds the", "byte limit", "file too large", "file size limit", "maximum file size", "文件大小超过", "单文件过大"])) {
     return { code: "repository_file_size_limit", origin: "client", recovery: "reduce_repository" };
   }
-  if (includesAny(lower, ["quota exceeded", "quota exhausted", "配额不足", "配额已用尽", "超出配额"])) {
+  // Only the platform's explicit daily index quota may use reset-based recovery.
+  // A provider's generic "quota exceeded" message has a different owner and fix.
+  if (includesAny(lower, [
+    "daily index quota exceeded",
+    "index quota exceeded",
+    "index_quota_exceeded",
+    "每日索引配额",
+    "索引配额已用尽",
+    "超出索引配额",
+  ])) {
     return { code: "index_quota_exceeded", origin: "relay", recovery: "wait_for_quota_reset" };
   }
   if (includesAny(lower, ["unauthorized", "invalid api key", "invalid token", "authentication failed", "remote-index 401", "remote-index 403"])) {

@@ -250,7 +250,7 @@
     "indexRecoveryFixProviderBilling": "Top up the affected model service balance or switch to a working model configuration. Verify it, then restart the MCP client.",
     "indexRecoveryRetryLater": "Wait for the provider rate-limit window, reduce concurrency if needed, then restart the MCP client to index again.",
     "indexRecoveryReduceRepository": "Ignore generated files, dependencies, and large files, or split the repository to meet file-count and per-file size limits, then restart the MCP client.",
-    "indexRecoveryWaitForQuotaReset": "Wait for indexing quota reset or adjust the plan/quota. Restart the MCP client when quota is available.",
+    "indexRecoveryWaitForQuotaReset": "A current indexing client that remains running automatically creates a new sync after the server quota resets. If the client is closed or does not support automatic recovery, restart it after quota becomes available.",
     "indexRecoveryFixCredentials": "Check the provider URL, API key, and model names. Fix and verify them, then restart the MCP client.",
     "indexRecoveryInspectLogs": "Expand the raw error and correlate it with request logs. Fix the root cause and restart the MCP client; do not only clear the record.",
     "viewRawIndexError": "View raw error details"

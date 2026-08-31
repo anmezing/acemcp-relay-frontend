@@ -250,7 +250,7 @@
     "indexRecoveryFixProviderBilling": "补充对应模型服务余额，或切换到可用的模型配置；验证配置后重启 MCP 客户端。",
     "indexRecoveryRetryLater": "等待第三方服务限流窗口结束，必要时降低并发；随后重启 MCP 客户端重新索引。",
     "indexRecoveryReduceRepository": "通过忽略生成物、依赖和大文件，或拆分仓库，使其满足文件数量和单文件大小限制，然后重启 MCP 客户端。",
-    "indexRecoveryWaitForQuotaReset": "等待索引配额重置或调整套餐/配额；配额可用后重启 MCP 客户端重新索引。",
+    "indexRecoveryWaitForQuotaReset": "支持自动恢复的新版索引客户端保持运行时，会在服务端配额重置后自动创建新的同步任务；若客户端已关闭或版本不支持自动恢复，请在配额可用后重新启动客户端。",
     "indexRecoveryFixCredentials": "检查第三方模型 URL、API Key 和模型名称；修复并验证后重启 MCP 客户端。",
     "indexRecoveryInspectLogs": "展开原始错误并结合请求日志排查。修复根因后重启 MCP 客户端，不要只清理错误记录。",
     "viewRawIndexError": "查看原始错误详情"

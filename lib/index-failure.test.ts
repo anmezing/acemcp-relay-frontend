@@ -83,6 +83,23 @@ describe("index failure presentation", () => {
     });
   });
 
+  it("distinguishes the platform daily index quota from provider quota wording", () => {
+    expect(resolveIndexFailurePresentation({
+      index_error: "daily index quota exceeded (used=2147483648, limit=2147483648, remaining=0 bytes)",
+    })).toMatchObject({
+      code: "index_quota_exceeded",
+      origin: "relay",
+      recovery: "wait_for_quota_reset",
+    });
+    expect(resolveIndexFailurePresentation({
+      index_error: "embedding provider quota exceeded",
+    })).toMatchObject({
+      code: "index_failed",
+      origin: "unknown",
+      recovery: "inspect_logs",
+    });
+  });
+
   it("falls back safely when a newer relay returns unknown diagnostic codes", () => {
     expect(resolveIndexFailurePresentation({
       index_error: "manifest rejected",
