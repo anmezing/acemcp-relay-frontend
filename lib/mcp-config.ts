@@ -4,6 +4,15 @@ const KEY_PLACEHOLDER = "YOUR_API_KEY";
 
 export type McpLaunchMode = "package-runner" | "global";
 
+export function availableMcpLaunchModes(
+  policy: ClientLaunchPolicy = clientLaunchPolicy(),
+): readonly McpLaunchMode[] {
+  const modes: McpLaunchMode[] = [];
+  if (policy.packageRunnerCommand) modes.push("package-runner");
+  if (policy.installedClientCommand) modes.push("global");
+  return Object.freeze(modes);
+}
+
 function cloudArgs(
   apiKey: string | null,
   repoPath: string | undefined,

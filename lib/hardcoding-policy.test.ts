@@ -48,6 +48,20 @@ describe("user-facing hardcoding policy", () => {
   });
 
 
+  it("keeps browser launch policy visible to the Next.js build", () => {
+    const source = read("lib/lce-client.ts");
+    for (const name of [
+      "NEXT_PUBLIC_LCE_CLIENT_PACKAGE_RUNNER",
+      "NEXT_PUBLIC_LCE_CLIENT_PACKAGE_RUNNER_ARGS",
+      "NEXT_PUBLIC_LCE_CLIENT_PACKAGE_NAME",
+      "NEXT_PUBLIC_LCE_CLIENT_PACKAGE_TAG",
+      "NEXT_PUBLIC_LCE_CLIENT_GLOBAL_EXECUTABLE",
+    ]) {
+      expect(source).toContain(`process.env.${name}`);
+    }
+    expect(source).not.toContain("= process.env,");
+  });
+
   it("keeps launch syntax and model payload bounds in their policy owners", () => {
     const launchFiles = ["lib/lce-client.ts", "lib/mcp-config.ts"];
     const launchText = launchFiles.map(read).join("\n");
