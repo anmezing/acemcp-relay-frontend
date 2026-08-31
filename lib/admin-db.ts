@@ -1,12 +1,12 @@
-import { applicationTimeZone } from "@/lib/server-runtime-config";
 import pool, {
   deleteBannedCache,
   deleteQuotaLimitCache,
   resetApiKey,
 } from "@/lib/db";
 
-// 统计/配额日界线来自统一部署策略，并与 Relay 保持一致。
-const TZ = applicationTimeZone();
+// 统计/配额里的“今天”统一按 Asia/Shanghai 自然日，与 relay 配额计数、
+// leaderboard 口径一致。
+const TZ = "Asia/Shanghai";
 
 // 管理端聚合查询。调用方（/api/admin/*）必须先通过 requireAdminSession。
 

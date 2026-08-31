@@ -1,5 +1,3 @@
-import { PROVIDER_ENDPOINTS } from "./model-provider-presets";
-
 export type RerankProvider = "siliconflow-compatible" | "voyage" | "custom";
 
 export interface RerankProviderPreset {
@@ -12,13 +10,13 @@ export interface RerankProviderPreset {
 export const RERANK_PROVIDER_PRESETS: Record<RerankProvider, RerankProviderPreset> = {
   "siliconflow-compatible": {
     label: "SiliconFlow",
-    baseUrl: PROVIDER_ENDPOINTS.siliconFlowRerank,
+    baseUrl: "https://api.siliconflow.cn/v1/rerank",
     models: [],
     dynamicModels: true,
   },
   voyage: {
     label: "Voyage AI",
-    baseUrl: PROVIDER_ENDPOINTS.voyageRerank,
+    baseUrl: "https://api.voyageai.com/v1/rerank",
     models: ["rerank-2.5", "rerank-2.5-lite"],
     dynamicModels: false,
   },

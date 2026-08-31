@@ -1,7 +1,6 @@
 import crypto from "crypto";
 import { AlipaySdk } from "alipay-sdk";
 import type { BillingOrder, PaymentProvider } from "@/lib/billing";
-import { paymentRuntimePolicy } from "@/lib/server-runtime-config";
 
 export interface PaymentAvailability {
   alipay: boolean;
@@ -90,7 +89,7 @@ function alipaySdk(): AlipaySdk {
     ...config,
     signType: "RSA2",
     camelcase: true,
-    timeout: paymentRuntimePolicy().providerRequestTimeoutMs,
+    timeout: 10_000,
   });
 }
 
@@ -125,7 +124,8 @@ function wechatConfig() {
     publicKeyId,
     publicKey,
     apiBase: httpsOrLocalUrl(
-      paymentRuntimePolicy().wechatPayApiBaseUrl,
+      secretValue("WECHAT_PAY_API_BASE_URL") ||
+        "https://api.mch.weixin.qq.com",
       "WECHAT_PAY_API_BASE_URL_INVALID"
     ).origin,
   };
@@ -169,7 +169,7 @@ export async function createAlipayNativeOrder(
       outTradeNo: order.orderNo,
       totalAmount: fenToYuan(order.amountFen),
       subject: `LCE ${order.planSnapshot.name}`,
-      timeoutExpress: `${paymentRuntimePolicy().orderTtlMinutes}m`,
+      timeoutExpress: "15m",
     },
   });
   if (result.code !== "10000") {
@@ -266,8 +266,7 @@ function verifyWechatSignature(
   const timestampSeconds = Number(timestamp);
   if (
     !Number.isSafeInteger(timestampSeconds) ||
-    Math.abs(Date.now() / 1000 - timestampSeconds) >
-      paymentRuntimePolicy().webhookMaxAgeSeconds
+    Math.abs(Date.now() / 1000 - timestampSeconds) > 300
   ) {
     throw new Error("WECHAT_TIMESTAMP_INVALID");
   }
@@ -311,7 +310,7 @@ export async function createWechatNativeOrder(
       "User-Agent": "LCE-Billing/1.0",
     },
     body,
-    signal: AbortSignal.timeout(paymentRuntimePolicy().providerRequestTimeoutMs),
+    signal: AbortSignal.timeout(10_000),
   });
   const responseBody = await response.text();
   verifyWechatSignature(responseBody, response.headers, config);

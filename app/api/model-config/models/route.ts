@@ -3,13 +3,11 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { decryptModelConfig } from "@/lib/model-config-crypto";
 import { getUserModelConfigRow } from "@/lib/model-config-db";
-import { SILICONFLOW_RERANK_MODELS_URL } from "@/lib/model-provider-presets";
 import { parseSiliconFlowRerankModels } from "@/lib/rerank-model-discovery";
-import {
-  modelDiscoveryProxyTimeoutMs,
-  providerModelDiscoveryResponseLimitBytes,
-} from "@/lib/server-runtime-config";
 
+const SILICONFLOW_MODELS_URL =
+  "https://api.siliconflow.cn/v1/models?type=text&sub_type=reranker";
+const MAX_RESPONSE_BYTES = 1024 * 1024;
 
 async function savedSiliconFlowKey(userId: string): Promise<string> {
   const row = await getUserModelConfigRow(userId);
@@ -40,11 +38,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const response = await fetch(SILICONFLOW_RERANK_MODELS_URL, {
+    const response = await fetch(SILICONFLOW_MODELS_URL, {
       method: "GET",
       headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
       cache: "no-store",
-      signal: AbortSignal.timeout(modelDiscoveryProxyTimeoutMs()),
+      signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) {
       const message = response.status === 401 || response.status === 403
@@ -54,11 +52,11 @@ export async function POST(request: Request) {
     }
 
     const contentLength = Number(response.headers.get("content-length") || 0);
-    if (contentLength > providerModelDiscoveryResponseLimitBytes()) {
+    if (contentLength > MAX_RESPONSE_BYTES) {
       return NextResponse.json({ error: "模型列表响应过大" }, { status: 502 });
     }
     const text = await response.text();
-    if (Buffer.byteLength(text, "utf8") > providerModelDiscoveryResponseLimitBytes()) {
+    if (Buffer.byteLength(text, "utf8") > MAX_RESPONSE_BYTES) {
       return NextResponse.json({ error: "模型列表响应过大" }, { status: 502 });
     }
     const models = parseSiliconFlowRerankModels(JSON.parse(text));

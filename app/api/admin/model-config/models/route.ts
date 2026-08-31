@@ -2,18 +2,14 @@ import { NextResponse } from "next/server";
 
 import { requireAdminSession } from "@/lib/admin";
 import { getRelayAdminHeaders } from "@/lib/relay-console";
-import {
-  modelDiscoveryProxyTimeoutMs,
-  platformModelConfigBodyLimitBytes,
-  platformModelConfigResponseLimitBytes,
-  relayUrl,
-} from "@/lib/server-runtime-config";
 
+const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
+const MAX_BODY_BYTES = 64 * 1024;
 
 export async function POST(request: Request) {
   if (!(await requireAdminSession())) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const text = await request.text();
-  if (Buffer.byteLength(text, "utf8") > platformModelConfigBodyLimitBytes()) {
+  if (Buffer.byteLength(text, "utf8") > MAX_BODY_BYTES) {
     return NextResponse.json({ error: "请求体过大" }, { status: 413 });
   }
   let body: Record<string, unknown>;
@@ -23,7 +19,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "请求体必须是 JSON" }, { status: 400 });
   }
   try {
-    const response = await fetch(relayUrl("/internal/platform-model-config"), {
+    const response = await fetch(`${RELAY_URL}/internal/platform-model-config`, {
       method: "POST",
       headers: { ...getRelayAdminHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -33,10 +29,10 @@ export async function POST(request: Request) {
         baseUrl: typeof body.baseUrl === "string" ? body.baseUrl : "",
         apiKey: typeof body.apiKey === "string" ? body.apiKey : "",
       }),
-      signal: AbortSignal.timeout(modelDiscoveryProxyTimeoutMs()),
+      signal: AbortSignal.timeout(30_000),
     });
     const responseText = await response.text();
-    if (Buffer.byteLength(responseText, "utf8") > platformModelConfigResponseLimitBytes()) {
+    if (Buffer.byteLength(responseText, "utf8") > MAX_BODY_BYTES) {
       return NextResponse.json({ error: "模型列表响应过大" }, { status: 502 });
     }
     let data: unknown;

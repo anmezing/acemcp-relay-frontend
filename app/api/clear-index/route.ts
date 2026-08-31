@@ -4,8 +4,8 @@ import { auth } from "@/lib/auth";
 import { getApiKey, initDB } from "@/lib/db";
 import { ensureOrgApiKey, getMemberRole } from "@/lib/org-db";
 import { getRelayConsoleHeaders } from "@/lib/relay-console";
-import { relayUrl } from "@/lib/server-runtime-config";
 
+const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
 
 export async function POST(request: Request) {
   try {
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       apiKey = keyRecord.api_key;
     }
 
-    const res = await fetch(relayUrl("/mcp/clear-index"), {
+    const res = await fetch(`${RELAY_URL}/mcp/clear-index`, {
       method: "POST",
       headers: {
         ...getRelayConsoleHeaders(apiKey),

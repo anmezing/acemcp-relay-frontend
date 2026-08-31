@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import {
   getLeaderboard,
-  getApplicationDateString,
+  getShanghaiDateString,
   isValidLeaderboardDate,
 } from "@/lib/db";
 import { maskUsername } from "@/lib/utils";
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const targetDate = requestedDate || getApplicationDateString();
+    const targetDate = requestedDate || getShanghaiDateString();
     const leaderboard = await getLeaderboard(targetDate);
 
     return NextResponse.json(

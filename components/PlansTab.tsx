@@ -9,7 +9,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useLocale, useTranslations } from "next-intl";
-import { CLIENT_RUNTIME_POLICY } from "@/lib/client-runtime-policy";
 
 interface BillingPlan {
   id: string;
@@ -162,7 +161,7 @@ export function PlansTab() {
         // 短暂网络失败不终止支付轮询。
       }
     };
-    const timer = window.setInterval(() => void poll(), CLIENT_RUNTIME_POLICY.paymentStatusPollMs);
+    const timer = window.setInterval(() => void poll(), 2_000);
     return () => {
       stopped = true;
       window.clearInterval(timer);

@@ -1,4 +1,3 @@
-import { applicationTimeZone } from "@/lib/server-runtime-config";
 import pool, {
   deleteOrgMemberQuotaCache,
   deleteOrgQuotaCache,
@@ -12,8 +11,9 @@ import pool, {
 // - 组织密钥：每 (user, org) 唯一，org_role ∈ 'owner' | 'member'。
 // relay 契约：tenant := key.org_id ?? user_id；delete-root 要求 org_role=owner。
 
-// 用量统计日界线来自统一部署策略，并与 Relay 保持一致。
-const TZ = applicationTimeZone();
+// 用量统计里的“今天”统一按 Asia/Shanghai 自然日，与 relay 配额计数、
+// admin-db 统计口径一致。
+const TZ = "Asia/Shanghai";
 
 export type OrgRole = "owner" | "member";
 

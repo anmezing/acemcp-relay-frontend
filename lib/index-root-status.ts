@@ -1,5 +1,3 @@
-import { CLIENT_RUNTIME_POLICY } from "@/lib/client-runtime-policy";
-
 export interface IndexRootStatusLike {
   index_state?: string;
   indexed_at?: string;
@@ -95,9 +93,7 @@ export interface IndexPollingPolicy {
  */
 export function resolveIndexPollingPolicy(hasActiveJob: boolean): IndexPollingPolicy {
   return {
-    intervalMs: hasActiveJob
-      ? CLIENT_RUNTIME_POLICY.indexPollActiveMs
-      : CLIENT_RUNTIME_POLICY.indexPollIdleMs,
+    intervalMs: hasActiveJob ? 5000 : 30000,
     refreshStats: true,
     refreshRoots: true,
   };

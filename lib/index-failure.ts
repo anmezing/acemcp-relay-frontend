@@ -1,7 +1,6 @@
 export type IndexFailureCode =
   | "heartbeat_timeout"
   | "embedding_space_changed"
-  | "embedding_input_rejected"
   | "upstream_bad_gateway"
   | "provider_billing"
   | "provider_rate_limited"
@@ -23,7 +22,6 @@ export type IndexFailureOrigin =
 export type IndexRecoveryCode =
   | "restart_client"
   | "reset_root"
-  | "fix_embedding_input"
   | "retry_after_service_recovers"
   | "fix_provider_billing"
   | "retry_later"
@@ -49,7 +47,6 @@ export interface IndexFailurePresentation {
 const failureCodes = new Set<IndexFailureCode>([
   "heartbeat_timeout",
   "embedding_space_changed",
-  "embedding_input_rejected",
   "upstream_bad_gateway",
   "provider_billing",
   "provider_rate_limited",
@@ -71,7 +68,6 @@ const failureOrigins = new Set<IndexFailureOrigin>([
 const recoveryCodes = new Set<IndexRecoveryCode>([
   "restart_client",
   "reset_root",
-  "fix_embedding_input",
   "retry_after_service_recovers",
   "fix_provider_billing",
   "retry_later",
@@ -97,15 +93,6 @@ function classifyLegacyFailure(detail: string): Omit<IndexFailurePresentation, "
   ])) {
     return { code: "embedding_space_changed", origin: "remote_index", recovery: "reset_root" };
   }
-  if (includesAny(lower, [
-    "embedding api 错误: http 400",
-    "embedding api error: http 400",
-    "valid utf-8 format",
-    "special characters are properly escaped",
-    "remote-index 400",
-  ])) {
-    return { code: "embedding_input_rejected", origin: "provider", recovery: "fix_embedding_input" };
-  }
   if (includesAny(lower, ["remote-index 502", "bad gateway", "cloudflare", "origin web server returned"])) {
     return { code: "upstream_bad_gateway", origin: "remote_index", recovery: "retry_after_service_recovers" };
   }
@@ -115,10 +102,10 @@ function classifyLegacyFailure(detail: string): Omit<IndexFailurePresentation, "
   if (includesAny(lower, ["too many requests", "rate limit", "rate-limit", "remote-index 429"])) {
     return { code: "provider_rate_limited", origin: "provider", recovery: "retry_later" };
   }
-  if (includesAny(lower, ["manifest exceeds", "unreadable file list exceeds", "too many files", "file count limit", "maximum file count", "文件数量", "文件数超过"])) {
+  if (includesAny(lower, ["manifest exceeds", "unreadable file list exceeds", "too many files", "file count limit", "maximum file count", "100,000 files", "100000 files", "文件数量", "文件数超过"])) {
     return { code: "repository_file_limit", origin: "client", recovery: "reduce_repository" };
   }
-  if (includesAny(lower, ["manifest file size is invalid", "file exceeds the", "byte limit", "file too large", "file size limit", "maximum file size", "文件大小超过", "单文件过大"])) {
+  if (includesAny(lower, ["manifest file size is invalid", "file exceeds the", "byte limit", "file too large", "file size limit", "maximum file size", "512 kib", "524288", "文件大小超过", "单文件过大"])) {
     return { code: "repository_file_size_limit", origin: "client", recovery: "reduce_repository" };
   }
   if (includesAny(lower, ["quota exceeded", "quota exhausted", "配额不足", "配额已用尽", "超出配额"])) {

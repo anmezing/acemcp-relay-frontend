@@ -11,23 +11,24 @@ import { LceBrand } from "@/components/LceBrand";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import type { AppLocale } from "@/i18n/config";
 import { useLocale, useTranslations } from "next-intl";
-import { CLIENT_RUNTIME_POLICY } from "@/lib/client-runtime-policy";
 
-// 日期范围和时区来自统一的前端运行策略。
+const LEADERBOARD_REFRESH_INTERVAL_MS = 30_000;
+
+// 获取最近三天的日期选项（使用 Asia/Shanghai 时区）
 function getDateOptions(locale: AppLocale) {
   const options: { date: string; label: string }[] = [];
   const now = new Date();
 
-  for (let i = 0; i < CLIENT_RUNTIME_POLICY.leaderboardDateOptionCount; i++) {
+  for (let i = 0; i < 3; i++) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
     // 完整日期字符串用于 API 调用 (YYYY-MM-DD)
     const dateStr = new Intl.DateTimeFormat("sv-SE", {
-      timeZone: CLIENT_RUNTIME_POLICY.applicationTimeZone,
+      timeZone: "Asia/Shanghai",
     }).format(d);
     // 显示标签使用 M/D 格式（如 1/15）
     const label = new Intl.DateTimeFormat(locale, {
-      timeZone: CLIENT_RUNTIME_POLICY.applicationTimeZone,
+      timeZone: "Asia/Shanghai",
       month: "numeric",
       day: "numeric",
     }).format(d);
@@ -105,11 +106,11 @@ export default function LeaderboardPage() {
   useEffect(() => {
     if (!session || selectedDate !== dateOptions[0]?.date) return;
 
-    // 当天排行榜直接读取请求日志；页面可见时按统一运行策略静默刷新。
+    // 当天排行榜直接读取请求日志；页面可见时每 30 秒静默刷新一次。
     const refresh = () => {
       if (document.visibilityState === "visible") void load(selectedDate);
     };
-    const intervalId = window.setInterval(refresh, CLIENT_RUNTIME_POLICY.leaderboardRefreshMs);
+    const intervalId = window.setInterval(refresh, LEADERBOARD_REFRESH_INTERVAL_MS);
     document.addEventListener("visibilitychange", refresh);
     return () => {
       window.clearInterval(intervalId);

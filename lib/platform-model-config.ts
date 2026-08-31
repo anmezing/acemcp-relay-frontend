@@ -1,10 +1,8 @@
 import { getRelayAdminHeaders } from "@/lib/relay-console";
-import {
-  platformModelConfigResponseLimitBytes,
-  relayRequestTimeoutMs,
-  relayUrl,
-} from "@/lib/server-runtime-config";
 
+const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
+const CONFIG_URL = `${RELAY_URL}/internal/platform-model-config`;
+const MAX_RESPONSE_BYTES = 64 * 1024;
 
 export interface PlatformModelConfigView {
   embeddings: {
@@ -149,13 +147,13 @@ function parseView(value: unknown): PlatformModelConfigView {
 }
 
 export async function fetchPlatformModelConfig(): Promise<PlatformModelConfigView> {
-  const response = await fetch(relayUrl("/internal/platform-model-config"), {
+  const response = await fetch(CONFIG_URL, {
     headers: getRelayAdminHeaders(),
     cache: "no-store",
-    signal: AbortSignal.timeout(relayRequestTimeoutMs()),
+    signal: AbortSignal.timeout(15_000),
   });
   const text = await response.text();
-  if (Buffer.byteLength(text, "utf8") > platformModelConfigResponseLimitBytes()) {
+  if (Buffer.byteLength(text, "utf8") > MAX_RESPONSE_BYTES) {
     throw new Error("模型配置响应过大");
   }
 

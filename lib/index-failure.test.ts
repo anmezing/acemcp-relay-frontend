@@ -26,16 +26,6 @@ describe("index failure presentation", () => {
     });
   });
 
-  it("classifies provider HTTP 400 embedding input rejection", () => {
-    expect(resolveIndexFailurePresentation({
-      index_error: "Embedding API 错误: HTTP 400: input must be encoded in valid UTF-8 format and special characters are properly escaped",
-    })).toMatchObject({
-      code: "embedding_input_rejected",
-      origin: "provider",
-      recovery: "fix_embedding_input",
-    });
-  });
-
   it("classifies legacy Cloudflare 502 responses", () => {
     expect(resolveIndexFailurePresentation({
       index_error: 'remote-index 502: {"title":"Error 502: Bad gateway","detail":"origin web server returned an invalid response"}',
