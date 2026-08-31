@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
+import { ByteQuotaInput } from "@/components/admin/ByteQuotaInput";
+import {
+  bytesToQuotaDraft,
+  formatByteLimit,
+  quotaDraftToBytes,
+} from "@/lib/byte-units";
+import type { ByteQuotaDraft } from "@/lib/byte-units";
 
 interface QuotaRow {
   user_id: string;
@@ -27,18 +34,6 @@ type UserQuotaSource =
   | "base_tier"
   | "platform_default";
 
-function formatBytes(value: number, unlimited: string): string {
-  if (value === 0) return unlimited;
-  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
-  let amount = value;
-  let unit = 0;
-  while (amount >= 1024 && unit < units.length - 1) {
-    amount /= 1024;
-    unit += 1;
-  }
-  return `${amount >= 10 || unit === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[unit]}`;
-}
-
 export function AdminQuotaTab() {
   const t = useTranslations("AdminQuotas");
   const [quotas, setQuotas] = useState<QuotaRow[] | null>(null);
@@ -49,7 +44,7 @@ export function AdminQuotaTab() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [requestDrafts, setRequestDrafts] = useState<Record<string, string>>({});
-  const [indexDrafts, setIndexDrafts] = useState<Record<string, string>>({});
+  const [indexDrafts, setIndexDrafts] = useState<Record<string, ByteQuotaDraft>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
 
@@ -90,7 +85,7 @@ export function AdminQuotaTab() {
   }, [load]);
 
   const save = useCallback(
-    async (userId: string) => {
+    async (quota: QuotaRow) => {
       const parseDraft = (rawValue: string): number | null | undefined => {
         const raw = rawValue.trim();
         if (raw === "") return null;
@@ -98,10 +93,20 @@ export function AdminQuotaTab() {
         const parsed = Number(raw);
         return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
       };
-      const requestLimit = parseDraft(requestDrafts[userId] ?? "");
-      const indexBytesLimit = parseDraft(indexDrafts[userId] ?? "");
-      if (requestLimit === undefined || indexBytesLimit === undefined) {
-        setNotice(t("bothQuotasMustBeIntegers00"));
+      const userId = quota.user_id;
+      const requestLimit = parseDraft(
+        requestDrafts[userId] ??
+          (quota.daily_limit === null ? "" : String(quota.daily_limit))
+      );
+      const indexDraft =
+        indexDrafts[userId] ?? bytesToQuotaDraft(quota.daily_index_bytes_limit);
+      const indexBytesLimit = quotaDraftToBytes(indexDraft.amount, indexDraft.unit);
+      if (requestLimit === undefined) {
+        setNotice(t("requestQuotaMustBeInteger"));
+        return;
+      }
+      if (indexBytesLimit === undefined) {
+        setNotice(t("indexQuotaMustBeNumber"));
         return;
       }
       setBusy(userId);
@@ -153,12 +158,12 @@ export function AdminQuotaTab() {
           {t("effectiveQuotasUseAdminOverridesActivePlans")}
           <span className="text-slate-300 font-mono ml-1">
             {t("requests")} {defaultLimit > 0 ? defaultLimit.toLocaleString() : t("unlimited")}, {t("index")} {" "}
-            {formatBytes(defaultIndexBytesLimit, t("unlimited"))}
+            {formatByteLimit(defaultIndexBytesLimit, t("unlimited"))}
           </span>
           {t("pro")}
           <span className="text-slate-300 font-mono ml-1">
             {t("requests")} {proLimit > 0 ? proLimit.toLocaleString() : t("unlimited")}, {t("index")} {" "}
-            {formatBytes(proIndexBytesLimit, t("unlimited"))}
+            {formatByteLimit(proIndexBytesLimit, t("unlimited"))}
           </span>
         </p>
         <Button variant="ghost" size="sm" onClick={refresh} disabled={loading}
@@ -179,6 +184,8 @@ export function AdminQuotaTab() {
         {quotas.map((q) => {
           const effective = q.effective_daily_limit;
           const over = effective > 0 && q.today_count >= effective;
+          const indexDraft =
+            indexDrafts[q.user_id] ?? bytesToQuotaDraft(q.daily_index_bytes_limit);
           return (
             <div key={q.user_id}
               className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-[#0a0f1a]/60 border border-white/[0.06] rounded-xl px-3 sm:px-4 py-2.5">
@@ -204,7 +211,7 @@ export function AdminQuotaTab() {
                   </span>
                 </p>
                 <p>
-                  {t("index2")} {formatBytes(q.effective_daily_index_bytes_limit, t("unlimited"))} / {t("day")}
+                  {t("index2")} {formatByteLimit(q.effective_daily_index_bytes_limit, t("unlimited"))} / {t("day")}
                   <span className="text-slate-600">
                     {` (${q.daily_index_bytes_limit_source === "subscription" && !q.subscription_plan_name
                       ? t("quotaSource.activePlan")
@@ -224,17 +231,25 @@ export function AdminQuotaTab() {
                   />
                 </label>
                 <label className="flex items-center gap-1 text-[10px] text-slate-500">
-                  {t("indexB")}
-                <input
-                  value={indexDrafts[q.user_id] ?? (q.daily_index_bytes_limit === null ? "" : String(q.daily_index_bytes_limit))}
-                  onChange={(e) => setIndexDrafts((d) => ({ ...d, [q.user_id]: e.target.value }))}
-                  placeholder={t("default")}
-                  inputMode="numeric"
-                  className="w-28 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/40 text-right font-mono"
-                />
+                  {t("indexQuota")}
+                  <ByteQuotaInput
+                    value={indexDraft}
+                    onChange={(value) =>
+                      setIndexDrafts((drafts) => ({
+                        ...drafts,
+                        [q.user_id]: value,
+                      }))
+                    }
+                    amountLabel={t("indexAmount")}
+                    unitLabel={t("indexUnit")}
+                    placeholder={t("default")}
+                    title={t("indexQuotaTitle")}
+                    compact
+                    className="w-40"
+                  />
                 </label>
                 <Button variant="glass" size="sm" disabled={busy === q.user_id}
-                  onClick={() => save(q.user_id)} className="h-7 px-2.5 text-xs">
+                  onClick={() => save(q)} className="h-7 px-2.5 text-xs">
                   {t("save")}
                 </Button>
               </div>
@@ -244,7 +259,7 @@ export function AdminQuotaTab() {
       </div>
 
       <p className="text-slate-600 text-[10px]">
-        {t("bothFieldsAreDailyLimitsBlankPlan")}
+        {t("quotaInputHint")}
       </p>
     </div>
   );

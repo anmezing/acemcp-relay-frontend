@@ -8,6 +8,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
+import { ByteQuotaInput } from "@/components/admin/ByteQuotaInput";
+import {
+  bytesToQuotaDraft,
+  formatByteLimit,
+  quotaDraftToBytes,
+} from "@/lib/byte-units";
+import type { ByteQuotaDraft } from "@/lib/byte-units";
 
 interface BillingPlan {
   id: string;
@@ -33,36 +40,26 @@ interface PlanDraft {
   priceYuan: string;
   durationDays: string;
   dailyRequestLimit: string;
-  dailyIndexBytesLimit: string;
+  dailyIndexQuota: ByteQuotaDraft;
   subaccountLimit: string;
   sortOrder: string;
   active: boolean;
 }
 
-const EMPTY_DRAFT: PlanDraft = {
-  code: "",
-  name: "",
-  description: "",
-  tier: "pro",
-  priceYuan: "",
-  durationDays: "30",
-  dailyRequestLimit: "0",
-  dailyIndexBytesLimit: "0",
-  subaccountLimit: "0",
-  sortOrder: "0",
-  active: true,
-};
-
-function formatBytes(value: number, unlimited: string): string {
-  if (value === 0) return unlimited;
-  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
-  let current = value;
-  let index = 0;
-  while (current >= 1024 && index < units.length - 1) {
-    current /= 1024;
-    index += 1;
-  }
-  return `${current.toFixed(current >= 10 || Number.isInteger(current) ? 0 : 1)} ${units[index]}`;
+function createEmptyDraft(): PlanDraft {
+  return {
+    code: "",
+    name: "",
+    description: "",
+    tier: "pro",
+    priceYuan: "",
+    durationDays: "30",
+    dailyRequestLimit: "0",
+    dailyIndexQuota: { amount: "0", unit: "GiB" },
+    subaccountLimit: "0",
+    sortOrder: "0",
+    active: true,
+  };
 }
 
 function parseInteger(value: string, invalidMessage: string, rangeMessage: string): number {
@@ -87,7 +84,7 @@ function yuanToFen(value: string, formatMessage: string, rangeMessage: string): 
 export function AdminPlansTab() {
   const t = useTranslations("AdminPlans");
   const [plans, setPlans] = useState<BillingPlan[] | null>(null);
-  const [draft, setDraft] = useState<PlanDraft>(EMPTY_DRAFT);
+  const [draft, setDraft] = useState<PlanDraft>(createEmptyDraft);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [noticeOk, setNoticeOk] = useState(false);
@@ -130,7 +127,7 @@ export function AdminPlansTab() {
       priceYuan: (plan.priceFen / 100).toFixed(2),
       durationDays: String(plan.durationDays),
       dailyRequestLimit: String(plan.dailyRequestLimit),
-      dailyIndexBytesLimit: String(plan.dailyIndexBytesLimit),
+      dailyIndexQuota: bytesToQuotaDraft(plan.dailyIndexBytesLimit),
       subaccountLimit: String(plan.subaccountLimit),
       sortOrder: String(plan.sortOrder),
       active: plan.active,
@@ -142,6 +139,13 @@ export function AdminPlansTab() {
     setBusy(true);
     setNotice("");
     try {
+      const dailyIndexBytesLimit = quotaDraftToBytes(
+        draft.dailyIndexQuota.amount,
+        draft.dailyIndexQuota.unit
+      );
+      if (dailyIndexBytesLimit === null || dailyIndexBytesLimit === undefined) {
+        throw new Error(t("indexQuotaInvalid"));
+      }
       const body = {
         id: draft.id,
         code: draft.code.trim(),
@@ -151,11 +155,7 @@ export function AdminPlansTab() {
         priceFen: yuanToFen(draft.priceYuan, t("priceFormat"), t("priceOutOfRange")),
         durationDays: parseInteger(draft.durationDays, t("mustBeNonNegativeInteger", { label: t("durationDays") }), t("outOfRange", { label: t("durationDays") })),
         dailyRequestLimit: parseInteger(draft.dailyRequestLimit, t("mustBeNonNegativeInteger", { label: t("dailyRequests") }), t("outOfRange", { label: t("dailyRequests") })),
-        dailyIndexBytesLimit: parseInteger(
-          draft.dailyIndexBytesLimit,
-          t("mustBeNonNegativeInteger", { label: t("dailyIndexBytes") }),
-          t("outOfRange", { label: t("dailyIndexBytes") })
-        ),
+        dailyIndexBytesLimit,
         subaccountLimit: parseInteger(draft.subaccountLimit, t("mustBeNonNegativeInteger", { label: t("subaccounts") }), t("outOfRange", { label: t("subaccounts") })),
         sortOrder: parseInteger(draft.sortOrder, t("mustBeNonNegativeInteger", { label: t("sortOrder") }), t("outOfRange", { label: t("sortOrder") })),
         active: draft.active,
@@ -173,7 +173,7 @@ export function AdminPlansTab() {
       };
       if (!response.ok) throw new Error(payload.error || t("failedToSave"));
       await load();
-      setDraft(EMPTY_DRAFT);
+      setDraft(createEmptyDraft());
       setNotice(t("planSaved"));
       setNoticeOk(true);
     } catch (reason) {
@@ -231,7 +231,7 @@ export function AdminPlansTab() {
               </p>
             </div>
             {draft.id && (
-              <Button variant="ghost" size="sm" onClick={() => setDraft(EMPTY_DRAFT)}>
+              <Button variant="ghost" size="sm" onClick={() => setDraft(createEmptyDraft())}>
                 <Plus className="mr-1 h-4 w-4" />
                 {t("new")}
               </Button>
@@ -313,17 +313,19 @@ export function AdminPlansTab() {
                 className="field-input"
               />
             </Field>
-            <Field label={t("dailyIndexBytes")}>
-              <input
-                value={draft.dailyIndexBytesLimit}
-                onChange={(event) =>
+            <Field label={t("dailyIndexQuota")}>
+              <ByteQuotaInput
+                value={draft.dailyIndexQuota}
+                onChange={(value) =>
                   setDraft((current) => ({
                     ...current,
-                    dailyIndexBytesLimit: event.target.value,
+                    dailyIndexQuota: value,
                   }))
                 }
-                inputMode="numeric"
-                className="field-input"
+                amountLabel={t("indexAmount")}
+                unitLabel={t("indexUnit")}
+                title={t("dailyIndexQuotaTitle")}
+                className="w-full"
               />
             </Field>
             <Field label={t("subaccounts")}>
@@ -440,7 +442,7 @@ export function AdminPlansTab() {
                 {t("requests")} {plan.dailyRequestLimit === 0 ? t("unlimited") : plan.dailyRequestLimit.toLocaleString()}
               </span>
               <span className="text-slate-500">
-                {t("index")} {formatBytes(plan.dailyIndexBytesLimit, t("unlimited"))}
+                {t("index")} {formatByteLimit(plan.dailyIndexBytesLimit, t("unlimited"))}
               </span>
               <span className="text-slate-500">{t("subaccounts")} {plan.subaccountLimit}</span>
               <div className="ml-auto flex gap-1">

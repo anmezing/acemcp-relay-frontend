@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
+import { ByteQuotaInput } from "@/components/admin/ByteQuotaInput";
+import {
+  bytesToQuotaDraft,
+  formatByteLimit,
+  quotaDraftToBytes,
+} from "@/lib/byte-units";
+import type { ByteQuotaDraft } from "@/lib/byte-units";
 
 interface AdminOrgRow {
   org_id: string;
@@ -30,17 +37,8 @@ type OrgQuotaSource =
   | "owner_tier"
   | "platform_default";
 
-function formatLimit(value: number, unlimited: string, bytes = false): string {
-  if (value === 0) return unlimited;
-  if (!bytes) return value.toLocaleString();
-  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
-  let amount = value;
-  let unit = 0;
-  while (amount >= 1024 && unit < units.length - 1) {
-    amount /= 1024;
-    unit += 1;
-  }
-  return `${amount >= 10 || unit === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[unit]}`;
+function formatRequestLimit(value: number, unlimited: string): string {
+  return value === 0 ? unlimited : value.toLocaleString();
 }
 
 // 平台管理员：组织列表 + 共享配额池分配（org_quotas，relay 消费）。
@@ -50,7 +48,9 @@ export function AdminOrgsTab() {
   const [orgs, setOrgs] = useState<AdminOrgRow[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [drafts, setDrafts] = useState<Record<string, { req: string; bytes: string }>>({});
+  const [drafts, setDrafts] = useState<
+    Record<string, { req: string; index: ByteQuotaDraft }>
+  >({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [noticeOk, setNoticeOk] = useState(false);
@@ -93,12 +93,17 @@ export function AdminOrgsTab() {
     async (org: AdminOrgRow) => {
       const draft = drafts[org.org_id] ?? {
         req: org.daily_request_limit === null ? "" : String(org.daily_request_limit),
-        bytes: org.daily_index_bytes_limit === null ? "" : String(org.daily_index_bytes_limit),
+        index: bytesToQuotaDraft(org.daily_index_bytes_limit),
       };
       const req = parseDraft(draft.req);
-      const bytes = parseDraft(draft.bytes);
-      if (req === undefined || bytes === undefined) {
-        setNotice(t("quotaMustBeANonNegativeInteger"));
+      const bytes = quotaDraftToBytes(draft.index.amount, draft.index.unit);
+      if (req === undefined) {
+        setNotice(t("requestQuotaMustBeInteger"));
+        setNoticeOk(false);
+        return;
+      }
+      if (bytes === undefined) {
+        setNotice(t("indexQuotaMustBeNumber"));
         setNoticeOk(false);
         return;
       }
@@ -181,6 +186,8 @@ export function AdminOrgsTab() {
       <div className="space-y-2">
         {orgs.map((org) => {
           const draft = drafts[org.org_id];
+          const indexDraft =
+            draft?.index ?? bytesToQuotaDraft(org.daily_index_bytes_limit);
           return (
             <div
               key={org.org_id}
@@ -197,7 +204,7 @@ export function AdminOrgsTab() {
                 </p>
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-500">
                   <span>
-                    {t("effectiveRequests")} {formatLimit(org.effective_daily_request_limit, t("unlimited"))} / {t("day")}
+                    {t("effectiveRequests")} {formatRequestLimit(org.effective_daily_request_limit, t("unlimited"))} / {t("day")}
                     <span className="text-slate-600">
                       {` (${org.daily_request_source === "subscription" && !org.plan_name
                         ? t("quotaSource.activePlan")
@@ -205,7 +212,7 @@ export function AdminOrgsTab() {
                     </span>
                   </span>
                   <span>
-                    {t("effectiveIndex")} {formatLimit(org.effective_daily_index_bytes_limit, t("unlimited"), true)} / {t("day")}
+                    {t("effectiveIndex")} {formatByteLimit(org.effective_daily_index_bytes_limit, t("unlimited"))} / {t("day")}
                     <span className="text-slate-600">
                       {` (${org.daily_index_bytes_source === "subscription" && !org.plan_name
                         ? t("quotaSource.activePlan")
@@ -227,9 +234,9 @@ export function AdminOrgsTab() {
                       ...d,
                       [org.org_id]: {
                         req: e.target.value,
-                        bytes:
-                          d[org.org_id]?.bytes ??
-                          (org.daily_index_bytes_limit === null ? "" : String(org.daily_index_bytes_limit)),
+                        index:
+                          d[org.org_id]?.index ??
+                          bytesToQuotaDraft(org.daily_index_bytes_limit),
                       },
                     }))
                   }
@@ -238,23 +245,27 @@ export function AdminOrgsTab() {
                   title={t("dailyRequestLimitTitle")}
                   className="w-24 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/40 text-right font-mono"
                 />
-                <input
-                  value={draft?.bytes ?? (org.daily_index_bytes_limit === null ? "" : String(org.daily_index_bytes_limit))}
-                  onChange={(e) =>
-                    setDrafts((d) => ({
-                      ...d,
+                <ByteQuotaInput
+                  value={indexDraft}
+                  onChange={(value) =>
+                    setDrafts((current) => ({
+                      ...current,
                       [org.org_id]: {
                         req:
-                          d[org.org_id]?.req ??
-                          (org.daily_request_limit === null ? "" : String(org.daily_request_limit)),
-                        bytes: e.target.value,
+                          current[org.org_id]?.req ??
+                          (org.daily_request_limit === null
+                            ? ""
+                            : String(org.daily_request_limit)),
+                        index: value,
                       },
                     }))
                   }
-                  placeholder={t("indexBytesPerDay")}
-                  inputMode="numeric"
+                  amountLabel={t("indexAmount")}
+                  unitLabel={t("indexUnit")}
+                  placeholder={t("indexQuotaPerDay")}
                   title={t("dailyIndexLimitTitle")}
-                  className="w-28 bg-white/[0.03] border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/40 text-right font-mono"
+                  compact
+                  className="w-40"
                 />
                 <Button
                   variant="glass"

@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useLocale, useTranslations } from "next-intl";
+import { formatByteLimit, formatBytes } from "@/lib/byte-units";
 
 interface BillingPlan {
   id: string;
@@ -67,19 +68,6 @@ function formatLimit(value: number, unit: string, unlimited: string): string {
   return value === 0
     ? unlimited
     : `${value.toLocaleString()}${unit ? ` ${unit}` : ""}`;
-}
-
-function formatBytes(value: number, unlimited: string): string {
-  if (value === 0) return unlimited;
-  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
-  let current = value;
-  let index = 0;
-  while (current >= 1024 && index < units.length - 1) {
-    current /= 1024;
-    index += 1;
-  }
-  const digits = current >= 100 || Number.isInteger(current) ? 0 : 1;
-  return `${current.toFixed(digits)} ${units[index]}`;
 }
 
 function formatMoney(fen: number): string {
@@ -278,7 +266,7 @@ export function PlansTab() {
                 <p className="text-slate-500">{t("indexDay")}</p>
                 <p className="mt-1 font-mono text-slate-200">
                   {data.subscription
-                    ? formatBytes(data.subscription.dailyIndexBytesLimit, t("unlimited"))
+                    ? formatByteLimit(data.subscription.dailyIndexBytesLimit, t("unlimited"))
                     : t("platformDefault")}
                 </p>
               </div>
@@ -316,8 +304,8 @@ export function PlansTab() {
                   {data.usage.indexBytesUsed === null
                     ? t("usageTemporarilyUnavailable")
                     : data.subscription
-                      ? `${formatBytes(data.usage.indexBytesUsed, t("unlimited"))} / ${formatBytes(data.subscription.dailyIndexBytesLimit, t("unlimited"))}`
-                      : formatBytes(data.usage.indexBytesUsed, t("unlimited"))}
+                      ? `${formatBytes(data.usage.indexBytesUsed)} / ${formatByteLimit(data.subscription.dailyIndexBytesLimit, t("unlimited"))}`
+                      : formatBytes(data.usage.indexBytesUsed)}
                 </span>
               </div>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
@@ -392,7 +380,7 @@ export function PlansTab() {
                   </div>
                   <div className="flex items-center gap-2 text-slate-300">
                     <Check className="h-4 w-4 text-cyan-400" />
-                    {t("dailyIndex")} {formatBytes(plan.dailyIndexBytesLimit, t("unlimited"))}
+                    {t("dailyIndex")} {formatByteLimit(plan.dailyIndexBytesLimit, t("unlimited"))}
                   </div>
                   <div className="flex items-center gap-2 text-slate-300">
                     <Users className="h-4 w-4 text-cyan-400" />
