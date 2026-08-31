@@ -1,13 +1,11 @@
-import { LCE_CLIENT_PACKAGE_NAME } from "@/lib/lce-client";
 import { getRelayAdminHeaders } from "@/lib/relay-console";
-import {
-  clientVersionCacheSeconds,
-  packageRegistryMetadataUrl,
-  relayRequestTimeoutMs,
-  relayUrl,
-} from "@/lib/server-runtime-config";
 
-export const LCE_CLOUD_PACKAGE = LCE_CLIENT_PACKAGE_NAME;
+export const LCE_CLOUD_PACKAGE = "@anmezing/lce-cloud";
+export const LCE_CLOUD_UPGRADE_COMMAND = `npm install -g ${LCE_CLOUD_PACKAGE}@latest`;
+
+const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
+const RELAY_POLICY_URL = `${RELAY_URL}/internal/client-version-policy`;
+const NPM_LATEST_URL = "https://registry.npmjs.org/@anmezing%2Flce-cloud/latest";
 const CLIENT_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 export interface RelayClientVersionPolicy {
@@ -18,7 +16,7 @@ export interface RelayClientVersionPolicy {
 
 export interface ClientVersionSummary extends RelayClientVersionPolicy {
   latestVersion: string | null;
-  latestVersionSource: "registry" | null;
+  latestVersionSource: "npm" | null;
   warnings: string[];
 }
 
@@ -36,23 +34,23 @@ async function responseMessage(response: Response): Promise<string> {
 }
 
 export async function fetchPublishedClientVersion(): Promise<string> {
-  const response = await fetch(packageRegistryMetadataUrl(LCE_CLOUD_PACKAGE), {
+  const response = await fetch(NPM_LATEST_URL, {
     headers: { Accept: "application/json" },
-    next: { revalidate: clientVersionCacheSeconds() },
-    signal: AbortSignal.timeout(relayRequestTimeoutMs()),
+    next: { revalidate: 900 },
+    signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) throw new Error(await responseMessage(response));
   const body = await response.json() as { version?: unknown };
   const version = optionalVersion(body.version);
-  if (!version) throw new Error("package registry returned an invalid version");
+  if (!version) throw new Error("npm registry returned an invalid version");
   return version;
 }
 
 export async function fetchRelayClientVersionPolicy(): Promise<RelayClientVersionPolicy> {
-  const response = await fetch(relayUrl("/internal/client-version-policy"), {
+  const response = await fetch(RELAY_POLICY_URL, {
     headers: getRelayAdminHeaders(),
     cache: "no-store",
-    signal: AbortSignal.timeout(relayRequestTimeoutMs()),
+    signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) throw new Error(await responseMessage(response));
   const body = await response.json() as Record<string, unknown>;
@@ -81,9 +79,9 @@ export async function getClientVersionSummary(): Promise<ClientVersionSummary> {
   return {
     ...policy,
     latestVersion: publishedVersion,
-    latestVersionSource: publishedVersion ? "registry" : null,
+    latestVersionSource: publishedVersion ? "npm" : null,
     warnings: [
-      ...(publishedResult.status === "rejected" ? ["package_registry_unavailable"] : []),
+      ...(publishedResult.status === "rejected" ? ["npm_registry_unavailable"] : []),
       ...(policyResult.status === "rejected" ? ["relay_policy_unavailable"] : []),
     ],
   };
@@ -94,7 +92,7 @@ export async function saveRelayMinimumClientVersion(minimumVersion: string | nul
   if (normalized !== null && !CLIENT_VERSION_PATTERN.test(normalized)) {
     throw new Error("invalid client version");
   }
-  const response = await fetch(relayUrl("/internal/client-version-policy"), {
+  const response = await fetch(RELAY_POLICY_URL, {
     method: "POST",
     headers: {
       ...getRelayAdminHeaders(),
@@ -102,7 +100,7 @@ export async function saveRelayMinimumClientVersion(minimumVersion: string | nul
     },
     body: JSON.stringify({ minimum_version: normalized }),
     cache: "no-store",
-    signal: AbortSignal.timeout(relayRequestTimeoutMs()),
+    signal: AbortSignal.timeout(8_000),
   });
   if (!response.ok) throw new Error(await responseMessage(response));
   const body = await response.json() as Record<string, unknown>;

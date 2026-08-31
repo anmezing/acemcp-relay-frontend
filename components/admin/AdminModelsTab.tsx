@@ -17,12 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  CLOUD_VECTOR_DIMENSIONS,
-  MAX_MODEL_PROVIDER_API_KEYS,
-  EMBEDDING_PROVIDER_PRESETS,
-  PROMPT_ENHANCER_PROVIDER_PRESETS,
-} from "@/lib/model-provider-presets";
 import { RERANK_PROVIDER_PRESETS, type RerankProvider } from "@/lib/rerank-providers";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
@@ -30,7 +24,6 @@ import { useTranslations } from "next-intl";
 type EmbeddingProvider = "openai-compatible" | "voyage";
 type PromptEnhancerProvider = "openai-compatible" | "anthropic" | "gemini";
 type ModelKind = "embeddings" | "rerank" | "promptEnhancer";
-type NoticeTone = "pending" | "success" | "error";
 
 interface ModelForm {
   embeddings: {
@@ -67,6 +60,14 @@ interface ModelView {
 
 const inputClass =
   "w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-2 text-xs text-slate-200 placeholder:text-slate-600 focus:border-cyan-500/40 focus:outline-none font-mono";
+const VOYAGE_EMBEDDING_URL = "https://api.voyageai.com/v1/embeddings";
+const VOYAGE_EMBEDDING_MODELS = ["voyage-code-3"] as const;
+const CLOUD_INDEX_DIMENSIONS = 1024;
+const PROMPT_ENHANCER_PROVIDER_PRESETS: Record<PromptEnhancerProvider, { label: string; baseUrl: string }> = {
+  "openai-compatible": { label: "OpenAI-compatible / Custom", baseUrl: "" },
+  anthropic: { label: "Anthropic", baseUrl: "https://api.anthropic.com/v1/messages" },
+  gemini: { label: "Google Gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta/models" },
+};
 
 function toForm(config: ModelView): ModelForm {
   const embeddings = { ...config.embeddings };
@@ -76,7 +77,7 @@ function toForm(config: ModelView): ModelForm {
   delete (rerank as { apiKeyConfigured?: boolean }).apiKeyConfigured;
   delete (promptEnhancer as { apiKeyConfigured?: boolean }).apiKeyConfigured;
   if (embeddings.provider === "voyage" && embeddings.outputDimension === undefined) {
-    embeddings.outputDimension = CLOUD_VECTOR_DIMENSIONS;
+    embeddings.outputDimension = CLOUD_INDEX_DIMENSIONS;
   }
   return {
     embeddings: { ...embeddings, apiKey: "" },
@@ -182,7 +183,7 @@ export function AdminModelsTab() {
   const [loading, setLoading] = useState(true);
   const [savingKind, setSavingKind] = useState<ModelKind | null>(null);
   const [notice, setNotice] = useState("");
-  const [noticeTone, setNoticeTone] = useState<NoticeTone>("error");
+  const [noticeOk, setNoticeOk] = useState(false);
   const [modelsLoading, setModelsLoading] = useState<ModelKind | null>(null);
   const [embeddingModels, setEmbeddingModels] = useState<string[]>([]);
   const [rerankModels, setRerankModels] = useState<string[]>([]);
@@ -208,7 +209,7 @@ export function AdminModelsTab() {
     } catch (error) {
       if (signal?.aborted) return;
       setNotice(error instanceof Error ? error.message : t("failedToLoadTryAgain"));
-      setNoticeTone("error");
+      setNoticeOk(false);
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
@@ -300,13 +301,13 @@ export function AdminModelsTab() {
       }
       const kindLabel = kind === "embeddings" ? "Embedding" : kind === "rerank" ? "Rerank" : t("promptEnhancement");
       setNotice(t("loadedModels", { count: models.length, kind: kindLabel }));
-      setNoticeTone("success");
+      setNoticeOk(true);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       setNotice(kind === "promptEnhancer"
         ? t("failedToLoadPromptEnhancerModelsUseManual", { p0: reason })
         : t("failedToLoadModels", { p0: reason }));
-      setNoticeTone("error");
+      setNoticeOk(false);
     } finally {
       setModelsLoading(null);
     }
@@ -315,10 +316,7 @@ export function AdminModelsTab() {
   const submit = useCallback(async (kind: ModelKind, confirmEmbeddingReset: boolean) => {
     if (!form) return;
     setSavingKind(kind);
-    setNotice(confirmEmbeddingReset
-      ? t("switchingEmbeddingAndClearingIndexes")
-      : t("validatingAndSavingModelConfiguration"));
-    setNoticeTone("pending");
+    setNotice("");
     try {
       const response = await fetch("/api/admin/model-config", {
         method: "POST",
@@ -331,7 +329,6 @@ export function AdminModelsTab() {
       });
       const data = await response.json().catch(() => ({}));
       if (kind === "embeddings" && response.status === 409 && data.requiresEmbeddingReset) {
-        setNotice("");
         setConfirmReset(true);
         return;
       }
@@ -354,11 +351,10 @@ export function AdminModelsTab() {
       setNotice(data.embeddingChanged
         ? t("configurationSavedAndOldIndexesClearedExisting")
         : t("sectionConfigurationSavedAndAppliedImmediately", { section }));
-      setNoticeTone("success");
+      setNoticeOk(true);
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      setNotice(t("failedToSave", { p0: reason }));
-      setNoticeTone("error");
+      setNotice(t("failedToSave", {p0: error instanceof Error ? error.message : String(error)}));
+      setNoticeOk(false);
     } finally {
       setSavingKind(null);
     }
@@ -373,22 +369,22 @@ export function AdminModelsTab() {
     const embeddings = (() => {
       if (!form.embeddings.baseUrl.trim()) return t("enterTheEmbeddingBaseUrl");
       if (embeddingKeys.length === 0 && !canReuseEmbeddingKey) return t("enterAnEmbeddingApiKey");
-      if (embeddingKeys.length > MAX_MODEL_PROVIDER_API_KEYS) return t("theEmbeddingKeyPoolSupportsUpTo", { p0: MAX_MODEL_PROVIDER_API_KEYS });
+      if (embeddingKeys.length > 100) return t("theEmbeddingKeyPoolSupportsUpTo");
       if (form.embeddings.provider !== "voyage" && embeddingKeys.length > 1) return t("onlyVoyageEmbeddingSupportsMultipleKeys");
       if (!form.embeddings.model.trim()) return form.embeddings.provider === "openai-compatible"
         ? t("loadAndSelectAnEmbeddingModel")
         : t("selectAnEmbeddingModel");
       if (!Number.isSafeInteger(form.embeddings.dimensions) || form.embeddings.dimensions <= 0) return t("enterAValidEmbeddingIndexDimension");
-      if (form.embeddings.dimensions !== CLOUD_VECTOR_DIMENSIONS) return t("cloudIndexesCurrentlyUseDimensionsChangingThe", {p0: CLOUD_VECTOR_DIMENSIONS});
+      if (form.embeddings.dimensions !== CLOUD_INDEX_DIMENSIONS) return t("cloudIndexesCurrentlyUseDimensionsChangingThe", {p0: CLOUD_INDEX_DIMENSIONS});
       if (form.embeddings.provider === "voyage" && form.embeddings.outputDimension !== undefined && form.embeddings.outputDimension !== form.embeddings.dimensions) {
-        return t("voyageOutputDimensionsMustMatchTheIndex", { p0: CLOUD_VECTOR_DIMENSIONS });
+        return t("voyageOutputDimensionsMustMatchTheIndex");
       }
       return "";
     })();
     const rerank = (() => {
       if (!form.rerank.baseUrl.trim()) return t("enterTheRerankBaseUrl");
       if (rerankKeys.length === 0 && !canReuseRerankKey) return t("enterARerankApiKey");
-      if (rerankKeys.length > MAX_MODEL_PROVIDER_API_KEYS) return t("theRerankKeyPoolSupportsUpTo", { p0: MAX_MODEL_PROVIDER_API_KEYS });
+      if (rerankKeys.length > 100) return t("theRerankKeyPoolSupportsUpTo");
       if (form.rerank.provider !== "voyage" && rerankKeys.length > 1) return t("onlyVoyageRerankSupportsMultipleKeys");
       if (!form.rerank.model.trim()) return form.rerank.provider === "siliconflow-compatible"
         ? t("loadAndSelectARerankModel")
@@ -399,7 +395,7 @@ export function AdminModelsTab() {
       if (!form.promptEnhancer.enabled) return "";
       if (!form.promptEnhancer.baseUrl.trim()) return t("enterThePromptEnhancerBaseUrl");
       if (promptEnhancerKeys.length === 0 && !canReusePromptEnhancerKey) return t("enterAPromptEnhancerApiKey");
-      if (promptEnhancerKeys.length > MAX_MODEL_PROVIDER_API_KEYS) return t("thePromptEnhancerKeyPoolSupportsUpTo", { p0: MAX_MODEL_PROVIDER_API_KEYS });
+      if (promptEnhancerKeys.length > 100) return t("thePromptEnhancerKeyPoolSupportsUpTo");
       if (!form.promptEnhancer.model.trim()) return t("enterOrSelectAPromptEnhancerModel");
       return "";
     })();
@@ -413,7 +409,7 @@ export function AdminModelsTab() {
 
   const rerankPreset = RERANK_PROVIDER_PRESETS[form.rerank.provider];
   const embeddingOptions = uniqueModels(
-    form.embeddings.provider === "voyage" ? [...EMBEDDING_PROVIDER_PRESETS.voyage.models] : [],
+    form.embeddings.provider === "voyage" ? [...VOYAGE_EMBEDDING_MODELS] : [],
     embeddingModels,
     [form.embeddings.model],
   );
@@ -451,11 +447,11 @@ export function AdminModelsTab() {
                     setEmbeddingModels([]);
                     updateEmbeddings({
                       provider,
-                      baseUrl: provider === "voyage" ? EMBEDDING_PROVIDER_PRESETS.voyage.baseUrl : "",
-                      model: provider === "voyage" ? EMBEDDING_PROVIDER_PRESETS.voyage.models[0] : "",
+                      baseUrl: provider === "voyage" ? VOYAGE_EMBEDDING_URL : "",
+                      model: provider === "voyage" ? VOYAGE_EMBEDDING_MODELS[0] : "",
                       apiKey: "",
-                      dimensions: CLOUD_VECTOR_DIMENSIONS,
-                      outputDimension: provider === "voyage" ? CLOUD_VECTOR_DIMENSIONS : undefined,
+                      dimensions: 1024,
+                      outputDimension: provider === "voyage" ? 1024 : undefined,
                       outputDtype: provider === "voyage" ? "float" : undefined,
                     });
                   }}
@@ -543,7 +539,7 @@ export function AdminModelsTab() {
               </Field>
               <Field
                 label={t("5IndexDimension")}
-                hint={t("mapsToEmbeddingsDimensionsTheCloudPostgresql", {p0: CLOUD_VECTOR_DIMENSIONS})}
+                hint={t("mapsToEmbeddingsDimensionsTheCloudPostgresql", {p0: CLOUD_INDEX_DIMENSIONS})}
               >
                 <input
                   type="number"
@@ -862,12 +858,7 @@ export function AdminModelsTab() {
       </div>
 
       {notice && (
-        <p className={cn(
-          "text-xs",
-          noticeTone === "success" && "text-emerald-400",
-          noticeTone === "pending" && "text-cyan-400",
-          noticeTone === "error" && "text-red-400",
-        )}>
+        <p className={cn("text-xs", noticeOk ? "text-emerald-400" : "text-red-400")}>
           {notice}
         </p>
       )}

@@ -24,7 +24,7 @@ vi.mock("redis", () => ({
 
 import {
   getLeaderboard,
-  getApplicationDateString,
+  getShanghaiDateString,
   isValidLeaderboardDate,
 } from "./db";
 
@@ -44,7 +44,7 @@ describe("live leaderboard aggregation", () => {
   });
 
   it("uses the Shanghai calendar date at the UTC day boundary", () => {
-    expect(getApplicationDateString(new Date("2026-08-28T16:01:00.000Z"))).toBe(
+    expect(getShanghaiDateString(new Date("2026-08-28T16:01:00.000Z"))).toBe(
       "2026-08-29"
     );
   });

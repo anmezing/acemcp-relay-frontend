@@ -1,65 +1,46 @@
-import { clientLaunchPolicy, type ClientLaunchPolicy } from "@/lib/lce-client";
-
 const KEY_PLACEHOLDER = "YOUR_API_KEY";
+// npx 每次启动解析 @latest 并使用缓存，客户端更新随 npm 发布自动到达用户，
+// 无需安装命令、无需本地路径（也因此不存在 ~ 展开问题）。
+const CLOUD_PACKAGE = "@anmezing/lce-cloud@latest";
+const GLOBAL_CLOUD_COMMAND = "lce-cloud";
 
-export type McpLaunchMode = "package-runner" | "global";
+export type McpLaunchMode = "npx" | "global";
 
-export function availableMcpLaunchModes(
-  policy: ClientLaunchPolicy = clientLaunchPolicy(),
-): readonly McpLaunchMode[] {
-  const modes: McpLaunchMode[] = [];
-  if (policy.packageRunnerCommand) modes.push("package-runner");
-  if (policy.installedClientCommand) modes.push("global");
-  return Object.freeze(modes);
-}
+// ── Cloud Mode (stdio, 推荐) ──────────────────────────────────
 
 function cloudArgs(
   apiKey: string | null,
   repoPath: string | undefined,
   launchMode: McpLaunchMode,
-  policy: ClientLaunchPolicy,
 ): string[] {
   const args = launchMode === "global"
     ? ["--key", apiKey || KEY_PLACEHOLDER]
-    : [
-        ...policy.packageRunnerArgsPrefix,
-        policy.packageSpecifier,
-        "--key",
-        apiKey || KEY_PLACEHOLDER,
-      ];
+    : ["-y", CLOUD_PACKAGE, "--key", apiKey || KEY_PLACEHOLDER];
   const normalizedRepoPath = repoPath?.trim();
   if (normalizedRepoPath) args.push("--repo", normalizedRepoPath);
   return args;
 }
 
-function requiredLaunchCommand(name: string, value: string | undefined): string {
-  if (!value) throw new Error(`${name} is required to generate this client launch mode`);
-  return value;
-}
-
-function cloudCommand(launchMode: McpLaunchMode, policy: ClientLaunchPolicy): string {
-  return launchMode === "global"
-    ? requiredLaunchCommand("NEXT_PUBLIC_LCE_CLIENT_GLOBAL_EXECUTABLE", policy.installedClientCommand)
-    : requiredLaunchCommand("NEXT_PUBLIC_LCE_CLIENT_PACKAGE_RUNNER", policy.packageRunnerCommand);
+function cloudCommand(launchMode: McpLaunchMode): string {
+  return launchMode === "global" ? GLOBAL_CLOUD_COMMAND : "npx";
 }
 
 export function buildCloudMcpConfigJson(
   apiKey: string | null,
   repoPath?: string,
-  launchMode: McpLaunchMode = "package-runner",
-  policy: ClientLaunchPolicy = clientLaunchPolicy(),
+  launchMode: McpLaunchMode = "npx",
 ): string {
   return JSON.stringify(
     {
       mcpServers: {
         lce: {
-          command: cloudCommand(launchMode, policy),
-          args: cloudArgs(apiKey, repoPath, launchMode, policy),
+          command: cloudCommand(launchMode),
+          args: cloudArgs(apiKey, repoPath, launchMode),
         },
       },
     },
     null,
-    2,
+    2
   );
 }
 
@@ -70,13 +51,12 @@ function tomlString(value: string): string {
 export function buildCloudMcpConfigToml(
   apiKey: string | null,
   repoPath?: string,
-  launchMode: McpLaunchMode = "package-runner",
-  policy: ClientLaunchPolicy = clientLaunchPolicy(),
+  launchMode: McpLaunchMode = "npx",
 ): string {
-  const args = cloudArgs(apiKey, repoPath, launchMode, policy).map(tomlString).join(", ");
+  const args = cloudArgs(apiKey, repoPath, launchMode).map(tomlString).join(", ");
   return [
     `[mcp_servers.lce]`,
-    `command = ${tomlString(cloudCommand(launchMode, policy))}`,
+    `command = ${tomlString(cloudCommand(launchMode))}`,
     `args = [${args}]`,
   ].join("\n");
 }

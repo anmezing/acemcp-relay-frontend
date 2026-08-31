@@ -7,6 +7,7 @@ vi.mock("@/lib/relay-console", () => ({
 import {
   getClientVersionSummary,
   LCE_CLOUD_PACKAGE,
+  LCE_CLOUD_UPGRADE_COMMAND,
   saveRelayMinimumClientVersion,
 } from "@/lib/client-version-policy";
 
@@ -33,7 +34,7 @@ describe("client version policy", () => {
     await expect(getClientVersionSummary()).resolves.toMatchObject({
       packageName: LCE_CLOUD_PACKAGE,
       latestVersion: "1.3.4",
-      latestVersionSource: "registry",
+      latestVersionSource: "npm",
       minimumVersion: "1.3.3",
       indexClientVersionRequired: true,
       warnings: [],
@@ -57,7 +58,7 @@ describe("client version policy", () => {
     await expect(getClientVersionSummary()).resolves.toMatchObject({
       latestVersion: null,
       latestVersionSource: null,
-      warnings: ["package_registry_unavailable"],
+      warnings: ["npm_registry_unavailable"],
     });
   });
 
@@ -69,4 +70,7 @@ describe("client version policy", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("keeps the documented upgrade command on the latest dist-tag", () => {
+    expect(LCE_CLOUD_UPGRADE_COMMAND).toBe("npm install -g @anmezing/lce-cloud@latest");
+  });
 });

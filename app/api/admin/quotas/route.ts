@@ -1,8 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  MAX_ADMIN_DAILY_INDEX_BYTES_LIMIT,
-  MAX_ADMIN_DAILY_REQUEST_LIMIT,
-} from "@/lib/quota-policy";
 import { requireAdminSession } from "@/lib/admin";
 import { listQuotas, setUserQuota } from "@/lib/admin-db";
 
@@ -72,10 +68,10 @@ export async function POST(request: NextRequest) {
     }
     return parsed;
   };
-  const requestLimit = parseLimit(body.requestLimit, MAX_ADMIN_DAILY_REQUEST_LIMIT);
+  const requestLimit = parseLimit(body.requestLimit, 1_000_000_000);
   const indexBytesLimit = parseLimit(
     body.indexBytesLimit,
-    MAX_ADMIN_DAILY_INDEX_BYTES_LIMIT
+    Number.MAX_SAFE_INTEGER
   );
   if (requestLimit === undefined || indexBytesLimit === undefined) {
     return NextResponse.json({ error: "invalid limit" }, { status: 400 });

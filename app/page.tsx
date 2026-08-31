@@ -103,7 +103,7 @@ export default function Home() {
                 <I18nText id="codingAgentsUsuallyUnderstandRepositoriesThroughRepeated" /><span className="text-white"><I18nText id="contextWindow" /></span><I18nText id="lceTurnsThisIntoOneCallThe" /><span className="text-white"><I18nText id="threeRetrievalPaths" /></span><I18nText id="withStructuredEvidenceSuchAsCallChains" />
               </p>
               <p>
-                <I18nText id="lceProvidesReadyCloud" />
+                <I18nText id="lceProvidesAReadyToUseCloud" />
               </p>
             </div>
           </section>
@@ -163,6 +163,9 @@ export default function Home() {
                 <I18nText id="openTheConsoleAndGenerateAnApi" />
               </StepCard>
               <StepCard step={2} title={<I18nText id="optionalInstallTheClientInAdvance" />}>
+                <code className="mb-2 block w-fit rounded-md border border-cyan-500/15 bg-cyan-500/[0.05] px-3 py-2 font-mono text-sm text-cyan-300">
+                  npm install -g @anmezing/lce-cloud@latest
+                </code>
                 <I18nText id="globalInstallationAvoidsRepeatedPackageResolution" />
               </StepCard>
               <StepCard step={3} title={<I18nText id="addTheMcpConfiguration" />}>

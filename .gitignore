@@ -47,7 +47,3 @@ next-env.d.ts
 
 # dev logs
 *.log
-
-# host-specific developer tool launchers (keep local; commands differ by environment)
-/.mcp.json
-/.codex/config.toml

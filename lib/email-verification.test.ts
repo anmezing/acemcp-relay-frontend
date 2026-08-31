@@ -77,7 +77,7 @@ describe("email verification SMTP configuration", () => {
     await sendAccountVerificationEmail({
       email: "user@example.com",
       name: "<LCE User>",
-      verificationUrl: "https://console.example.test/api/auth/verify-email?token=test&callbackURL=%2Fconsole",
+      verificationUrl: "https://lcebot.com/api/auth/verify-email?token=test&callbackURL=%2Fconsole",
     }, env);
 
     const firstTransport = mailMocks.transports.at(-1)!;
@@ -85,13 +85,13 @@ describe("email verification SMTP configuration", () => {
       from: "noreply@example.com",
       to: "user@example.com",
       subject: expect.stringContaining("LCE"),
-      text: expect.stringContaining("https://console.example.test/api/auth/verify-email"),
+      text: expect.stringContaining("https://lcebot.com/api/auth/verify-email"),
       html: expect.stringContaining("&lt;LCE User&gt;"),
     }));
 
     await sendAccountVerificationEmail({
       email: "user@example.com",
-      verificationUrl: "https://console.example.test/api/auth/verify-email?token=rotated",
+      verificationUrl: "https://lcebot.com/api/auth/verify-email?token=rotated",
     }, { ...env, SMTP_PASSWORD: "rotated-secret" });
 
     expect(firstTransport.close).toHaveBeenCalledOnce();

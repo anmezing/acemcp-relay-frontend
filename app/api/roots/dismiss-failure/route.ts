@@ -4,8 +4,8 @@ import { auth } from "@/lib/auth";
 import { getApiKey, initDB } from "@/lib/db";
 import { ensureOrgApiKey, getMemberRole } from "@/lib/org-db";
 import { getRelayConsoleHeaders } from "@/lib/relay-console";
-import { relayUrl } from "@/lib/server-runtime-config";
 
+const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
 
 // 清理失败任务记录不会删除已发布索引，但仍属于组织索引管理操作，因此组织
 // 上下文只允许 owner。Relay 会再次做权威权限校验。
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
       apiKey = keyRecord.api_key;
     }
 
-    const res = await fetch(relayUrl("/mcp/dismiss-root-failure"), {
+    const res = await fetch(`${RELAY_URL}/mcp/dismiss-root-failure`, {
       method: "POST",
       headers: {
         ...getRelayConsoleHeaders(apiKey),

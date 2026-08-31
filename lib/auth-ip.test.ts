@@ -28,7 +28,7 @@ describe("authIpAddressOptions", () => {
 
   it("makes Better Auth ignore a caller-supplied X-Forwarded-For when unconfigured", () => {
     const spoofed = "198.51.100.27";
-    const request = new Request("https://console.example.test/api/auth/sign-in", {
+    const request = new Request("https://lcebot.com/api/auth/sign-in", {
       headers: { "x-forwarded-for": spoofed },
     });
     const options = {

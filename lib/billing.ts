@@ -1,6 +1,4 @@
 import crypto from "crypto";
-import { paymentRuntimePolicy } from "@/lib/server-runtime-config";
-import { MILLISECONDS_PER_DAY, MILLISECONDS_PER_MINUTE } from "@/lib/time-policy";
 import pool, {
   deleteOrgQuotaCache,
   deleteQuotaLimitCache,
@@ -476,9 +474,7 @@ export async function createPendingOrder(
     }
 
     const now = new Date();
-    const expiresAt = new Date(
-      now.getTime() + paymentRuntimePolicy().orderTtlMinutes * MILLISECONDS_PER_MINUTE,
-    );
+    const expiresAt = new Date(now.getTime() + 15 * 60_000);
     const compactDate = now
       .toISOString()
       .slice(0, 10)
@@ -641,7 +637,7 @@ export async function markOrderPaid(input: {
           ? currentExpiry
           : input.paidAt;
       const nextExpiry = new Date(
-        base.getTime() + order.planSnapshot.durationDays * MILLISECONDS_PER_DAY
+        base.getTime() + order.planSnapshot.durationDays * 86_400_000
       );
 
       await client.query(

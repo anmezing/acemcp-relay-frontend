@@ -79,27 +79,8 @@ describe("admin model config routes", () => {
       method: "POST",
       headers: { "X-LCE-Console-Token": "console-token", "Content-Type": "application/json" },
       body: JSON.stringify(patch),
-      signal: expect.any(AbortSignal),
     });
     expect(headers).toHaveBeenCalled();
-  });
-
-  it("returns an actionable gateway timeout when the relay save times out", async () => {
-    const timeout = new Error("The operation timed out");
-    timeout.name = "TimeoutError";
-    fetchMock.mockRejectedValueOnce(timeout);
-
-    const response = await POST(request(JSON.stringify({
-      section: "rerank",
-      config: { rerank: { model: "rerank-v2" } },
-      confirmEmbeddingReset: false,
-    })));
-
-    expect(response.status).toBe(504);
-    await expect(response.json()).resolves.toMatchObject({
-      code: "MODEL_CONFIG_PROXY_TIMEOUT",
-      error: expect.stringContaining("余额"),
-    });
   });
 
   it("bounds request bodies before proxying", async () => {

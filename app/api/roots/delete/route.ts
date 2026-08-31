@@ -4,8 +4,8 @@ import { auth } from "@/lib/auth";
 import { getApiKey, initDB } from "@/lib/db";
 import { ensureOrgApiKey, getMemberRole } from "@/lib/org-db";
 import { getRelayConsoleHeaders } from "@/lib/relay-console";
-import { relayUrl } from "@/lib/server-runtime-config";
 
+const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
 
 // 谁能调：登录用户删自己个人租户的索引；body.org_id 时仅该组织 owner
 // （成员 403，前端先挡；Relay 再按 Better Auth member.role 权威校验）。
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       apiKey = keyRecord.api_key;
     }
 
-    const res = await fetch(relayUrl("/mcp/delete-root"), {
+    const res = await fetch(`${RELAY_URL}/mcp/delete-root`, {
       method: "POST",
       headers: {
         ...getRelayConsoleHeaders(apiKey),

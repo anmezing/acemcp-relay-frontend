@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale } from "next-intl/server";
-import { siteMetadataUrl } from "@/lib/server-runtime-config";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -16,10 +15,8 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const siteUrl = siteMetadataUrl();
-
 export const metadata: Metadata = {
-  metadataBase: siteUrl,
+  metadataBase: new URL("https://lcebot.com"),
   title: {
     default: "LCE",
     template: "%s | LCE",
@@ -36,7 +33,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     type: "website",
-    url: siteUrl,
+    url: "https://lcebot.com",
     siteName: "LCE",
     title: "LCE",
     description: "Code Context Engine for AI Coding Agents",

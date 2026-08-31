@@ -13,33 +13,25 @@ import {
 } from "@/lib/org-sync";
 import { getOrganizationMembershipLimit } from "@/lib/billing";
 import { authIpAddressOptions } from "@/lib/auth-ip";
-import { LINUXDO_OAUTH_PROVIDER } from "@/lib/auth-provider-presets";
 import { isEmailVerificationConfigured, sendAccountVerificationEmail } from "@/lib/email-verification";
-import { MILLISECONDS_PER_DAY } from "@/lib/time-policy";
-import {
-  applicationBaseUrl,
-  authRuntimePolicy,
-  postgresConnectionOptions,
-} from "@/lib/server-runtime-config";
 
 const credentialEmailVerificationEnabled = isEmailVerificationConfigured();
-const AUTH_RUNTIME_POLICY = authRuntimePolicy();
 
 export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: applicationBaseUrl(),
+  baseURL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
   emailAndPassword: {
     enabled: true,
     disableSignUp: !credentialEmailVerificationEnabled,
-    minPasswordLength: AUTH_RUNTIME_POLICY.minPasswordLength,
-    maxPasswordLength: AUTH_RUNTIME_POLICY.maxPasswordLength,
+    minPasswordLength: 8,
+    maxPasswordLength: 128,
     autoSignIn: false,
     requireEmailVerification: true,
   },
   emailVerification: {
     sendOnSignUp: true,
     sendOnSignIn: true,
-    expiresIn: AUTH_RUNTIME_POLICY.emailVerificationTtlSeconds,
+    expiresIn: 60 * 60,
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
       await sendAccountVerificationEmail({
@@ -52,7 +44,13 @@ export const auth = betterAuth({
   advanced: {
     ipAddress: authIpAddressOptions(process.env.BETTER_AUTH_TRUSTED_PROXIES),
   },
-  database: new Pool(postgresConnectionOptions()),
+  database: new Pool({
+    host: process.env.POSTGRES_HOST || "localhost",
+    port: parseInt(process.env.POSTGRES_PORT || "5432"),
+    user: process.env.POSTGRES_USER || "postgres",
+    password: process.env.POSTGRES_PASSWORD,
+    database: process.env.POSTGRES_DB || "postgres",
+  }),
   user: {
     additionalFields: {
       trustLevel: {
@@ -109,8 +107,9 @@ export const auth = betterAuth({
               message: "GITHUB_ACCOUNT_TOO_YOUNG:unknown:unknown",
             });
           }
-          const minDays = AUTH_RUNTIME_POLICY.githubMinAccountAgeDays;
-          const ageDays = Math.floor((Date.now() - createdMs) / MILLISECONDS_PER_DAY);
+          const raw = Number(process.env.AUTH_GITHUB_MIN_ACCOUNT_AGE_DAYS);
+          const minDays = Number.isFinite(raw) && raw >= 0 ? raw : 365;
+          const ageDays = Math.floor((Date.now() - createdMs) / 86_400_000);
           if (ageDays < minDays) {
             throw new APIError("BAD_REQUEST", {
               message: `GITHUB_ACCOUNT_TOO_YOUNG:${minDays}:${ageDays}`,
@@ -149,7 +148,7 @@ export const auth = betterAuth({
     organization({
       // 邀请制：任何用户可创建组织成为 owner。角色只用 owner/member 两档。
       creatorRole: "owner",
-      invitationExpiresIn: AUTH_RUNTIME_POLICY.organizationInvitationTtlSeconds,
+      invitationExpiresIn: 60 * 60 * 48,
       // 子账号按 owner 名下全部组织中的唯一用户计数；候选用户若已在其中
       // 一个组织，不会因加入另一个组织重复占用套餐席位。
       membershipLimit: async (user, targetOrganization) =>
@@ -167,10 +166,13 @@ export const auth = betterAuth({
     genericOAuth({
       config: [
         {
-          ...LINUXDO_OAUTH_PROVIDER,
-          scopes: [...LINUXDO_OAUTH_PROVIDER.scopes],
+          providerId: "linuxdo",
           clientId: process.env.AUTH_LINUXDO_ID!,
           clientSecret: process.env.AUTH_LINUXDO_SECRET!,
+          authorizationUrl: "https://connect.linux.do/oauth2/authorize",
+          tokenUrl: "https://connect.linuxdo.org/oauth2/token",
+          userInfoUrl: "https://connect.linuxdo.org/api/user",
+          scopes: ["profile", "email"],
           mapProfileToUser: (profile) => {
             return {
               name: profile.name || profile.username,

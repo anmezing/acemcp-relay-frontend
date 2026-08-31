@@ -1,30 +1,9 @@
+export const MIN_PASSWORD_LENGTH = 8;
+export const MAX_PASSWORD_LENGTH = 128;
+
 export type CredentialMode = "login" | "register";
 
 export type RegistrationAvailability = "checking" | "open" | "closed" | "unavailable";
-
-export interface CredentialPasswordPolicy {
-  minLength: number;
-  maxLength: number;
-}
-
-export function passwordPolicyFromResponse(
-  responseOk: boolean,
-  payload: unknown,
-): CredentialPasswordPolicy | null {
-  if (!responseOk || typeof payload !== "object" || payload === null) return null;
-  const policy = (payload as { passwordPolicy?: unknown }).passwordPolicy;
-  if (typeof policy !== "object" || policy === null) return null;
-  const { minLength, maxLength } = policy as { minLength?: unknown; maxLength?: unknown };
-  if (
-    !Number.isSafeInteger(minLength) ||
-    !Number.isSafeInteger(maxLength) ||
-    (minLength as number) <= 0 ||
-    (maxLength as number) < (minLength as number)
-  ) {
-    return null;
-  }
-  return { minLength: minLength as number, maxLength: maxLength as number };
-}
 
 export function registrationAvailabilityFromResponse(
   responseOk: boolean,
@@ -95,7 +74,6 @@ export interface CredentialMessage {
     | "passwordMaximum"
     | "passwordsDoNotMatch"
     | "registrationClosed"
-    | "registrationStatusUnavailable"
     | "registrationCapacityReached"
     | "emailAlreadyRegistered"
     | "incorrectEmailOrPassword"
@@ -112,8 +90,7 @@ export interface CredentialMessage {
 }
 
 export function validateCredentialFields(
-  fields: CredentialFields,
-  passwordPolicy: CredentialPasswordPolicy | null = null,
+  fields: CredentialFields
 ): CredentialMessage | null {
   if (fields.mode === "register" && !fields.name.trim()) {
     return { key: "enterDisplayName" };
@@ -125,14 +102,11 @@ export function validateCredentialFields(
     return { key: "enterPassword" };
   }
   if (fields.mode === "register") {
-    if (!passwordPolicy) {
-      return { key: "registrationStatusUnavailable" };
+    if (fields.password.length < MIN_PASSWORD_LENGTH) {
+      return { key: "passwordMinimum", values: { count: MIN_PASSWORD_LENGTH } };
     }
-    if (fields.password.length < passwordPolicy.minLength) {
-      return { key: "passwordMinimum", values: { count: passwordPolicy.minLength } };
-    }
-    if (fields.password.length > passwordPolicy.maxLength) {
-      return { key: "passwordMaximum", values: { count: passwordPolicy.maxLength } };
+    if (fields.password.length > MAX_PASSWORD_LENGTH) {
+      return { key: "passwordMaximum", values: { count: MAX_PASSWORD_LENGTH } };
     }
     if (fields.password !== fields.confirmPassword) {
       return { key: "passwordsDoNotMatch" };
@@ -143,8 +117,7 @@ export function validateCredentialFields(
 
 export function credentialAuthErrorMessage(
   error: CredentialAuthError | null | undefined,
-  mode: CredentialMode,
-  passwordPolicy: CredentialPasswordPolicy | null = null,
+  mode: CredentialMode
 ): CredentialMessage {
   const raw = [error?.code, error?.message, error?.statusText]
     .filter(Boolean)
@@ -175,11 +148,11 @@ export function credentialAuthErrorMessage(
   if (raw.includes("VERIFICATION_EMAIL_NOT_ENABLED") || raw.includes("EMAIL_VERIFICATION_UNAVAILABLE")) {
     return { key: "emailVerificationUnavailable" };
   }
-  if (raw.includes("PASSWORD_TOO_SHORT") && passwordPolicy) {
-    return { key: "passwordMinimum", values: { count: passwordPolicy.minLength } };
+  if (raw.includes("PASSWORD_TOO_SHORT")) {
+    return { key: "passwordMinimum", values: { count: MIN_PASSWORD_LENGTH } };
   }
-  if (raw.includes("PASSWORD_TOO_LONG") && passwordPolicy) {
-    return { key: "passwordMaximum", values: { count: passwordPolicy.maxLength } };
+  if (raw.includes("PASSWORD_TOO_LONG")) {
+    return { key: "passwordMaximum", values: { count: MAX_PASSWORD_LENGTH } };
   }
   return mode === "register"
     ? { key: "signUpFailed" }

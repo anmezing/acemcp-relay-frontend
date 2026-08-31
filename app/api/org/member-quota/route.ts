@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { MAX_MEMBER_DAILY_REQUEST_LIMIT } from "@/lib/quota-policy";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { initDB } from "@/lib/db";
@@ -53,7 +52,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "缺少 orgId / userId" }, { status: 400 });
     }
     const limit = body.limit === null || body.limit === undefined ? null : Number(body.limit);
-    if (limit !== null && (!Number.isInteger(limit) || limit < 0 || limit > MAX_MEMBER_DAILY_REQUEST_LIMIT)) {
+    if (limit !== null && (!Number.isInteger(limit) || limit < 0 || limit > 10_000_000)) {
       return NextResponse.json({ error: "无效的配额" }, { status: 400 });
     }
 
