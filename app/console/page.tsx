@@ -6,7 +6,6 @@ import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import {
-  availableMcpLaunchModes,
   buildCloudMcpConfigJson,
   buildCloudMcpConfigToml,
   type McpLaunchMode,
@@ -76,8 +75,6 @@ import {
   type IndexFailureOrigin,
   type IndexRecoveryCode,
 } from "@/lib/index-failure";
-
-const AVAILABLE_MCP_LAUNCH_MODES = availableMcpLaunchModes();
 
 type Tab =
   | "keys" | "plans" | "docs" | "profile" | "model-config" | "version" | "team"
@@ -500,26 +497,18 @@ export default function ConsolePage() {
   const { data: myOrgs } = authClient.useListOrganizations();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mcpConfigFormat, setMcpConfigFormat] = useState<"json" | "toml">("json");
-  const [mcpLaunchMode, setMcpLaunchMode] = useState<McpLaunchMode>(
-    AVAILABLE_MCP_LAUNCH_MODES[0] ?? "package-runner",
-  );
+  const [mcpLaunchMode, setMcpLaunchMode] = useState<McpLaunchMode>("package-runner");
   const [mcpRepoPath, setMcpRepoPath] = useState("");
-  const mcpLaunchModeConfigured = AVAILABLE_MCP_LAUNCH_MODES.includes(mcpLaunchMode);
 
   const mcpConfig = useMemo(() => {
-    if (!mcpLaunchModeConfigured) return "";
     return mcpConfigFormat === "toml"
       ? buildCloudMcpConfigToml(fullKey, mcpRepoPath, mcpLaunchMode)
       : buildCloudMcpConfigJson(fullKey, mcpRepoPath, mcpLaunchMode);
-  }, [fullKey, mcpConfigFormat, mcpLaunchMode, mcpLaunchModeConfigured, mcpRepoPath]);
+  }, [fullKey, mcpConfigFormat, mcpLaunchMode, mcpRepoPath]);
 
   const generateAndCopyConfig = async () => {
     if (loading) return;
     resetConfigCopied();
-    if (!mcpLaunchModeConfigured) {
-      setConfigError(t("mcpLaunchNotConfigured"));
-      return;
-    }
     setConfigError("");
     setLoading(true);
     try {
@@ -1414,41 +1403,30 @@ export default function ConsolePage() {
                               {([
                                 { value: "package-runner" as const, label: t("packageRunnerLaunchMode") },
                                 { value: "global" as const, label: t("globalLaunchMode") },
-                              ])
-                                .filter((option) => AVAILABLE_MCP_LAUNCH_MODES.includes(option.value))
-                                .map((option) => (
-                                  <button
-                                    key={option.value}
-                                    type="button"
-                                    role="radio"
-                                    aria-checked={mcpLaunchMode === option.value}
-                                    onClick={() => {
-                                      setMcpLaunchMode(option.value);
-                                      resetConfigCopied();
-                                      setConfigError("");
-                                    }}
-                                    className={cn(
-                                      "rounded-md border px-3 py-2 text-left text-xs transition-colors",
-                                      mcpLaunchMode === option.value
-                                        ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-200"
-                                        : "border-white/[0.08] bg-white/[0.02] text-slate-400 hover:border-white/[0.16] hover:text-slate-300",
-                                    )}
-                                  >
-                                    {option.label}
-                                  </button>
-                                ))}
+                              ]).map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={mcpLaunchMode === option.value}
+                                  onClick={() => {
+                                    setMcpLaunchMode(option.value);
+                                    resetConfigCopied();
+                                    setConfigError("");
+                                  }}
+                                  className={cn(
+                                    "rounded-md border px-3 py-2 text-left text-xs transition-colors",
+                                    mcpLaunchMode === option.value
+                                      ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-200"
+                                      : "border-white/[0.08] bg-white/[0.02] text-slate-400 hover:border-white/[0.16] hover:text-slate-300",
+                                  )}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
                             </div>
-                            <p
-                              className={cn(
-                                "mt-2 text-xs leading-relaxed",
-                                mcpLaunchModeConfigured ? "text-slate-500" : "text-amber-300",
-                              )}
-                            >
-                              {!mcpLaunchModeConfigured
-                                ? t("mcpLaunchNotConfigured")
-                                : mcpLaunchMode === "package-runner"
-                                  ? t("packageRunnerLaunchModeHelp")
-                                  : t("globalLaunchModeHelp")}
+                            <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                              {mcpLaunchMode === "package-runner" ? t("packageRunnerLaunchModeHelp") : t("globalLaunchModeHelp")}
                             </p>
                           </div>
 
@@ -1486,14 +1464,14 @@ export default function ConsolePage() {
                           <div className="relative group">
                             <div className="bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-3 font-mono text-sm overflow-x-auto">
                               <pre className="text-slate-300 whitespace-pre-wrap break-all">
-                                <code>{mcpConfig || t("mcpLaunchNotConfigured")}</code>
+                                <code>{mcpConfig}</code>
                               </pre>
                             </div>
                             <Button
                               variant="glass"
                               size="sm"
                               onClick={generateAndCopyConfig}
-                              disabled={loading || !mcpLaunchModeConfigured}
+                              disabled={loading}
                               className="absolute top-2 right-2"
                             >
                               {copiedConfig ? t("copied") : loading ? t("generating") : t("copyConfig")}

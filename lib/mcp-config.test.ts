@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ClientLaunchPolicy } from "./lce-client";
-import {
-  availableMcpLaunchModes,
-  buildCloudMcpConfigJson,
-  buildCloudMcpConfigToml,
-} from "./mcp-config";
+import { buildCloudMcpConfigJson, buildCloudMcpConfigToml } from "./mcp-config";
 
 const launchPolicy: ClientLaunchPolicy = {
   packageRunnerCommand: "configured-package-runner",
@@ -14,19 +10,6 @@ const launchPolicy: ClientLaunchPolicy = {
 };
 
 describe("MCP config", () => {
-  it("exposes only launch modes configured by the deployment", () => {
-    expect(availableMcpLaunchModes(launchPolicy)).toEqual(["package-runner", "global"]);
-    expect(availableMcpLaunchModes({
-      ...launchPolicy,
-      packageRunnerCommand: undefined,
-    })).toEqual(["global"]);
-    expect(availableMcpLaunchModes({
-      ...launchPolicy,
-      packageRunnerCommand: undefined,
-      installedClientCommand: undefined,
-    })).toEqual([]);
-  });
-
   describe("cloud stdio mode", () => {
     it("uses the configured package-runner policy with an api key", () => {
       const config = JSON.parse(

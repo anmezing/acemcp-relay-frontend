@@ -92,7 +92,6 @@
     "mcpProjectRootPlaceholder": "例如 D:\\code\\my-project 或 /home/me/my-project",
     "mcpProjectRootHelp": "支持 MCP workspace roots 的客户端可留空并自动发现项目。若编辑器未实现 roots/list，或启动目录不是项目目录，请填写 Git 仓库的绝对路径；配置会自动加入 --repo。",
     "mcpLaunchMode": "客户端启动方式",
-    "mcpLaunchNotConfigured": "当前部署尚未配置客户端启动命令。请联系管理员配置包运行器或已安装的客户端可执行程序。",
     "packageRunnerLaunchMode": "使用包运行器（无需全局安装，推荐）",
     "globalLaunchMode": "使用全局客户端（已安装）",
     "packageRunnerLaunchModeHelp": "包运行器会按生成的配置获取并启动 LCE 客户端；无需额外写安装命令。",

@@ -92,7 +92,6 @@
     "mcpProjectRootPlaceholder": "For example, D:\\code\\my-project or /home/me/my-project",
     "mcpProjectRootHelp": "Leave this blank when the client supports MCP workspace roots. If it does not implement roots/list or starts the server outside the project, enter the Git repository's absolute path and the generated config will add --repo.",
     "mcpLaunchMode": "Client launch mode",
-    "mcpLaunchNotConfigured": "No client launcher is configured for this deployment. Ask an administrator to configure a package runner or an installed client executable.",
     "packageRunnerLaunchMode": "Use a package runner (no global install, recommended)",
     "globalLaunchMode": "Use global client (already installed)",
     "packageRunnerLaunchModeHelp": "The package runner obtains and starts the LCE client from the generated configuration; no separate installation command is required.",

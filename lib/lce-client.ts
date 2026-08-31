@@ -21,19 +21,8 @@ export interface ClientLaunchPolicy {
   installedClientCommand?: string;
 }
 
-// Next.js only inlines browser-visible variables when each process.env key is
-// referenced statically. Keep the injectable object for tests, but do not pass
-// process.env through an alias in client code.
-const publicClientLaunchEnvironment = Object.freeze({
-  NEXT_PUBLIC_LCE_CLIENT_PACKAGE_RUNNER: process.env.NEXT_PUBLIC_LCE_CLIENT_PACKAGE_RUNNER,
-  NEXT_PUBLIC_LCE_CLIENT_PACKAGE_RUNNER_ARGS: process.env.NEXT_PUBLIC_LCE_CLIENT_PACKAGE_RUNNER_ARGS,
-  NEXT_PUBLIC_LCE_CLIENT_PACKAGE_NAME: process.env.NEXT_PUBLIC_LCE_CLIENT_PACKAGE_NAME,
-  NEXT_PUBLIC_LCE_CLIENT_PACKAGE_TAG: process.env.NEXT_PUBLIC_LCE_CLIENT_PACKAGE_TAG,
-  NEXT_PUBLIC_LCE_CLIENT_GLOBAL_EXECUTABLE: process.env.NEXT_PUBLIC_LCE_CLIENT_GLOBAL_EXECUTABLE,
-});
-
 export function clientLaunchPolicy(
-  env: Readonly<Record<string, string | undefined>> = publicClientLaunchEnvironment,
+  env: Readonly<Record<string, string | undefined>> = process.env,
 ): ClientLaunchPolicy {
   const packageName = env.NEXT_PUBLIC_LCE_CLIENT_PACKAGE_NAME?.trim() || LCE_CLIENT_PACKAGE_NAME;
   const packageTag = env.NEXT_PUBLIC_LCE_CLIENT_PACKAGE_TAG?.trim() || "latest";
