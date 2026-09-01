@@ -263,6 +263,7 @@
     "indexRecoveryWaitForQuotaReset": "A current indexing client that remains running automatically creates a new sync after the server quota resets. If the client is closed or does not support automatic recovery, restart it after quota becomes available.",
     "indexRecoveryFixCredentials": "Contact an administrator to verify the provider URL, API key, and model names. After it is fixed, reopen the project or restart the LCE MCP client.",
     "indexRecoveryContactAdmin": "This issue cannot normally be fixed by an end user. Copy the diagnostics and contact an administrator, then reopen the project or restart the LCE MCP client after the service is fixed.",
+    "indexRecoveryProviderInvalidRequest": "Repeated retries will not fix this error. Copy the diagnostics and contact an administrator, including any file, chunk, and line information shown in the details. After the model configuration or rejected input is fixed, reopen the project or restart the MCP client.",
     "indexRecoveryInspectLogs": "Copy the diagnostics and contact an administrator; end users do not need to inspect server logs.",
     "viewRawIndexError": "View raw error details"
   },

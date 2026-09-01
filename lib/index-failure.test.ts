@@ -16,6 +16,46 @@ describe("index failure presentation", () => {
     });
   });
 
+  it("uses the exact structured 20015 tuple even when legacy text is misleading", () => {
+    expect(resolveIndexFailurePresentation({
+      index_error: "network down while formatting an upstream response",
+      index_error_code: "provider_invalid_request",
+      index_error_origin: "provider",
+      index_recovery: "contact_admin",
+    })).toEqual({
+      code: "provider_invalid_request",
+      origin: "provider",
+      recovery: "contact_admin",
+      rawDetail: "network down while formatting an upstream response",
+    });
+  });
+
+  it("falls back atomically when a structured tuple is partial", () => {
+    expect(resolveIndexFailurePresentation({
+      index_error: "Embedding API 错误: The parameter is invalid. [20015]",
+      index_error_code: "network_unavailable",
+    })).toEqual({
+      code: "provider_invalid_request",
+      origin: "provider",
+      recovery: "contact_admin",
+      rawDetail: "Embedding API 错误: The parameter is invalid. [20015]",
+    });
+  });
+
+  it("falls back atomically when a structured tuple is mismatched", () => {
+    expect(resolveIndexFailurePresentation({
+      index_error: "dial tcp: connection refused",
+      index_error_code: "provider_invalid_request",
+      index_error_origin: "provider",
+      index_recovery: "retry_later",
+    })).toEqual({
+      code: "network_unavailable",
+      origin: "network",
+      recovery: "restart_client",
+      rawDetail: "dial tcp: connection refused",
+    });
+  });
+
   it("classifies an embedding-space change as requiring a full root reset", () => {
     expect(resolveIndexFailurePresentation({
       index_error: "LCE cloud index begin failed: cloud embedding space changed; clear the tenant root before starting a new index job",

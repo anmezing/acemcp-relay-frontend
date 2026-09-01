@@ -29,7 +29,7 @@ describe(
 
     it("钉住无成本重复索引结果", () => {
       const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
-      expect(contract.schemaVersion).toBe("1.8");
+      expect(contract.schemaVersion).toBe("1.9");
       expect(contract.codebaseIndex.startOutcomes).toEqual({
         created: {
           requiredFields: ["job"],
@@ -48,6 +48,34 @@ describe(
         },
         busyRetryPolicy: "client_waits_without_consuming_failure_retry_budget",
       });
+    });
+
+    it("钉住索引失败诊断原子契约和错误响应字段", () => {
+      const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
+      expect(contract.codebaseIndex.requiredFields.fail).toEqual([
+        "operation",
+        "job_id",
+        "error",
+      ]);
+      expect(contract.codebaseIndex.optionalFields.fail).toEqual([
+        "error_code",
+        "error_origin",
+        "recovery",
+      ]);
+      expect(contract.codebaseIndex.failureDiagnostics).toMatchObject({
+        fields: ["error_code", "error_origin", "recovery"],
+        presenceRule: "all_or_none",
+        invalidValueBehavior: "reject",
+        missingFieldsBehavior: "relay_classifies_error_text_and_persists_result",
+      });
+      expect(contract.codebaseIndex.failureDiagnostics.codes.provider_invalid_request).toEqual({
+        origin: "provider",
+        recovery: "contact_admin",
+      });
+      expect(contract.responseEnvelope.optionalErrorShape).toEqual([
+        "code",
+        "retry_after_seconds",
+      ]);
     });
 
     it("钉住客户端版本来源、最低版本策略与升级机制", () => {

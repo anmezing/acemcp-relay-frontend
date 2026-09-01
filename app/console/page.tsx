@@ -299,6 +299,10 @@ const INDEX_RECOVERY_KEYS: Record<IndexRecoveryCode, string> = {
   inspect_logs: "indexRecoveryInspectLogs",
 };
 
+const INDEX_FAILURE_RECOVERY_OVERRIDE_KEYS: Partial<Record<IndexFailureCode, string>> = {
+  provider_invalid_request: "indexRecoveryProviderInvalidRequest",
+};
+
 function isActiveIndexJob(value: unknown): value is ActiveIndexJob {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const job = value as Partial<ActiveIndexJob>;
@@ -2552,7 +2556,12 @@ function RootIndexStatus({ root }: { root: RelayRoot }) {
                 {t(INDEX_FAILURE_ORIGIN_KEYS[failure.origin])}
               </Badge>
             </div>
-            <p className="mt-1 text-slate-400">{t(INDEX_RECOVERY_KEYS[failure.recovery])}</p>
+            <p className="mt-1 text-slate-400">
+              {t(
+                INDEX_FAILURE_RECOVERY_OVERRIDE_KEYS[failure.code]
+                  ?? INDEX_RECOVERY_KEYS[failure.recovery],
+              )}
+            </p>
             <button
               type="button"
               className="mt-1.5 inline-flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300"
