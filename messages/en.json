@@ -265,7 +265,14 @@
     "indexRecoveryContactAdmin": "This issue cannot normally be fixed by an end user. Copy the diagnostics and contact an administrator, then reopen the project or restart the LCE MCP client after the service is fixed.",
     "indexRecoveryProviderInvalidRequest": "Repeated retries will not fix this error. Copy the diagnostics and contact an administrator, including any file, chunk, and line information shown in the details. After the model configuration or rejected input is fixed, reopen the project or restart the MCP client.",
     "indexRecoveryInspectLogs": "Copy the diagnostics and contact an administrator; end users do not need to inspect server logs.",
-    "viewRawIndexError": "View raw error details"
+    "viewRawIndexError": "View raw error details",
+    "firstIndexInProgress": "First index in progress, statistics will be available after indexing completes",
+    "processed": "Processed",
+    "dismissFailureHint": "Deletes failed index records and related data. If no index snapshot is available, completely clears the project's index state, allowing a fresh start after IDE restart",
+    "dismissFailureWarningTitle": "⚠️ Warning: This will delete failed index data",
+    "dismissFailureWarning1": "Deletes failed tasks and related index data",
+    "dismissFailureWarning2": "If no index snapshot exists (first index failed), completely clears index state",
+    "dismissFailureWarning3": "Requires IDE restart or window reload to trigger re-indexing"
   },
   "Leaderboard": {
     "loading": "Loading...",

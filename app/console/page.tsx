@@ -1817,23 +1817,54 @@ export default function ConsolePage() {
 
                       </div>
                     ) : tenantStats && !tenantStats.exists ? (
-                      <div className="flex flex-col items-center py-8 text-center text-slate-500">
-                        {tenantStats.active_job && (
-                          <div className="mb-6 w-full max-w-md text-left">
-                            <IndexingProgress job={tenantStats.active_job} />
+                      <div className="space-y-4">
+                        {tenantStats.active_job ? (
+                          <>
+                            <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
+                              <CardContent className="p-4">
+                                <p className="text-slate-500 text-xs mb-3">{t("indexStatistics")}</p>
+                                <IndexingProgress job={tenantStats.active_job} />
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <p className="text-2xl font-semibold text-white">{tenantStats.active_job.total_files.toLocaleString()}</p>
+                                    <p className="text-slate-500 text-xs">{t("files")} · {t("indexing")}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-2xl font-semibold text-cyan-400">{tenantStats.active_job.indexed_files.toLocaleString()}</p>
+                                    <p className="text-slate-500 text-xs">{t("processed")}</p>
+                                  </div>
+                                </div>
+                                <p className="text-amber-400 text-xs mt-3 flex items-start gap-1.5">
+                                  <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                                  {t("firstIndexInProgress")}
+                                </p>
+                              </CardContent>
+                            </Card>
+                            <Button
+                              variant="glass"
+                              size="sm"
+                              onClick={() => fetchTenantStats()}
+                              disabled={tenantStatsLoading}
+                            >
+                              <RefreshCw className={cn("w-4 h-4 mr-1", tenantStatsLoading && "animate-spin")} />
+                              {tenantStatsLoading ? t("refreshing") : t("refreshStats")}
+                            </Button>
+                          </>
+                        ) : (
+                          <div className="flex flex-col items-center py-8 text-center text-slate-500">
+                            <p>{t("noIndexHasBeenCreated")}{t("startYourIdeAfterSetupTheFirst")}</p>
+                            <Button
+                              variant="glass"
+                              size="sm"
+                              onClick={() => fetchTenantStats()}
+                              disabled={tenantStatsLoading}
+                              className="mt-4"
+                            >
+                              <RefreshCw className={cn("mr-1 h-4 w-4", tenantStatsLoading && "animate-spin")} />
+                              {tenantStatsLoading ? t("refreshing") : t("refreshStats")}
+                            </Button>
                           </div>
                         )}
-                        <p>{t("noIndexHasBeenCreated")}{t("startYourIdeAfterSetupTheFirst")}</p>
-                        <Button
-                          variant="glass"
-                          size="sm"
-                          onClick={() => fetchTenantStats()}
-                          disabled={tenantStatsLoading}
-                          className="mt-4"
-                        >
-                          <RefreshCw className={cn("mr-1 h-4 w-4", tenantStatsLoading && "animate-spin")} />
-                          {tenantStatsLoading ? t("refreshing") : t("refreshStats")}
-                        </Button>
                       </div>
                     ) : (
                       <div className="space-y-4">
@@ -2091,10 +2122,24 @@ export default function ConsolePage() {
             <AlertDialogDescription className="text-slate-400">
               {rootPendingAction
                 ? rootPendingAction.kind === "dismiss_failure"
-                  ? t("confirmDismissIndexFailure", {
-                      workspace: rootPendingAction.root.workspace_id,
-                      branch: rootBranchLabel(rootPendingAction.root) || t("defaultBranch"),
-                    })
+                  ? (
+                    <div className="space-y-2">
+                      <p>
+                        {t("confirmDismissIndexFailure", {
+                          workspace: rootPendingAction.root.workspace_id,
+                          branch: rootBranchLabel(rootPendingAction.root) || t("defaultBranch"),
+                        })}
+                      </p>
+                      <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] p-3 text-xs text-amber-200">
+                        <p className="font-medium mb-1">{t("dismissFailureWarningTitle")}</p>
+                        <ul className="list-disc list-inside space-y-0.5 text-slate-300">
+                          <li>{t("dismissFailureWarning1")}</li>
+                          <li>{t("dismissFailureWarning2")}</li>
+                          <li>{t("dismissFailureWarning3")}</li>
+                        </ul>
+                      </div>
+                    </div>
+                  )
                   : t("confirmDeleteProjectIndex", {
                       workspace: rootPendingAction.root.workspace_id,
                       branch: rootBranchLabel(rootPendingAction.root) || t("defaultBranch"),
@@ -2679,6 +2724,7 @@ function RootManagementButtons({
           onClick={() => onDismissFailure(root)}
           className="h-8 px-2 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
           aria-label={t("dismissFailureFor", { workspace: root.workspace_id, branch: rootBranchLabel(root) })}
+          title={t("dismissFailureHint")}
         >
           <CircleX className="mr-1 h-3.5 w-3.5" />
           <span className="text-[11px]">{t("dismissFailureRecord")}</span>

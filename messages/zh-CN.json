@@ -265,7 +265,14 @@
     "indexRecoveryContactAdmin": "该问题通常无法由普通用户在本机解决。请复制诊断信息并联系管理员；服务修复后重新打开项目或重启 LCE MCP 客户端。",
     "indexRecoveryProviderInvalidRequest": "重复重试无法解决该错误。请复制诊断信息并联系管理员，并附上详情中的文件、分块和行号（如有）；管理员修复模型配置或对应输入后，再重新打开项目或重启 MCP 客户端。",
     "indexRecoveryInspectLogs": "请复制诊断信息并联系管理员，普通用户不需要查看服务器日志。",
-    "viewRawIndexError": "查看原始错误详情"
+    "viewRawIndexError": "查看原始错误详情",
+    "firstIndexInProgress": "首次索引正在进行中，统计数据将在索引完成后显示",
+    "processed": "已处理",
+    "dismissFailureHint": "删除失败的索引记录和相关数据。如果没有可用的索引快照，将完全清理该项目的索引状态，重启 IDE 后可重新开始索引",
+    "dismissFailureWarningTitle": "⚠️ 注意：此操作将删除失败的索引数据",
+    "dismissFailureWarning1": "删除失败任务和相关的索引数据",
+    "dismissFailureWarning2": "如果该项目没有任何可用的索引快照（首次索引失败），将完全清理索引状态",
+    "dismissFailureWarning3": "需要重启 IDE 或重新加载窗口才能触发重新索引"
   },
   "Leaderboard": {
     "loading": "加载中...",
