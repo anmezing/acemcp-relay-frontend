@@ -1,9 +1,11 @@
 export type IndexFailureCode =
+  | "client_disconnected"
   | "heartbeat_timeout"
   | "embedding_space_changed"
   | "upstream_bad_gateway"
   | "provider_billing"
   | "provider_rate_limited"
+  | "provider_invalid_request"
   | "repository_file_limit"
   | "repository_file_size_limit"
   | "index_quota_exceeded"
@@ -28,6 +30,7 @@ export type IndexRecoveryCode =
   | "reduce_repository"
   | "wait_for_quota_reset"
   | "fix_credentials"
+  | "contact_admin"
   | "inspect_logs";
 
 export interface IndexFailureLike {
@@ -45,11 +48,13 @@ export interface IndexFailurePresentation {
 }
 
 const failureCodes = new Set<IndexFailureCode>([
+  "client_disconnected",
   "heartbeat_timeout",
   "embedding_space_changed",
   "upstream_bad_gateway",
   "provider_billing",
   "provider_rate_limited",
+  "provider_invalid_request",
   "repository_file_limit",
   "repository_file_size_limit",
   "index_quota_exceeded",
@@ -74,6 +79,7 @@ const recoveryCodes = new Set<IndexRecoveryCode>([
   "reduce_repository",
   "wait_for_quota_reset",
   "fix_credentials",
+  "contact_admin",
   "inspect_logs",
 ]);
 
@@ -83,6 +89,9 @@ function includesAny(value: string, needles: readonly string[]): boolean {
 
 function classifyLegacyFailure(detail: string): Omit<IndexFailurePresentation, "rawDetail"> {
   const lower = detail.trim().toLowerCase();
+  if (includesAny(lower, ["client disconnected before first upload"])) {
+    return { code: "client_disconnected", origin: "client", recovery: "restart_client" };
+  }
   if (includesAny(lower, ["heartbeat timed out", "heartbeat timeout"])) {
     return { code: "heartbeat_timeout", origin: "relay", recovery: "restart_client" };
   }
@@ -101,6 +110,9 @@ function classifyLegacyFailure(detail: string): Omit<IndexFailurePresentation, "
   }
   if (includesAny(lower, ["too many requests", "rate limit", "rate-limit", "remote-index 429"])) {
     return { code: "provider_rate_limited", origin: "provider", recovery: "retry_later" };
+  }
+  if (includesAny(lower, ["the parameter is invalid", "[20015]", "valid utf-8", "special characters are properly escaped"])) {
+    return { code: "provider_invalid_request", origin: "provider", recovery: "contact_admin" };
   }
   if (includesAny(lower, ["manifest exceeds", "unreadable file list exceeds", "too many files", "file count limit", "maximum file count", "100,000 files", "100000 files", "文件数量", "文件数超过"])) {
     return { code: "repository_file_limit", origin: "client", recovery: "reduce_repository" };
@@ -126,7 +138,7 @@ function classifyLegacyFailure(detail: string): Omit<IndexFailurePresentation, "
   if (includesAny(lower, ["connection refused", "connection reset", "network is unreachable", "no such host", "i/o timeout", "context deadline exceeded", "unexpected eof", "socket hang up"])) {
     return { code: "network_unavailable", origin: "network", recovery: "restart_client" };
   }
-  return { code: "index_failed", origin: "unknown", recovery: "inspect_logs" };
+  return { code: "index_failed", origin: "unknown", recovery: "contact_admin" };
 }
 
 export function resolveIndexFailurePresentation(root: IndexFailureLike): IndexFailurePresentation {

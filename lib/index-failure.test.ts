@@ -36,7 +36,12 @@ describe("index failure presentation", () => {
     });
   });
 
-  it("classifies heartbeat timeouts and provider balance failures", () => {
+  it("classifies client disconnects, heartbeat timeouts, and provider failures", () => {
+    expect(resolveIndexFailurePresentation({ index_error: "index client disconnected before first upload" })).toMatchObject({
+      code: "client_disconnected",
+      origin: "client",
+      recovery: "restart_client",
+    });
     expect(resolveIndexFailurePresentation({ index_error: "index job heartbeat timed out" })).toMatchObject({
       code: "heartbeat_timeout",
       origin: "relay",
@@ -46,6 +51,11 @@ describe("index failure presentation", () => {
       code: "provider_billing",
       origin: "provider",
       recovery: "fix_provider_billing",
+    });
+    expect(resolveIndexFailurePresentation({ index_error: "Embedding API 错误: The parameter is invalid. [20015]" })).toMatchObject({
+      code: "provider_invalid_request",
+      origin: "provider",
+      recovery: "contact_admin",
     });
   });
 
@@ -86,7 +96,7 @@ describe("index failure presentation", () => {
     })).toMatchObject({
       code: "index_failed",
       origin: "unknown",
-      recovery: "inspect_logs",
+      recovery: "contact_admin",
     });
   });
 
@@ -99,7 +109,7 @@ describe("index failure presentation", () => {
     })).toEqual({
       code: "index_failed",
       origin: "unknown",
-      recovery: "inspect_logs",
+      recovery: "contact_admin",
       rawDetail: "manifest rejected",
     });
   });

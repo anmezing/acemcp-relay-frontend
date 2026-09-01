@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getApiKey, initDB } from "@/lib/db";
 import { ensureOrgApiKey, getMemberRole } from "@/lib/org-db";
 import { getRelayConsoleHeaders } from "@/lib/relay-console";
+import { isRelayConnectionError, RELAY_UNAVAILABLE_RESPONSE } from "@/lib/relay-network-error";
 
 const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
 
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest) {
 
     const res = await fetch(`${RELAY_URL}/mcp/roots`, {
       headers: getRelayConsoleHeaders(apiKey),
+      signal: AbortSignal.timeout(10_000),
     });
 
     if (!res.ok) {
@@ -54,6 +56,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(orgId ? { ...data, orgRole: role } : data);
   } catch (error) {
     console.error("获取索引列表失败:", error);
+    if (isRelayConnectionError(error)) {
+      return NextResponse.json(RELAY_UNAVAILABLE_RESPONSE, { status: 503 });
+    }
     return NextResponse.json({ error: "服务器错误" }, { status: 500 });
   }
 }

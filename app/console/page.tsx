@@ -73,6 +73,10 @@ import {
   type IndexFailureOrigin,
   type IndexRecoveryCode,
 } from "@/lib/index-failure";
+import {
+  isIndexJobWaitingForClient,
+  resolveIndexPhaseTranslationKey,
+} from "@/lib/index-job-phase";
 
 type Tab =
   | "keys" | "plans" | "docs" | "profile" | "model-config" | "version" | "team"
@@ -258,11 +262,13 @@ type RootManagementAction = {
 };
 
 const INDEX_FAILURE_TITLE_KEYS: Record<IndexFailureCode, string> = {
+  client_disconnected: "indexFailureClientDisconnected",
   heartbeat_timeout: "indexFailureHeartbeatTimeout",
   embedding_space_changed: "indexFailureEmbeddingSpaceChanged",
   upstream_bad_gateway: "indexFailureUpstreamBadGateway",
   provider_billing: "indexFailureProviderBilling",
   provider_rate_limited: "indexFailureProviderRateLimited",
+  provider_invalid_request: "indexFailureProviderInvalidRequest",
   repository_file_limit: "indexFailureRepositoryFileLimit",
   repository_file_size_limit: "indexFailureRepositoryFileSizeLimit",
   index_quota_exceeded: "indexFailureQuotaExceeded",
@@ -289,6 +295,7 @@ const INDEX_RECOVERY_KEYS: Record<IndexRecoveryCode, string> = {
   reduce_repository: "indexRecoveryReduceRepository",
   wait_for_quota_reset: "indexRecoveryWaitForQuotaReset",
   fix_credentials: "indexRecoveryFixCredentials",
+  contact_admin: "indexRecoveryContactAdmin",
   inspect_logs: "indexRecoveryInspectLogs",
 };
 
@@ -2420,25 +2427,39 @@ function LogEntry({ log, onClick }: { log: RequestLog; onClick?: () => void }) {
 // 索引统计卡片内的构建进度条：消费 tenant-stats 的 active_job 字段
 function IndexingProgress({ job }: { job: ActiveIndexJob }) {
   const t = useTranslations("Console");
+  const waitingForClient = isIndexJobWaitingForClient(job.phase);
   const percent =
     job.total_files > 0
       ? Math.min(100, Math.round((job.indexed_files / job.total_files) * 100))
       : 0;
   return (
-    <div className="mb-4 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.06] p-3">
+    <div className={cn(
+      "mb-4 rounded-lg border p-3",
+      waitingForClient
+        ? "border-amber-500/20 bg-amber-500/[0.06]"
+        : "border-cyan-500/20 bg-cyan-500/[0.06]",
+    )}>
       <div className="flex items-center justify-between gap-2 mb-2">
-        <p className="flex items-center gap-2 text-xs text-cyan-300">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          {t("indexing")} {job.indexed_files.toLocaleString()}/{job.total_files.toLocaleString()} {t("files")}
+        <p className={cn("flex items-center gap-2 text-xs", waitingForClient ? "text-amber-300" : "text-cyan-300")}>
+          {waitingForClient
+            ? <Info className="h-3.5 w-3.5" />
+            : <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {waitingForClient ? t("indexWaitingForClientSummary") : t("indexing")} {job.indexed_files.toLocaleString()}/{job.total_files.toLocaleString()} {t("files")}
         </p>
-        <span className="text-xs text-slate-500">{job.phase}</span>
+        <span className="text-xs text-slate-500">{t(resolveIndexPhaseTranslationKey(job.phase))}</span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-blue-500 transition-all duration-500"
+          className={cn(
+            "h-full rounded-full transition-all duration-500",
+            waitingForClient ? "bg-amber-400" : "bg-gradient-to-r from-cyan-400 to-blue-500",
+          )}
           style={{ width: `${percent}%` }}
         />
       </div>
+      {waitingForClient && (
+        <p className="mt-2 text-[11px] text-slate-500">{t("indexWaitingForClientHint")}</p>
+      )}
     </div>
   );
 }
@@ -2449,8 +2470,12 @@ function RootIndexStatus({ root }: { root: RelayRoot }) {
   const progress = resolveRootIndexProgress(root);
   const counts = resolveRootIndexCounts(root);
   const indexAvailable = root.index_available ?? Boolean(root.indexed_at);
+  const waitingForClient = state === "building" && isIndexJobWaitingForClient(root.index_phase);
+  const [diagnosticCopied, setDiagnosticCopied] = useState(false);
   const stateLabel =
-    state === "building"
+    waitingForClient
+      ? t("indexStateWaitingForClient")
+      : state === "building"
       ? indexAvailable
         ? t("indexStateUpdatingAvailable")
         : t("indexStateBuilding")
@@ -2464,8 +2489,10 @@ function RootIndexStatus({ root }: { root: RelayRoot }) {
             ? t("indexStateReady")
             : t("indexStateNotStarted");
   const stateClass =
-    state === "building"
-      ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
+    waitingForClient
+      ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+      : state === "building"
+        ? "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"
       : state === "failed"
         ? indexAvailable
           ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
@@ -2479,11 +2506,12 @@ function RootIndexStatus({ root }: { root: RelayRoot }) {
     <div className="mt-2 space-y-1.5" data-testid="root-index-status">
       <div className="flex flex-wrap items-center gap-2 text-[11px]">
         <Badge variant="outline" className={cn("border text-[10px]", stateClass)}>
-          {state === "building" && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+          {state === "building" && !waitingForClient && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+          {waitingForClient && <Info className="mr-1 h-3 w-3" />}
           {stateLabel}
         </Badge>
         {root.index_phase && state === "building" && (
-          <span className="text-slate-500">{root.index_phase}</span>
+          <span className="text-slate-500">{t(resolveIndexPhaseTranslationKey(root.index_phase))}</span>
         )}
         {showProgress && counts.total > 0 && (
           <span className="text-slate-500">
@@ -2491,6 +2519,9 @@ function RootIndexStatus({ root }: { root: RelayRoot }) {
           </span>
         )}
       </div>
+      {waitingForClient && (
+        <p className="text-[11px] text-slate-500">{t("indexWaitingForClientHint")}</p>
+      )}
       {showProgress && counts.total > 0 && (
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
           <div
@@ -2522,6 +2553,28 @@ function RootIndexStatus({ root }: { root: RelayRoot }) {
               </Badge>
             </div>
             <p className="mt-1 text-slate-400">{t(INDEX_RECOVERY_KEYS[failure.recovery])}</p>
+            <button
+              type="button"
+              className="mt-1.5 inline-flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300"
+              onClick={async () => {
+                const diagnostic = [
+                  `workspace: ${root.workspace_id}`,
+                  `root: ${root.root_id}`,
+                  `branch: ${rootBranchLabel(root)}`,
+                  `state: ${root.index_state ?? "failed"}`,
+                  `phase: ${root.index_phase ?? "unknown"}`,
+                  `error_code: ${failure.code}`,
+                  `origin: ${failure.origin}`,
+                  `detail: ${failure.rawDetail || "(none)"}`,
+                ].join("\n");
+                await navigator.clipboard.writeText(diagnostic);
+                setDiagnosticCopied(true);
+                window.setTimeout(() => setDiagnosticCopied(false), 2000);
+              }}
+            >
+              <Copy className="h-3 w-3" />
+              {diagnosticCopied ? t("diagnosticCopied") : t("copyDiagnostic")}
+            </button>
             {failure.rawDetail && (
               <details className="mt-1.5 text-slate-500">
                 <summary className="cursor-pointer select-none hover:text-slate-300">

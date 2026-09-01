@@ -136,13 +136,18 @@ describe("GET /api/roots", () => {
     expect(await res.json()).toEqual({ error: "relay 不可用" });
   });
 
-  it("fetch 抛异常返回 500", async () => {
-    fetchMock.mockRejectedValue(new Error("connect refused"));
+  it("relay 连接失败返回可重试的 503，而不是笼统服务器错误", async () => {
+    fetchMock.mockRejectedValue(Object.assign(new TypeError("fetch failed"), {
+      cause: { code: "ENOTFOUND", hostname: "relay" },
+    }));
 
     const res = await GET(rootsRequest());
 
-    expect(res.status).toBe(500);
-    expect(await res.json()).toEqual({ error: "服务器错误" });
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({
+      code: "relay_unavailable",
+      error: "索引服务暂时不可用，请稍后重试；如果持续失败，请联系管理员。",
+    });
   });
 
   it("orgId 上下文：非成员 403 且不请求 relay（fail-closed）", async () => {
@@ -279,6 +284,20 @@ describe("POST /api/roots/dismiss-failure", () => {
 
     expect(res.status).toBe(400);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("relay DNS 失败时清理接口返回明确的 503", async () => {
+    fetchMock.mockRejectedValue(Object.assign(new TypeError("fetch failed"), {
+      cause: { code: "ENOTFOUND", hostname: "relay" },
+    }));
+
+    const res = await dismissRootFailure(rootActionRequest("dismiss-failure", { root_id: "root-1" }));
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({
+      code: "relay_unavailable",
+      error: "索引服务暂时不可用，请稍后重试；如果持续失败，请联系管理员。",
+    });
   });
 
   it("运行中任务冲突时透传 409", async () => {

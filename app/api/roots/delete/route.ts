@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getApiKey, initDB } from "@/lib/db";
 import { ensureOrgApiKey, getMemberRole } from "@/lib/org-db";
 import { getRelayConsoleHeaders } from "@/lib/relay-console";
+import { isRelayConnectionError, RELAY_UNAVAILABLE_RESPONSE } from "@/lib/relay-network-error";
 
 const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
 
@@ -61,6 +62,7 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ root_id: rootId }),
+      signal: AbortSignal.timeout(10_000),
     });
 
     const data = await res.json().catch(() => ({}));
@@ -75,6 +77,9 @@ export async function POST(request: Request) {
     return NextResponse.json(data);
   } catch (error) {
     console.error("删除索引失败:", error);
+    if (isRelayConnectionError(error)) {
+      return NextResponse.json(RELAY_UNAVAILABLE_RESPONSE, { status: 503 });
+    }
     return NextResponse.json({ error: "服务器错误" }, { status: 500 });
   }
 }
