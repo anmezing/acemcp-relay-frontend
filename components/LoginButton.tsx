@@ -37,7 +37,7 @@ export function LoginButton({ user }: LoginButtonProps) {
 
   return (
     <div className="flex items-center gap-1 sm:gap-2">
-      <Button variant="ghost" asChild className="text-slate-400 hover:text-white">
+      <Button variant="gradient" asChild className="rounded-lg">
         <Link href="/login">{t("logIn")}</Link>
       </Button>
       <Button variant="gradient" asChild className="rounded-lg">

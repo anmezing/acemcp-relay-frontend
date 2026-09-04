@@ -433,3 +433,72 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+
+/* Interactive 3D relationship graph backdrop */
+.graph-globe-root {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: auto;
+  mask-image: radial-gradient(ellipse 58% 68% at 50% 43%, black 0%, black 54%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 58% 68% at 50% 43%, black 0%, black 54%, transparent 100%);
+}
+
+.graph-globe-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+  outline: none;
+}
+
+.graph-globe-canvas:active {
+  cursor: grabbing;
+}
+
+.graph-globe-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(29, 181, 192, 0.08), transparent 28%),
+    linear-gradient(90deg, rgba(6, 11, 20, 0.85) 0%, transparent 22%, transparent 78%, rgba(6, 11, 20, 0.85) 100%);
+}
+
+.graph-globe-hint {
+  position: absolute;
+  right: 1.5rem;
+  bottom: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(148, 163, 184, 0.65);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.625rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.graph-globe-hint-dot {
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 9999px;
+  background: #57d6c1;
+  box-shadow: 0 0 0.75rem rgba(87, 214, 193, 0.8);
+}
+
+@media (max-width: 767px) {
+  .graph-globe-root {
+    mask-image: radial-gradient(ellipse 92% 54% at 50% 35%, black 0%, black 58%, transparent 100%);
+    -webkit-mask-image: radial-gradient(ellipse 92% 54% at 50% 35%, black 0%, black 58%, transparent 100%);
+  }
+
+  .graph-globe-hint {
+    right: 1rem;
+    bottom: 1rem;
+    font-size: 0.55rem;
+  }
+}

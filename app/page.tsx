@@ -4,32 +4,25 @@ import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { LceBrand } from "@/components/LceBrand";
 import { I18nText } from "@/components/I18nText";
+import { GraphGlobe } from "@/components/GraphGlobe";
 
 export default function Home() {
   return (
-    <div className="relative min-h-screen overflow-clip bg-[#0a0f1a] animate-page-fade-in">
-      {/* Ambient light effects */}
-      <div className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-gradient-radial from-cyan-500/8 via-blue-500/4 to-transparent rounded-full blur-3xl" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-gradient-radial from-indigo-500/6 to-transparent rounded-full blur-3xl" />
-
-      {/* Subtle grid */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px]" />
-
-      {/* Noise texture overlay */}
-      <div className="absolute inset-0 opacity-[0.015] pointer-events-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIj48ZmlsdGVyIGlkPSJhIiB4PSIwIiB5PSIwIj48ZmVUdXJidWxlbmNlIGJhc2VGcmVxdWVuY3k9Ii43NSIgc3RpdGNoVGlsZXM9InN0aXRjaCIgdHlwZT0iZnJhY3RhbE5vaXNlIi8+PC9maWx0ZXI+PHJlY3Qgd2lkdGg9IjMwMCIgaGVpZ2h0PSIzMDAiIGZpbHRlcj0idXJsKCNhKSIgb3BhY2l0eT0iMSIvPjwvc3ZnPg==')]" />
+    <div className="relative min-h-screen overflow-clip bg-[#060b14] animate-page-fade-in">
+      {/* Interactive relationship graph backdrop */}
+      <div className="pointer-events-none absolute inset-x-0 top-14 z-0 h-[650px] md:h-[760px]">
+        <GraphGlobe />
+      </div>
+      <div className="pointer-events-none absolute inset-x-0 top-14 z-[1] h-[650px] bg-[radial-gradient(ellipse_at_center,transparent_30%,#060b14_82%)] md:h-[760px]" />
+      <div className="pointer-events-none absolute inset-0 z-[1] bg-[linear-gradient(to_bottom,rgba(6,11,20,0.08)_0%,rgba(6,11,20,0.08)_42%,#060b14_78%,#060b14_100%)]" />
+      <div className="pointer-events-none absolute inset-0 z-[1] opacity-[0.018] bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMDAiIGhlaWdodD0iMzAwIj48ZmlsdGVyIGlkPSJhIiB4PSIwIiB5PSIwIj48ZmVUeXJidWxlbmNlIGJhc2VGcmVxdWVuY3k9Ii43NSIgc3RpdGNoVGlsZXM9InN0aXRjaCIgdHlwZT0iZnJhY3RhbE5vaXNlIi8+PC9maWx0ZXI+PHJlY3Qgd2lkdGg9IjMwMCIgaGVpZ2h0PSIzMDAiIGZpbHRlcj0idXJsKCNhKSIgb3BhY2l0eT0iMSIvPjwvc3ZnPg==')]" />
 
       <Header />
 
-      <main className="relative pt-28 pb-20 px-6">
+      <main className="relative pt-28 pb-20 px-6 pointer-events-none">
         {/* Hero */}
-        <section className="text-center space-y-8 mb-24">
+        <section className="relative z-20 text-center space-y-8 mb-24 pointer-events-none">
           <div className="relative inline-block opacity-0 animate-scale-in">
-            <div className="absolute -inset-x-48 -inset-y-24 pointer-events-none">
-              <div className="absolute top-1/2 left-1/4 -translate-y-1/2 w-[300px] h-[200px] bg-cyan-500/60 blur-[80px] rounded-full animate-aurora-1" />
-              <div className="absolute top-1/3 right-1/4 w-[250px] h-[180px] bg-emerald-500/50 blur-[70px] rounded-full animate-aurora-2" />
-              <div className="absolute bottom-1/3 left-1/3 w-[280px] h-[160px] bg-blue-500/55 blur-[75px] rounded-full animate-aurora-3" />
-              <div className="absolute top-1/2 right-1/3 -translate-y-1/2 w-[220px] h-[140px] bg-indigo-500/45 blur-[60px] rounded-full animate-aurora-4" />
-            </div>
             <h1 className="relative">
               <LceBrand
                 iconSize={112}
