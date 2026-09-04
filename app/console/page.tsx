@@ -165,6 +165,7 @@ interface LogsResponse {
     page: number;
     limit: number;
     total: number;
+    totalPages: number;
   };
 }
 
@@ -477,6 +478,7 @@ export default function ConsolePage() {
   const [logsLoading, setLogsLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [logsPage, setLogsPage] = useState(1);
+  const [logsJumpPage, setLogsJumpPage] = useState("1");
   const { copied: copiedConfig, trigger: markConfigCopied, reset: resetConfigCopied } = useCopyFeedback();
   const [configError, setConfigError] = useState("");
   const [showDetailDialog, setShowDetailDialog] = useState(false);
@@ -766,31 +768,22 @@ export default function ConsolePage() {
     setLogsLoading(true);
     const startTime = Date.now();
     try {
-      // 第 1 页或强制刷新时获取统计数据
       const needStats = forceRefreshStats || page === 1;
-      const url = needStats
-        ? `/api/logs?page=${page}&limit=20&withStats=true`
-        : `/api/logs?page=${page}&limit=20`;
-
+      const url = `/api/logs?page=${page}&limit=20${needStats ? "&withStats=true" : ""}`;
       const res = await fetch(url);
       if (res.ok) {
-        const data = await res.json();
-
-        if (needStats) {
-          // 带统计数据的响应
-          setLogsData(data);
-        } else {
-          // 只更新日志列表，保留原有统计数据和 total
-          setLogsData(prev => prev ? {
-            ...prev,
-            logs: data.logs,
-            pagination: {
-              ...data.pagination,
-              total: prev.pagination.total,
-            },
-          } : data);
-        }
-        setLogsPage(page);
+        const data = (await res.json()) as LogsResponse;
+        setLogsData((previous) => ({
+          ...data,
+          stats: data.stats ?? previous?.stats ?? {
+            successCount: 0,
+            failedCount: 0,
+            totalCount: data.pagination.total,
+            contextEngineCount: 0,
+          },
+        }));
+        setLogsPage(data.pagination.page);
+        setLogsJumpPage(String(data.pagination.page));
       }
     } catch (error) {
       console.error("获取请求日志失败:", error);
@@ -1594,8 +1587,15 @@ export default function ConsolePage() {
                     </div>
 
                     {/* Pagination */}
-                    {logsData && logsData.pagination.total > 20 && (
-                      <div className="flex items-center justify-center gap-2 mt-6 flex-shrink-0">
+                    {logsData && logsData.pagination.total > 0 && (
+                      <div className="mt-6 flex flex-shrink-0 flex-wrap items-center justify-center gap-2 text-sm text-slate-500">
+                        <span className="mr-2">
+                          {t("logPaginationSummary", {
+                            total: logsData.pagination.total.toLocaleString(),
+                            page: logsData.pagination.page,
+                            totalPages: logsData.pagination.totalPages,
+                          })}
+                        </span>
                         <Button
                           variant="glass"
                           size="sm"
@@ -1604,14 +1604,38 @@ export default function ConsolePage() {
                         >
                           {t("previous")}
                         </Button>
-                        <span className="text-slate-500 text-sm px-3">
-                          {logsPage} / {Math.ceil(logsData.pagination.total / 20)}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            value={logsJumpPage}
+                            onChange={(event) => setLogsJumpPage(event.target.value.replace(/\D/g, ""))}
+                            onKeyDown={(event) => {
+                              if (event.key !== "Enter") return;
+                              const requested = Number(logsJumpPage);
+                              if (Number.isSafeInteger(requested) && requested > 0) {
+                                void fetchLogs(Math.min(requested, logsData.pagination.totalPages));
+                              }
+                            }}
+                            inputMode="numeric"
+                            aria-label={t("jumpToPage")}
+                            className="h-8 w-16 rounded-md border border-white/[0.08] bg-white/[0.03] px-2 text-center font-mono text-xs text-slate-200 outline-none focus:border-cyan-500/40"
+                          />
+                          <Button
+                            variant="glass"
+                            size="sm"
+                            disabled={logsLoading || !/^\d+$/.test(logsJumpPage) || Number(logsJumpPage) < 1}
+                            onClick={() => {
+                              const requested = Number(logsJumpPage);
+                              void fetchLogs(Math.min(requested, logsData.pagination.totalPages));
+                            }}
+                          >
+                            {t("jump")}
+                          </Button>
+                        </div>
                         <Button
                           variant="glass"
                           size="sm"
                           onClick={() => fetchLogs(logsPage + 1)}
-                          disabled={logsPage >= Math.ceil(logsData.pagination.total / 20) || logsLoading}
+                          disabled={logsPage >= logsData.pagination.totalPages || logsLoading}
                         >
                           {t("next")}
                         </Button>

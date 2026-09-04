@@ -56,7 +56,7 @@ describe("live leaderboard aggregation", () => {
     }
   );
 
-  it("aggregates only retrieval and prompt-enhancement calls from request logs", async () => {
+  it("aggregates only successful retrieval and prompt-enhancement calls from daily rollups", async () => {
     await expect(getLeaderboard("2026-08-29")).resolves.toEqual([
       {
         rank: 1,
@@ -69,15 +69,16 @@ describe("live leaderboard aggregation", () => {
     expect(mocks.connect).toHaveBeenCalledTimes(1);
     expect(mocks.query).toHaveBeenCalledTimes(1);
     const [sql, params] = mocks.query.mock.calls[0] as [string, unknown[]];
-    expect(sql).toContain("FROM request_logs rl");
+    expect(sql).toContain("FROM request_log_daily_stats rl");
     expect(sql).not.toContain("FROM leaderboard");
     expect(sql).toContain("rl.request_path IN (");
     expect(sql).toContain("/mcp/tools/call/codebase-retrieval");
     expect(sql).toContain("/mcp/tools/call/codebase_enhance_prompt");
     expect(sql).not.toContain("/mcp/tools/call/codebase_index");
     expect(sql).not.toContain("/mcp/tools/call/codebase_symbol_graph");
-    expect(sql).toContain("rl.status_code = 200");
-    expect(sql).toContain("AT TIME ZONE 'Asia/Shanghai'");
+    expect(sql).toContain("SUM(rl.success_count)");
+    expect(sql).toContain("rl.stat_date = $1::date");
+    expect(sql).toContain("HAVING SUM(rl.success_count) > 0");
     expect(sql).toContain("ROW_NUMBER()");
     expect(params).toEqual(["2026-08-29"]);
     expect(mocks.release).toHaveBeenCalledTimes(1);
