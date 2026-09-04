@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("@/lib/auth", () => ({ auth: { api: { getSession: vi.fn() } } }));
 vi.mock("@/lib/model-config-db", () => ({ getUserModelConfigRow: vi.fn() }));
-vi.mock("@/lib/model-config-crypto", () => ({ decryptModelConfig: vi.fn() }));
+vi.mock("@/lib/model-config-crypto", () => ({
+  decryptModelConfig: vi.fn(),
+  modelConfigEnabled: vi.fn(() => !!process.env.MODEL_CONFIG_SECRET),
+}));
 
 import { auth } from "@/lib/auth";
 import { decryptModelConfig } from "@/lib/model-config-crypto";
@@ -26,6 +29,7 @@ function request(body: unknown) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  process.env.MODEL_CONFIG_SECRET = "model-config-models-route-test-secret";
   getSession.mockResolvedValue({ user: { id: "user-1" } } as Awaited<ReturnType<typeof auth.api.getSession>>);
   getRow.mockResolvedValue(null);
   fetchMock.mockResolvedValue(new Response(JSON.stringify({
@@ -38,6 +42,35 @@ describe("POST /api/model-config/models", () => {
     getSession.mockResolvedValue(null);
     const response = await POST(request({ provider: "siliconflow-compatible", apiKey: "sk-test" }));
     expect(response.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not proxy model discovery when personal model configuration is disabled", async () => {
+    delete process.env.MODEL_CONFIG_SECRET;
+
+    const response = await POST(request({
+      provider: "siliconflow-compatible",
+      apiKey: "sk-test",
+    }));
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "服务端未启用自定义 rerank（未配置 MODEL_CONFIG_SECRET）",
+    });
+    expect(getRow).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("sanitizes failures while loading a saved API key", async () => {
+    getRow.mockRejectedValue(new Error("database connection detail"));
+
+    const response = await POST(request({
+      provider: "siliconflow-compatible",
+      apiKey: "",
+    }));
+
+    expect(response.status).toBe(502);
+    expect(await response.json()).toEqual({ error: "获取模型失败，请稍后重试" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

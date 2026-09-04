@@ -6,6 +6,7 @@ import {
   ByteUnit,
 } from "@/lib/byte-units";
 import { cn } from "@/lib/utils";
+import { DarkSelect } from "@/components/ui/dark-select";
 
 interface ByteQuotaInputProps {
   value: ByteQuotaDraft;
@@ -37,7 +38,7 @@ export function ByteQuotaInput({
   return (
     <div
       className={cn(
-        "flex min-w-0 overflow-hidden rounded-lg border border-white/[0.08] bg-white/[0.03] focus-within:border-cyan-500/40",
+        "flex min-w-0 rounded-lg border border-white/[0.08] bg-white/[0.03] focus-within:border-cyan-500/40",
         className
       )}
       title={title}
@@ -56,24 +57,17 @@ export function ByteQuotaInput({
           controlClass
         )}
       />
-      <select
+      <DarkSelect
         value={value.unit}
-        onChange={(event) =>
-          onChange({ ...value, unit: event.target.value as ByteUnit })
+        options={BYTE_UNIT_OPTIONS.map((unit) => ({ value: unit, label: unit }))}
+        onValueChange={(unit) =>
+          onChange({ ...value, unit: unit as ByteUnit })
         }
-        aria-label={unitLabel}
+        ariaLabel={unitLabel}
         disabled={disabled}
-        className={cn(
-          "border-l border-white/[0.08] bg-[#0d1422] px-1.5 font-mono text-slate-300 outline-none disabled:opacity-50",
-          controlClass
-        )}
-      >
-        {BYTE_UNIT_OPTIONS.map((unit) => (
-          <option key={unit} value={unit}>
-            {unit}
-          </option>
-        ))}
-      </select>
+        className={cn("h-full w-20 border-l border-white/[0.08]")}
+        triggerClassName={cn("rounded-l-none border-y-0 border-r-0", controlClass)}
+      />
     </div>
   );
 }

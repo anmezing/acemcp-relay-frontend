@@ -272,7 +272,10 @@
     "dismissFailureWarningTitle": "⚠️ Warning: This will delete failed index data",
     "dismissFailureWarning1": "Deletes failed tasks and related index data",
     "dismissFailureWarning2": "If no index snapshot exists (first index failed), completely clears index state",
-    "dismissFailureWarning3": "Requires IDE restart or window reload to trigger re-indexing"
+    "dismissFailureWarning3": "Requires IDE restart or window reload to trigger re-indexing",
+    "logPaginationSummary": "{total} records · Page {page} of {totalPages}",
+    "jumpToPage": "Page to jump to",
+    "jump": "Go"
   },
   "Leaderboard": {
     "loading": "Loading...",
@@ -449,6 +452,7 @@
       "paid": "Paid",
       "pending": "Pending",
       "closed": "Closed",
+      "canceled": "Canceled",
       "failed": "Failed"
     },
     "failedToLoadPlans": "Failed to load plans",
@@ -485,7 +489,27 @@
     "paymentQrCode": "Payment QR code",
     "waitingForPayment": "Waiting for payment",
     "close": "Close",
-    "recentOrders": "Recent Orders"
+    "recentOrders": "Recent Orders",
+    "subscriptionLifecyclePolicy": "Plans grant a fixed number of days and do not auto-renew. Renewals extend from the current expiry; upgrades apply immediately only when the purchased term covers the remaining active term; no entitlement may be reduced during an active term.",
+    "subaccountQuotaPolicy": "Subaccount capacity is shared by the purchasing owner across all organizations, rather than granted again per organization.",
+    "activeSubscriptionCancellationPolicy": "Paid plans are fixed-term and do not auto-renew. Early self-service termination and automatic refunds are not supported; refunds require manual review, and benefits remain active until expiry unless refunded.",
+    "downgradeUnavailable": "Downgrade unavailable during the active term",
+    "upgradeTermTooShort": "Upgrade term is too short",
+    "upgradeTermTooShortHelp": "The current system does not prorate or credit plan prices. To avoid shortening paid time or over-granting higher-tier benefits, choose an upgrade term that covers the remaining active term, or upgrade closer to expiry.",
+    "downgradeContactSupport": "To prevent early loss of paid benefits, purchase a lower plan after the current plan expires.",
+    "closingQrDoesNotCancel": "Closing this QR window does not cancel an active subscription. Unpaid orders close automatically after timeout.",
+    "providerOrderBeingCreated": "The provider is creating this order. Try canceling again shortly.",
+    "paymentReceivedNeedsManualReview": "Payment received, but plan activation needs manual review.",
+    "failedToCancelOrder": "Failed to cancel order",
+    "pendingOrderCanceled": "Pending order canceled",
+    "cancelPendingOrder": "Cancel pending order",
+    "orderNeedsManualReview": "Order requires manual review",
+    "cancel": "Cancel",
+    "purchaseKind": {
+      "new": "New purchase",
+      "renewal": "Renewal (extends from current expiry)",
+      "upgrade": "Upgrade (immediate; purchased term covers remaining time)"
+    }
   },
   "UserModels": {
     "failedToLoadRefreshAndTryAgain": "Failed to load. Refresh and try again.",
@@ -509,7 +533,11 @@
     "enterAnApiKeyThenLoadModels": "Enter an API key, then load models",
     "noModelsAvailable": "No models available",
     "save": "Save",
-    "restorePlatformSettings": "Restore platform settings"
+    "restorePlatformSettings": "Restore platform settings",
+    "personalRerankIsActive": "Retrieval currently uses your saved Rerank configuration and API key. API keys are write-only and are never returned.",
+    "platformRerankIsActive": "Retrieval currently uses the platform-managed Rerank configuration. Saving a personal configuration makes your API key take priority.",
+    "personalSource": "Personal configuration active",
+    "platformSource": "Platform configuration active"
   },
   "AdminLogs": {
     "deletedRecords": "Deleted {p0} records",
@@ -689,6 +717,7 @@
     "priceFormat": "Price must use the 0.00 format",
     "priceOutOfRange": "Price is outside the safe range",
     "mustBeNonNegativeInteger": "{label} must be a non-negative integer",
+    "mustBeInteger": "{label} must be an integer",
     "outOfRange": "{label} is outside the safe range",
     "completeRequiredFields": "Complete the plan code, name, and duration",
     "failedToSave": "Failed to save",
@@ -698,7 +727,7 @@
     "planDeleted": "Plan deleted",
     "editPlan": "Edit plan",
     "newPlan": "New plan",
-    "snapshotDescription": "0 means unlimited. For index quota, enter an amount and select B, KiB, MiB, GiB, or TiB. Existing orders retain their purchase snapshot when a plan changes.",
+    "snapshotDescription": "For request and index quotas, 0 means unlimited; for subaccounts, 0 means no subaccounts. Enter the index amount and select B, KiB, MiB, GiB, or TiB. Orders keep purchase snapshots; same-plan renewals never reduce existing benefits, and plan changes must increase every entitlement.",
     "new": "New",
     "planCode": "Plan code",
     "planName": "Plan name",
@@ -727,7 +756,21 @@
     "days": "{count, plural, one {# day} other {# days}}",
     "requests": "Requests",
     "unlimited": "Unlimited",
-    "index": "Index"
+    "index": "Index",
+    "manualReviewOrders": "Orders awaiting fulfillment",
+    "manualReviewDescription": "Payments are confirmed, but plan entitlements are not active yet. A retry preserves the original settlement time and revalidates the current plan and subaccount seats.",
+    "failedToLoadManualReviewOrders": "Failed to load orders awaiting fulfillment",
+    "refreshManualReviewOrders": "Refresh orders awaiting fulfillment",
+    "noManualReviewOrders": "There are no orders awaiting fulfillment.",
+    "retryFulfillment": "Retry fulfillment",
+    "retryingFulfillment": "Retrying...",
+    "fulfillmentRetryFailed": "Order fulfillment retry failed",
+    "fulfillmentApplied": "Order entitlements are now active",
+    "fulfillmentStillBlocked": "The order is still blocked. Resolve the conflict and retry.",
+    "unknownFulfillmentError": "Unknown fulfillment conflict",
+    "unknownPaymentTime": "Unknown payment time",
+    "paidAt": "Paid at",
+    "userId": "User"
   },
   "CurrentVersion": {
     "loadFailed": "Failed to load version information. Try again.",

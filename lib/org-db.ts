@@ -72,7 +72,8 @@ export async function ensureOrgApiKey(
          COALESCE((
            SELECT tier FROM api_keys
            WHERE user_id = $2::VARCHAR(255)
-           ORDER BY (org_id IS NULL) DESC, created_at
+             AND org_id IS NULL
+           ORDER BY created_at, id
            LIMIT 1
          ), 'free'),
          $4, $5
@@ -289,6 +290,8 @@ interface OrgQuotaEntitlementRow {
   daily_request_limit?: string | number | null;
   daily_index_bytes_limit?: string | number | null;
   owner_user_id?: string | null;
+  owner_daily_request_limit?: string | number | null;
+  owner_daily_index_bytes_limit?: string | number | null;
   owner_tier?: string | null;
   plan_name?: string | null;
   subscription_daily_request_limit?: string | number | null;
@@ -312,6 +315,8 @@ const ORG_EFFECTIVE_QUOTA_SQL = `
   SELECT q.daily_request_limit,
          q.daily_index_bytes_limit,
          canonical_owner.owner_user_id,
+         owner_overrides.daily_limit AS owner_daily_request_limit,
+         owner_overrides.daily_index_bytes_limit AS owner_daily_index_bytes_limit,
          COALESCE(owner_key.tier, 'free') AS owner_tier,
          subscriptions.plan_name,
          subscriptions.daily_request_limit AS subscription_daily_request_limit,
@@ -327,6 +332,8 @@ const ORG_EFFECTIVE_QUOTA_SQL = `
     ORDER BY owners."createdAt", owners.id
     LIMIT 1
   ) AS canonical_owner ON TRUE
+  LEFT JOIN user_quotas AS owner_overrides
+    ON owner_overrides.user_id = canonical_owner.owner_user_id
   LEFT JOIN LATERAL (
     SELECT active.plan_name,
            active.daily_request_limit,
@@ -342,6 +349,7 @@ const ORG_EFFECTIVE_QUOTA_SQL = `
     SELECT keys.tier
     FROM api_keys AS keys
     WHERE keys.user_id = canonical_owner.owner_user_id
+      AND (keys.org_id IS NULL OR keys.org_id = requested_org.org_id)
     ORDER BY (keys.org_id IS NULL) DESC, keys.created_at, keys.id
     LIMIT 1
   ) AS owner_key ON TRUE
@@ -365,6 +373,8 @@ function configuredQuotaLimit(name: string): number {
 function resolveOrgQuota(row: OrgQuotaEntitlementRow | undefined): EffectiveOrgQuota {
   const requestOverride = nullableQuotaLimit(row?.daily_request_limit);
   const indexBytesOverride = nullableQuotaLimit(row?.daily_index_bytes_limit);
+  const ownerRequestOverride = nullableQuotaLimit(row?.owner_daily_request_limit);
+  const ownerIndexBytesOverride = nullableQuotaLimit(row?.owner_daily_index_bytes_limit);
   const subscriptionRequest = nullableQuotaLimit(row?.subscription_daily_request_limit);
   const subscriptionIndexBytes = nullableQuotaLimit(
     row?.subscription_daily_index_bytes_limit
@@ -385,18 +395,21 @@ function resolveOrgQuota(row: OrgQuotaEntitlementRow | undefined): EffectiveOrgQ
 
   return {
     dailyRequestLimit:
-      requestOverride ?? (hasSubscription ? subscriptionRequest : fallbackRequest),
+      requestOverride ??
+      ownerRequestOverride ??
+      (hasSubscription ? subscriptionRequest : fallbackRequest),
     dailyIndexBytesLimit:
       indexBytesOverride ??
+      ownerIndexBytesOverride ??
       (hasSubscription ? subscriptionIndexBytes : fallbackIndexBytes),
     dailyRequestSource:
-      requestOverride !== null
+      requestOverride !== null || ownerRequestOverride !== null
         ? "admin_override"
         : hasSubscription
           ? "subscription"
           : fallbackSource,
     dailyIndexBytesSource:
-      indexBytesOverride !== null
+      indexBytesOverride !== null || ownerIndexBytesOverride !== null
         ? "admin_override"
         : hasSubscription
           ? "subscription"
@@ -490,22 +503,35 @@ export async function listOrgsWithQuotas(): Promise<AdminOrgRow[]> {
   const client = await pool.connect();
   try {
     const result = await client.query(`
+      WITH member_stats AS (
+        SELECT members."organizationId" AS org_id,
+               COUNT(*)::int AS member_count
+        FROM "member" AS members
+        GROUP BY members."organizationId"
+      ), request_stats AS (
+        SELECT logs.tenant_id AS org_id,
+               COUNT(*)::int AS requests_7d
+        FROM request_logs AS logs
+        WHERE logs.tenant_id IS NOT NULL
+          AND logs.request_timestamp > NOW() - INTERVAL '7 days'
+        GROUP BY logs.tenant_id
+      )
       SELECT o."id" AS org_id, o."name", o."slug", o."createdAt" AS created_at,
-        (SELECT u.email FROM "member" m JOIN "user" u ON u.id = m."userId"
-          WHERE m."organizationId" = o."id" AND m."role" LIKE '%owner%'
-          ORDER BY m."createdAt" LIMIT 1) AS owner_email,
-        (SELECT COUNT(*) FROM "member" m WHERE m."organizationId" = o."id")::int AS member_count,
-        (SELECT COUNT(*) FROM request_logs rl
-          WHERE rl.tenant_id = o."id"
-            AND rl.request_timestamp > NOW() - INTERVAL '7 days')::int AS requests_7d,
+        owner_user.email AS owner_email,
+        COALESCE(member_stats.member_count, 0) AS member_count,
+        COALESCE(request_stats.requests_7d, 0) AS requests_7d,
         q.daily_request_limit, q.daily_index_bytes_limit,
         canonical_owner.owner_user_id,
+        owner_overrides.daily_limit AS owner_daily_request_limit,
+        owner_overrides.daily_index_bytes_limit AS owner_daily_index_bytes_limit,
         COALESCE(owner_key.tier, 'free') AS owner_tier,
         subscriptions.plan_name,
         subscriptions.daily_request_limit AS subscription_daily_request_limit,
         subscriptions.daily_index_bytes_limit AS subscription_daily_index_bytes_limit,
         subscriptions.expires_at AS subscription_expires_at
       FROM "organization" o
+      LEFT JOIN member_stats ON member_stats.org_id = o."id"
+      LEFT JOIN request_stats ON request_stats.org_id = o."id"
       LEFT JOIN org_quotas q ON q.org_id = o."id"
       LEFT JOIN LATERAL (
         SELECT owners."userId" AS owner_user_id
@@ -515,6 +541,9 @@ export async function listOrgsWithQuotas(): Promise<AdminOrgRow[]> {
         ORDER BY owners."createdAt", owners.id
         LIMIT 1
       ) AS canonical_owner ON TRUE
+      LEFT JOIN "user" AS owner_user ON owner_user.id = canonical_owner.owner_user_id
+      LEFT JOIN user_quotas AS owner_overrides
+        ON owner_overrides.user_id = canonical_owner.owner_user_id
       LEFT JOIN LATERAL (
         SELECT active.plan_name,
                active.daily_request_limit,
@@ -530,6 +559,7 @@ export async function listOrgsWithQuotas(): Promise<AdminOrgRow[]> {
         SELECT keys.tier
         FROM api_keys AS keys
         WHERE keys.user_id = canonical_owner.owner_user_id
+          AND (keys.org_id IS NULL OR keys.org_id = o."id")
         ORDER BY (keys.org_id IS NULL) DESC, keys.created_at, keys.id
         LIMIT 1
       ) AS owner_key ON TRUE

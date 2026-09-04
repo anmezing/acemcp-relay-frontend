@@ -42,9 +42,12 @@ export async function POST(request: NextRequest) {
     const conflict =
       typeof (error as { code?: unknown })?.code === "string" &&
       (error as { code: string }).code === "23505";
-    return NextResponse.json(
-      { error: conflict ? "套餐标识已存在" : "套餐参数无效" },
-      { status: conflict ? 409 : 400 }
-    );
+    if (conflict) {
+      return NextResponse.json({ error: "套餐标识已存在" }, { status: 409 });
+    }
+    if (code.startsWith("INVALID_")) {
+      return NextResponse.json({ error: "套餐参数无效" }, { status: 400 });
+    }
+    return NextResponse.json({ error: "套餐保存失败" }, { status: 500 });
   }
 }

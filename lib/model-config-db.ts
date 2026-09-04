@@ -1,4 +1,4 @@
-import pool, { deleteModelConfigCache, initDB } from "@/lib/db";
+import pool, { initDB } from "@/lib/db";
 import { encryptModelConfig, type UserModelConfig } from "@/lib/model-config-crypto";
 
 export interface UserModelConfigRow {
@@ -36,7 +36,6 @@ export async function saveUserModelConfig(userId: string, config: UserModelConfi
   } finally {
     client.release();
   }
-  await deleteModelConfigCache(userId);
 }
 
 export async function resetUserModelConfig(userId: string) {
@@ -47,7 +46,6 @@ export async function resetUserModelConfig(userId: string) {
   } finally {
     client.release();
   }
-  await deleteModelConfigCache(userId);
 }
 
 export async function countUserModelConfigs(): Promise<number> {

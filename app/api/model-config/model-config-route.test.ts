@@ -16,14 +16,16 @@ import { auth } from "@/lib/auth";
 import { encryptModelConfig } from "@/lib/model-config-crypto";
 import {
   getUserModelConfigRow,
+  resetUserModelConfig,
   saveUserModelConfig,
 } from "@/lib/model-config-db";
 import { fetchPlatformModelConfig } from "@/lib/platform-model-config";
-import { GET, POST } from "./route";
+import { DELETE, GET, POST } from "./route";
 
 const getSession = vi.mocked(auth.api.getSession);
 const getRow = vi.mocked(getUserModelConfigRow);
 const saveConfig = vi.mocked(saveUserModelConfig);
+const resetConfig = vi.mocked(resetUserModelConfig);
 const getPlatformConfig = vi.mocked(fetchPlatformModelConfig);
 
 function request(rerank: Record<string, unknown>) {
@@ -78,6 +80,39 @@ describe("GET /api/model-config", () => {
     expect(getPlatformConfig).toHaveBeenCalledTimes(1);
   });
 
+  it("does not return any API-key derivative and exposes the effective source", async () => {
+    getRow.mockResolvedValue({
+      config_enc: encryptModelConfig({
+        rerank: {
+          provider: "voyage",
+          model: "rerank-2.5",
+          baseUrl: "https://api.voyageai.com/v1/rerank",
+          apiKey: "private-key-shape-must-not-leak",
+        },
+      }),
+    });
+
+    const response = await GET();
+    const data = await response.json();
+    expect(data).toMatchObject({
+      configured: true,
+      effectiveSource: "personal",
+      apiKeyConfigured: true,
+      rerank: { provider: "voyage", model: "rerank-2.5" },
+    });
+    expect(data.rerank).not.toHaveProperty("apiKey");
+  });
+
+  it("reports platform fallback when no personal config exists", async () => {
+    getRow.mockResolvedValue(null);
+    const response = await GET();
+    expect(await response.json()).toMatchObject({
+      configured: false,
+      effectiveSource: "platform",
+      apiKeyConfigured: false,
+    });
+  });
+
   it("fails closed when Relay platform config is unavailable", async () => {
     getPlatformConfig.mockRejectedValueOnce(new Error("down"));
     const response = await GET();
@@ -112,7 +147,30 @@ describe("POST /api/model-config", () => {
     expect(saveConfig).not.toHaveBeenCalled();
   });
 
-  it("reuses the saved API key when editing the same provider", async () => {
+  it("does not reuse a custom-provider key after changing its base URL", async () => {
+    getRow.mockResolvedValue({
+      config_enc: encryptModelConfig({
+        rerank: {
+          provider: "custom",
+          model: "old-model",
+          baseUrl: "https://old.example/v1/rerank",
+          apiKey: "custom-secret",
+        },
+      }),
+    });
+
+    const response = await POST(request({
+      provider: "custom",
+      model: "new-model",
+      baseUrl: "https://new.example/v1/rerank",
+      apiKey: "",
+    }));
+
+    expect(response.status).toBe(400);
+    expect(saveConfig).not.toHaveBeenCalled();
+  });
+
+  it("reuses the saved API key only for the same normalized credential target", async () => {
     getRow.mockResolvedValue({
       config_enc: encryptModelConfig({
         rerank: {
@@ -139,6 +197,30 @@ describe("POST /api/model-config", () => {
         baseUrl: "https://api.voyageai.com/v1/rerank",
         apiKey: "voyage-key",
       },
+    });
+  });
+});
+
+
+describe("DELETE /api/model-config", () => {
+  it("requires authentication before deleting personal credentials", async () => {
+    getSession.mockResolvedValueOnce(null);
+
+    const response = await DELETE();
+
+    expect(response.status).toBe(401);
+    expect(resetConfig).not.toHaveBeenCalled();
+  });
+
+  it("removes the personal config so requests fall back to the platform", async () => {
+    const response = await DELETE();
+    expect(response.status).toBe(200);
+    expect(resetConfig).toHaveBeenCalledWith("user-1");
+    expect(await response.json()).toMatchObject({
+      configured: false,
+      effectiveSource: "platform",
+      reset: true,
+      apiKeyConfigured: false,
     });
   });
 });

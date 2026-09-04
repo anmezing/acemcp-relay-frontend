@@ -15,7 +15,7 @@ export async function DELETE(
   try {
     if (!(await deleteBillingPlan(id))) {
       return NextResponse.json(
-        { error: "套餐不存在，或已有订单不能删除；可改为停用" },
+        { error: "套餐不存在，或已有订单/订阅引用，不能删除；可改为停用" },
         { status: 409 }
       );
     }

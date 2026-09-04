@@ -5,6 +5,7 @@ import { Loader2, RefreshCw, RotateCcw, Save } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
+import { DarkSelect } from "@/components/ui/dark-select";
 import { cn } from "@/lib/utils";
 import {
   RERANK_PROVIDER_PRESETS,
@@ -44,12 +45,15 @@ export function UserModelConfigTab() {
   const [loaded, setLoaded] = useState(false);
   const [enabled, setEnabled] = useState(true);
   const [configured, setConfigured] = useState(false);
+  const [effectiveSource, setEffectiveSource] = useState<"personal" | "platform">("platform");
+  const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
   const [platformDefaults, setPlatformDefaults] = useState({
     embeddings: { provider: "", model: "", baseUrl: "" },
     rerank: { provider: "", model: "", baseUrl: "" },
   });
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [configuredProvider, setConfiguredProvider] = useState<RerankProvider | null>(null);
+  const [configuredBaseUrl, setConfiguredBaseUrl] = useState<string | null>(null);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -64,11 +68,14 @@ export function UserModelConfigTab() {
       if (signal?.aborted) return;
       setEnabled(data.enabled);
       setConfigured(data.configured);
+      setEffectiveSource(data.effectiveSource === "personal" ? "personal" : "platform");
+      setApiKeyConfigured(data.apiKeyConfigured === true);
       if (data.platformDefaults) setPlatformDefaults(data.platformDefaults);
       if (data.configured && data.rerank) {
         const provider = data.rerank.provider as RerankProvider;
         const preset = RERANK_PROVIDER_PRESETS[provider];
         setConfiguredProvider(provider);
+        setConfiguredBaseUrl(data.rerank.baseUrl);
         setForm({
           provider,
           model: data.rerank.model,
@@ -82,6 +89,7 @@ export function UserModelConfigTab() {
         );
       } else {
         setConfiguredProvider(null);
+        setConfiguredBaseUrl(null);
         setForm(EMPTY_FORM);
         setModelOptions([]);
       }
@@ -170,9 +178,7 @@ export function UserModelConfigTab() {
     setNotice("");
     try {
       const response = await fetch("/api/model-config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reset: true }),
+        method: "DELETE",
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       showNotice(t("restoredPlatformRerank"), true);
@@ -183,6 +189,12 @@ export function UserModelConfigTab() {
       setBusy(false);
     }
   }, [load, t]);
+
+  const canReuseSavedKey =
+    configured &&
+    apiKeyConfigured &&
+    form.provider === configuredProvider &&
+    form.baseUrl.trim() === configuredBaseUrl;
 
   if (!loaded) return <Skeleton className="h-64 bg-white/[0.06] rounded-xl" />;
 
@@ -260,18 +272,35 @@ export function UserModelConfigTab() {
       ) : (
         <Card className="bg-[#0a0f1a]/60 border-white/[0.06]">
           <CardContent className="p-4 space-y-4">
-            <h3 className="text-white text-sm font-medium">Rerank</h3>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-white text-sm font-medium">Rerank</h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  {effectiveSource === "personal"
+                    ? t("personalRerankIsActive")
+                    : t("platformRerankIsActive")}
+                </p>
+              </div>
+              <span className={cn(
+                "rounded-full border px-2 py-1 text-[10px]",
+                effectiveSource === "personal"
+                  ? "border-cyan-500/20 bg-cyan-500/10 text-cyan-300"
+                  : "border-white/[0.08] bg-white/[0.03] text-slate-400"
+              )}>
+                {effectiveSource === "personal" ? t("personalSource") : t("platformSource")}
+              </span>
+            </div>
             <div className="grid gap-3">
               <Field label={t("provider")}>
-                <select
+                <DarkSelect
                   value={form.provider}
-                  onChange={(event) => selectProvider(event.target.value as RerankProvider)}
-                  className={inputCls}
-                >
-                  {Object.entries(RERANK_PROVIDER_PRESETS).map(([value, preset]) => (
-                    <option key={value} value={value}>{preset.label}</option>
-                  ))}
-                </select>
+                  options={Object.entries(RERANK_PROVIDER_PRESETS).map(([value, preset]) => ({
+                    value,
+                    label: preset.label,
+                  }))}
+                  onValueChange={(value) => selectProvider(value as RerankProvider)}
+                  ariaLabel={t("provider")}
+                />
               </Field>
               <Field label="Base URL">
                 <input
@@ -284,7 +313,7 @@ export function UserModelConfigTab() {
               </Field>
               <Field
                 label={
-                  configured && form.provider === configuredProvider
+                  canReuseSavedKey
                     ? t("apiKeyLeaveBlankToUseThe")
                     : "API Key"
                 }
@@ -295,7 +324,7 @@ export function UserModelConfigTab() {
                     value={form.apiKey}
                     onChange={(event) => set({ apiKey: event.target.value })}
                     placeholder={
-                      configured && form.provider === configuredProvider ? t("saved") : "sk-..."
+                      canReuseSavedKey ? t("saved") : "sk-..."
                     }
                     className={inputCls}
                   />
@@ -305,7 +334,7 @@ export function UserModelConfigTab() {
                       variant="glass"
                       size="sm"
                       onClick={fetchModels}
-                      disabled={modelsLoading || (!form.apiKey && form.provider !== configuredProvider)}
+                      disabled={modelsLoading || (!form.apiKey && !canReuseSavedKey)}
                       className="h-[30px] shrink-0 px-3 text-xs text-cyan-400"
                     >
                       {modelsLoading
@@ -325,22 +354,16 @@ export function UserModelConfigTab() {
                     className={inputCls}
                   />
                 ) : (
-                  <select
+                  <DarkSelect
                     value={form.model}
-                    onChange={(event) => set({ model: event.target.value })}
+                    options={modelOptions.map((model) => ({ value: model, label: model }))}
+                    onValueChange={(model) => set({ model })}
                     disabled={modelOptions.length === 0}
-                    className={cn(inputCls, modelOptions.length === 0 && "cursor-not-allowed text-slate-600")}
-                  >
-                    {modelOptions.length === 0 ? (
-                      <option value="">
-                        {form.provider === "siliconflow-compatible"
-                          ? t("enterAnApiKeyThenLoadModels")
-                          : t("noModelsAvailable")}
-                      </option>
-                    ) : modelOptions.map((model) => (
-                      <option key={model} value={model}>{model}</option>
-                    ))}
-                  </select>
+                    placeholder={form.provider === "siliconflow-compatible"
+                      ? t("enterAnApiKeyThenLoadModels")
+                      : t("noModelsAvailable")}
+                    ariaLabel={t("model")}
+                  />
                 )}
               </Field>
             </div>
@@ -357,7 +380,7 @@ export function UserModelConfigTab() {
           <Button
             variant="glass"
             size="sm"
-            disabled={busy || !form.model || !form.baseUrl || (!form.apiKey && form.provider !== configuredProvider)}
+            disabled={busy || !form.model || !form.baseUrl || (!form.apiKey && !canReuseSavedKey)}
             onClick={save}
             className="text-xs text-cyan-400"
           >

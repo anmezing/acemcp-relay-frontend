@@ -1,7 +1,9 @@
 import crypto from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  closeWechatPaymentOrder,
   createWechatNativeOrder,
+  PaymentOrderRejectedError,
   paymentAvailability,
   verifyAlipayNotification,
   verifyWechatNotification,
@@ -317,7 +319,8 @@ describe("WeChat Pay Native order response verification", () => {
   function signedResponse(
     body: string,
     platformPrivateKey: string,
-    mutateSignature = false
+    mutateSignature = false,
+    status = 200
   ) {
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const nonce = "response-nonce";
@@ -329,7 +332,7 @@ describe("WeChat Pay Native order response verification", () => {
       )
       .toString("base64");
     return new Response(body, {
-      status: 200,
+      status,
       headers: {
         "Content-Type": "application/json",
         "wechatpay-timestamp": timestamp,
@@ -349,6 +352,9 @@ describe("WeChat Pay Native order response verification", () => {
     planId: "plan-1",
     provider: "wechat" as const,
     status: "pending" as const,
+    fulfillmentStatus: "pending" as const,
+    fulfillmentError: null,
+    fulfillmentEffectiveAt: null,
     amountFen: 1234,
     currency: "CNY",
     planSnapshot: {
@@ -411,5 +417,36 @@ describe("WeChat Pay Native order response verification", () => {
     await expect(createWechatNativeOrder(order)).rejects.toThrow(
       "WECHAT_SIGNATURE_HEADERS_MISSING"
     );
+  });
+
+  it("classifies a signed business rejection separately from an ambiguous transport failure", async () => {
+    const { platform } = configureWechat();
+    const body = JSON.stringify({ code: "PARAM_ERROR" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => signedResponse(body, platform.privateKey, false, 400))
+    );
+
+    const promise = createWechatNativeOrder(order);
+    await expect(promise).rejects.toBeInstanceOf(PaymentOrderRejectedError);
+    await expect(createWechatNativeOrder(order)).rejects.toThrow(
+      "WECHAT_CREATE_FAILED:PARAM_ERROR"
+    );
+  });
+
+  it("sends an authenticated close request and accepts WeChat's 204 response", async () => {
+    configureWechat();
+    const fetchMock = vi.fn<typeof fetch>();
+    fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(closeWechatPaymentOrder(order.orderNo)).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain(
+      `/v3/pay/transactions/out-trade-no/${order.orderNo}/close`
+    );
+    expect(init?.method).toBe("POST");
+    expect(new Headers(init?.headers).get("Authorization")).toMatch(/^WECHATPAY2-SHA256-RSA2048 /);
   });
 });

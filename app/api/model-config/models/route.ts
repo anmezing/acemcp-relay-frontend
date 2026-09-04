@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
-import { decryptModelConfig } from "@/lib/model-config-crypto";
+import { decryptModelConfig, modelConfigEnabled } from "@/lib/model-config-crypto";
 import { getUserModelConfigRow } from "@/lib/model-config-db";
 import { parseSiliconFlowRerankModels } from "@/lib/rerank-model-discovery";
 
@@ -23,6 +23,12 @@ export async function POST(request: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "未登录" }, { status: 401 });
   }
+  if (!modelConfigEnabled()) {
+    return NextResponse.json(
+      { error: "服务端未启用自定义 rerank（未配置 MODEL_CONFIG_SECRET）" },
+      { status: 400 }
+    );
+  }
 
   const body = await request.json().catch(() => null) as
     | { provider?: unknown; apiKey?: unknown }
@@ -32,12 +38,13 @@ export async function POST(request: Request) {
   }
 
   const submittedKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
-  const apiKey = submittedKey || await savedSiliconFlowKey(session.user.id);
-  if (!apiKey) {
-    return NextResponse.json({ error: "请先填写 SiliconFlow API Key" }, { status: 400 });
-  }
 
   try {
+    const apiKey = submittedKey || await savedSiliconFlowKey(session.user.id);
+    if (!apiKey) {
+      return NextResponse.json({ error: "请先填写 SiliconFlow API Key" }, { status: 400 });
+    }
+
     const response = await fetch(SILICONFLOW_MODELS_URL, {
       method: "GET",
       headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },

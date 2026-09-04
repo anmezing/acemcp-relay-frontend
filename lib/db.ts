@@ -138,16 +138,6 @@ export async function deleteOrgQuotaCache(orgId: string) {
   }
 }
 
-// 删除模型配置缓存（relay 侧以 modelcfg:{userId} 缓存，保存后立即生效）
-export async function deleteModelConfigCache(userId: string) {
-  try {
-    const redis = await getRedisClient();
-    await redis.del(`modelcfg:${userId}`);
-  } catch (error) {
-    console.error("Failed to delete model config cache:", error);
-  }
-}
-
 let dbInitialized = false;
 let dbInitialization: Promise<void> | undefined;
 
@@ -309,6 +299,17 @@ async function initializeDB() {
       CREATE UNIQUE INDEX IF NOT EXISTS member_org_user_uniq
         ON "member" ("organizationId", "userId")
     `);
+    // Relay 对组织密钥逐请求校验动态成员关系和套餐席位。以下索引分别覆盖：
+    // 1) 从 canonical owner 找其名下组织；2) 按组织确定最早 owner 及统计成员。
+    // 避免套餐过期的严格授权校验退化为全 member 表扫描。
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS member_user_org_idx
+        ON "member" ("userId", "organizationId")
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS member_org_created_idx
+        ON "member" ("organizationId", "createdAt", "id")
+    `);
     await client.query(`
       DELETE FROM api_keys AS keys
       WHERE keys.org_id IS NOT NULL
@@ -423,7 +424,11 @@ async function initializeDB() {
         plan_id TEXT NOT NULL REFERENCES billing_plans(id) ON DELETE RESTRICT,
         provider VARCHAR(16) NOT NULL CHECK (provider IN ('alipay', 'wechat')),
         status VARCHAR(16) NOT NULL DEFAULT 'pending'
-          CHECK (status IN ('pending', 'paid', 'closed', 'failed')),
+          CHECK (status IN ('pending', 'paid', 'closed', 'canceled', 'failed')),
+        fulfillment_status VARCHAR(24) NOT NULL DEFAULT 'pending'
+          CHECK (fulfillment_status IN ('pending', 'applied', 'manual_review')),
+        fulfillment_error TEXT,
+        fulfillment_effective_at TIMESTAMP WITH TIME ZONE,
         amount_fen BIGINT NOT NULL CHECK (amount_fen >= 0),
         currency CHAR(3) NOT NULL DEFAULT 'CNY',
         plan_snapshot JSONB NOT NULL,
@@ -436,9 +441,90 @@ async function initializeDB() {
       )
     `);
     await client.query(`
+      ALTER TABLE billing_orders
+        ADD COLUMN IF NOT EXISTS fulfillment_status VARCHAR(24) NOT NULL DEFAULT 'pending',
+        ADD COLUMN IF NOT EXISTS fulfillment_error TEXT,
+        ADD COLUMN IF NOT EXISTS fulfillment_effective_at TIMESTAMP WITH TIME ZONE
+    `);
+    // Active cancellation is distinct from timeout closure: canceled is terminal,
+    // while closed can still receive a provider callback that was delayed in transit.
+    // Avoid taking a recurring ALTER TABLE lock on every process start once the
+    // production constraint already contains the current state-machine values.
+    await client.query(`
+      DO $$
+      DECLARE
+        current_definition TEXT;
+      BEGIN
+        SELECT pg_get_constraintdef(c.oid)
+          INTO current_definition
+          FROM pg_constraint c
+          JOIN pg_class t ON t.oid = c.conrelid
+          JOIN pg_namespace n ON n.oid = t.relnamespace
+         WHERE n.nspname = 'public'
+           AND t.relname = 'billing_orders'
+           AND c.conname = 'billing_orders_status_check';
+
+        IF current_definition IS NULL OR position('canceled' IN current_definition) = 0 THEN
+          ALTER TABLE billing_orders
+            DROP CONSTRAINT IF EXISTS billing_orders_status_check;
+          ALTER TABLE billing_orders
+            ADD CONSTRAINT billing_orders_status_check
+            CHECK (status IN ('pending', 'paid', 'closed', 'canceled', 'failed'));
+        END IF;
+      END;
+      $$
+    `);
+    await addConstraintIfMissing(
+      "billing_orders",
+      "billing_orders_fulfillment_status_check",
+      `ALTER TABLE billing_orders
+       ADD CONSTRAINT billing_orders_fulfillment_status_check
+       CHECK (fulfillment_status IN ('pending', 'applied', 'manual_review'))`
+    );
+    // 旧版本中 paid 与订阅写入在同一事务，存量 paid 订单均视为已发放；
+    // 新版本的 manual_review 不会被此幂等回填覆盖。
+    await client.query(`
+      UPDATE billing_orders
+         SET fulfillment_status = 'applied', updated_at = NOW()
+       WHERE status = 'paid' AND fulfillment_status = 'pending'
+    `);
+    await client.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS billing_orders_provider_trade_uniq
         ON billing_orders (provider, provider_trade_no)
         WHERE provider_trade_no IS NOT NULL
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS billing_orders_manual_review_idx
+        ON billing_orders (updated_at DESC, id DESC)
+        WHERE status = 'paid' AND fulfillment_status = 'manual_review'
+    `);
+    // Enforce one live checkout per user across all payment providers. Clean up
+    // legacy duplicates deterministically before adding the partial unique index.
+    await client.query(`
+      UPDATE billing_orders
+         SET status = 'closed', updated_at = NOW()
+       WHERE status = 'pending' AND expires_at <= NOW()
+    `);
+    await client.query(`
+      WITH ranked AS (
+        SELECT id,
+               ROW_NUMBER() OVER (
+                 PARTITION BY user_id
+                 ORDER BY created_at DESC, id DESC
+               ) AS row_number
+          FROM billing_orders
+         WHERE status = 'pending'
+      )
+      UPDATE billing_orders AS orders
+         SET status = 'closed', updated_at = NOW()
+        FROM ranked
+       WHERE orders.id = ranked.id
+         AND ranked.row_number > 1
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS billing_orders_one_pending_per_user_uniq
+        ON billing_orders (user_id)
+        WHERE status = 'pending'
     `);
     // 订阅列直接保存已购买快照，使 Relay 不依赖可变的 billing_plans 表。
     // expires_at 是唯一有效期判断；过期后请求自动回落，不需要清理定时任务。
@@ -457,6 +543,29 @@ async function initializeDB() {
         updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
       )
     `);
+    await addConstraintIfMissing(
+      "user_subscriptions",
+      "user_subscriptions_valid_window_check",
+      `ALTER TABLE user_subscriptions
+       ADD CONSTRAINT user_subscriptions_valid_window_check
+       CHECK (expires_at > starts_at) NOT VALID`
+    );
+    // NOT VALID keeps a legacy malformed row from blocking a production rollout,
+    // while PostgreSQL still enforces the rule for every new/updated row. Validate
+    // immediately when historical data is already clean; otherwise leave the bad
+    // row inactive for explicit operator reconciliation instead of mutating paid time.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM user_subscriptions WHERE expires_at <= starts_at
+        ) THEN
+          ALTER TABLE user_subscriptions
+            VALIDATE CONSTRAINT user_subscriptions_valid_window_check;
+        END IF;
+      END;
+      $$
+    `);
     await client.query(`
       CREATE INDEX IF NOT EXISTS user_subscriptions_active_idx
         ON user_subscriptions (user_id, expires_at)
@@ -470,106 +579,149 @@ async function initializeDB() {
         ON billing_orders (expires_at)
         WHERE status = 'pending'
     `);
-    // organization 插件的 membershipLimit 负责返回友好错误；触发器使用同一
-    // “套餐持有人名下全部组织中，除本人外的唯一账号”口径并加事务锁，兜住并发
-    // 接受邀请或直接写 member 表造成的超卖。角色升级不能绕过席位限制；
-    // 没有有效订阅时子账号上限为 0。
+    // organization 插件负责友好错误；数据库使用同一套 canonical owner 规则
+    // （每个组织最早的 owner）作为最终一致性边界。约束触发器在事务结束时校验
+    // INSERT/UPDATE/DELETE 的最终状态，因此所有权转移可以在一个事务中完成，
+    // 同时不能通过删除 owner、移动成员或直接写表绕过全局共享席位上限。
     await client.query(`
       CREATE OR REPLACE FUNCTION enforce_subscription_subaccount_limit()
       RETURNS TRIGGER AS $$
       DECLARE
+        affected_organization_ids TEXT[];
+        affected_organization_id TEXT;
+        owner_user_ids TEXT[] := ARRAY[]::TEXT[];
         owner_user_id TEXT;
         seat_limit INTEGER;
         used_seats BIGINT;
-        excluded_member_id TEXT;
-        new_seat_cost INTEGER;
       BEGIN
-        IF TG_OP = 'UPDATE' THEN
-          excluded_member_id := OLD.id;
+        IF TG_OP = 'UPDATE'
+           AND OLD.role IS NOT DISTINCT FROM NEW.role
+           AND OLD."organizationId" IS NOT DISTINCT FROM NEW."organizationId"
+           AND OLD."userId" IS NOT DISTINCT FROM NEW."userId"
+           AND OLD."createdAt" IS NOT DISTINCT FROM NEW."createdAt"
+           AND OLD.id IS NOT DISTINCT FROM NEW.id THEN
+          RETURN NEW;
+        END IF;
+
+        IF TG_OP = 'INSERT' THEN
+          affected_organization_ids := ARRAY[NEW."organizationId"];
+        ELSIF TG_OP = 'DELETE' THEN
+          -- Removing an ordinary member can only reduce usage. Owner removal must be
+          -- checked because it can leave the organization ownerless or transfer its
+          -- canonical ownership and shared seat pool to another account.
+          IF NOT ('owner' = ANY(
+            regexp_split_to_array(COALESCE(OLD.role, ''), '\\s*,\\s*')
+          )) THEN
+            RETURN OLD;
+          END IF;
+          affected_organization_ids := ARRAY[OLD."organizationId"];
+        ELSIF OLD."organizationId" IS DISTINCT FROM NEW."organizationId" THEN
+          affected_organization_ids := ARRAY[OLD."organizationId", NEW."organizationId"];
         ELSE
-          excluded_member_id := NULL;
+          affected_organization_ids := ARRAY[NEW."organizationId"];
         END IF;
 
-        SELECT candidate.user_id
-          INTO owner_user_id
-          FROM (
-            SELECT m."userId" AS user_id, m."createdAt" AS created_at, m.id
-              FROM "member" m
-             WHERE m."organizationId" = NEW."organizationId"
-               AND (
-                 excluded_member_id IS NULL OR m.id <> excluded_member_id
-               )
-               AND 'owner' = ANY(
-                 regexp_split_to_array(COALESCE(m.role, ''), '\\s*,\\s*')
-               )
-            UNION ALL
-            SELECT NEW."userId", NEW."createdAt", NEW.id
-             WHERE 'owner' = ANY(
-               regexp_split_to_array(COALESCE(NEW.role, ''), '\\s*,\\s*')
-             )
-          ) candidate
-         ORDER BY candidate.created_at, candidate.id
-         LIMIT 1;
+        -- Serialize topology changes per organization before deriving canonical owners.
+        FOR affected_organization_id IN
+          SELECT DISTINCT affected.organization_id
+            FROM unnest(affected_organization_ids) AS affected(organization_id)
+           WHERE affected.organization_id IS NOT NULL
+           ORDER BY affected.organization_id
+        LOOP
+          PERFORM pg_advisory_xact_lock(
+            hashtext('acemcp:organization-membership'),
+            hashtext(affected_organization_id)
+          );
+        END LOOP;
 
-        IF owner_user_id IS NULL THEN
-          RAISE EXCEPTION 'ORGANIZATION_OWNER_REQUIRED';
-        END IF;
+        FOR affected_organization_id IN
+          SELECT DISTINCT affected.organization_id
+            FROM unnest(affected_organization_ids) AS affected(organization_id)
+           WHERE affected.organization_id IS NOT NULL
+           ORDER BY affected.organization_id
+        LOOP
+          -- Cascading deletion of the organization itself must not be rejected.
+          IF NOT EXISTS (
+            SELECT 1 FROM "organization" o WHERE o.id = affected_organization_id
+          ) THEN
+            CONTINUE;
+          END IF;
 
-        PERFORM pg_advisory_xact_lock(
-          hashtext('acemcp:subaccounts'),
-          hashtext(owner_user_id)
-        );
-
-        SELECT s.subaccount_limit
-          INTO seat_limit
-          FROM user_subscriptions s
-         WHERE s.user_id = owner_user_id
-           AND s.starts_at <= NOW()
-           AND s.expires_at > NOW();
-        seat_limit := COALESCE(seat_limit, 0);
-
-        WITH owned_organizations AS (
-          SELECT DISTINCT ownership."organizationId" AS organization_id
-            FROM "member" ownership
-           WHERE ownership."userId" = owner_user_id
-             AND (
-               excluded_member_id IS NULL OR ownership.id <> excluded_member_id
-             )
+          SELECT m."userId"
+            INTO owner_user_id
+            FROM "member" m
+           WHERE m."organizationId" = affected_organization_id
              AND 'owner' = ANY(
-               regexp_split_to_array(COALESCE(ownership.role, ''), '\\s*,\\s*')
+               regexp_split_to_array(COALESCE(m.role, ''), '\\s*,\\s*')
              )
-          UNION
-          SELECT NEW."organizationId"
-           WHERE NEW."userId" = owner_user_id
-             AND 'owner' = ANY(
-               regexp_split_to_array(COALESCE(NEW.role, ''), '\\s*,\\s*')
-             )
-        )
-        , existing_accounts AS (
-          SELECT DISTINCT counted."userId" AS user_id
-            FROM "member" counted
-            JOIN owned_organizations owned
-              ON owned.organization_id = counted."organizationId"
-           WHERE counted."userId" <> owner_user_id
-             AND (
-               excluded_member_id IS NULL OR counted.id <> excluded_member_id
-             )
-        )
-        SELECT
-          COUNT(*),
-          CASE
-            WHEN NEW."userId" = owner_user_id THEN 0
-            WHEN COUNT(*) FILTER (
-              WHERE existing_accounts.user_id = NEW."userId"
-            ) > 0 THEN 0
-            ELSE 1
-          END
-          INTO used_seats, new_seat_cost
-          FROM existing_accounts;
+           ORDER BY m."createdAt", m.id
+           LIMIT 1;
 
-        IF used_seats + new_seat_cost > seat_limit THEN
-          RAISE EXCEPTION 'SUBACCOUNT_LIMIT_REACHED';
-        END IF;
+          IF owner_user_id IS NULL THEN
+            RAISE EXCEPTION 'ORGANIZATION_OWNER_REQUIRED';
+          END IF;
+          IF NOT (owner_user_id = ANY(owner_user_ids)) THEN
+            owner_user_ids := array_append(owner_user_ids, owner_user_id);
+          END IF;
+        END LOOP;
+
+        -- Sorted owner locks avoid deadlocks when a transaction transfers ownership
+        -- between organizations belonging to different subscription holders.
+        FOR owner_user_id IN
+          SELECT owners.value
+            FROM unnest(owner_user_ids) AS owners(value)
+           ORDER BY owners.value
+        LOOP
+          PERFORM pg_advisory_xact_lock(
+            hashtext('acemcp:subaccounts'),
+            hashtext(owner_user_id)
+          );
+        END LOOP;
+
+        FOR owner_user_id IN
+          SELECT owners.value
+            FROM unnest(owner_user_ids) AS owners(value)
+           ORDER BY owners.value
+        LOOP
+          SELECT s.subaccount_limit
+            INTO seat_limit
+            FROM user_subscriptions s
+           WHERE s.user_id = owner_user_id
+             AND s.starts_at <= NOW()
+             AND s.expires_at > NOW();
+          seat_limit := COALESCE(seat_limit, 0);
+
+          WITH canonical_ownership AS (
+            SELECT organization_id, canonical_owner_id
+              FROM (
+                SELECT
+                  m."organizationId" AS organization_id,
+                  m."userId" AS canonical_owner_id,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY m."organizationId"
+                    ORDER BY m."createdAt", m.id
+                  ) AS owner_rank
+                FROM "member" m
+                WHERE 'owner' = ANY(
+                  regexp_split_to_array(COALESCE(m.role, ''), '\\s*,\\s*')
+                )
+              ) ranked
+             WHERE owner_rank = 1
+          )
+          SELECT COUNT(DISTINCT counted."userId")
+            INTO used_seats
+            FROM canonical_ownership owned
+            JOIN "member" counted
+              ON counted."organizationId" = owned.organization_id
+             AND counted."userId" <> owner_user_id
+           WHERE owned.canonical_owner_id = owner_user_id;
+
+          IF used_seats > seat_limit THEN
+            RAISE EXCEPTION 'SUBACCOUNT_LIMIT_REACHED';
+          END IF;
+        END LOOP;
+
+        IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
         RETURN NEW;
       END;
       $$ LANGUAGE plpgsql
@@ -578,8 +730,9 @@ async function initializeDB() {
       DROP TRIGGER IF EXISTS member_subscription_subaccount_limit ON "member"
     `);
     await client.query(`
-      CREATE TRIGGER member_subscription_subaccount_limit
-      BEFORE INSERT OR UPDATE OF role, "organizationId", "userId" ON "member"
+      CREATE CONSTRAINT TRIGGER member_subscription_subaccount_limit
+      AFTER INSERT OR UPDATE OR DELETE ON "member"
+      DEFERRABLE INITIALLY DEFERRED
       FOR EACH ROW
       EXECUTE FUNCTION enforce_subscription_subaccount_limit()
     `);
@@ -612,7 +765,227 @@ async function initializeDB() {
     if (tenantIdColumn.rows[0]) {
       await client.query(`
         CREATE INDEX IF NOT EXISTS idx_request_logs_tenant_ts
-          ON request_logs (tenant_id, request_timestamp)
+          ON request_logs (tenant_id, request_timestamp DESC)
+      `);
+    }
+    const requestLogsTable = await client.query(`
+      SELECT to_regclass('public.request_logs') IS NOT NULL AS ok
+    `);
+    if (requestLogsTable.rows[0]?.ok) {
+      // 明细页按稳定倒序读取。精确总数和状态统计不在请求路径 COUNT(*)，
+      // 而由下面的数据库触发器维护用户级汇总行。
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_request_logs_user_ts_id
+          ON request_logs (user_id, request_timestamp DESC, id DESC)
+      `);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS frontend_schema_migrations (
+          key TEXT PRIMARY KEY,
+          applied_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS request_log_user_stats (
+          user_id VARCHAR(255) PRIMARY KEY,
+          total_count BIGINT NOT NULL DEFAULT 0 CHECK (total_count >= 0),
+          success_count BIGINT NOT NULL DEFAULT 0 CHECK (success_count >= 0),
+          failed_count BIGINT NOT NULL DEFAULT 0 CHECK (failed_count >= 0),
+          context_engine_count BIGINT NOT NULL DEFAULT 0 CHECK (context_engine_count >= 0),
+          updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS request_log_daily_stats (
+          stat_date DATE NOT NULL,
+          user_id VARCHAR(255) NOT NULL,
+          request_path VARCHAR(512) NOT NULL,
+          total_count BIGINT NOT NULL DEFAULT 0 CHECK (total_count >= 0),
+          success_count BIGINT NOT NULL DEFAULT 0 CHECK (success_count >= 0),
+          failed_count BIGINT NOT NULL DEFAULT 0 CHECK (failed_count >= 0),
+          updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (stat_date, user_id, request_path)
+        );
+        CREATE INDEX IF NOT EXISTS idx_request_log_daily_stats_user_date
+          ON request_log_daily_stats (user_id, stat_date DESC);
+
+        CREATE OR REPLACE FUNCTION maintain_request_log_stats()
+        RETURNS TRIGGER AS $$
+        BEGIN
+          IF TG_OP <> 'INSERT' THEN
+            UPDATE request_log_user_stats
+               SET total_count = GREATEST(total_count - 1, 0),
+                   success_count = GREATEST(success_count - CASE
+                     WHEN OLD.status_code >= 200 AND OLD.status_code < 400 AND OLD.status <> 'error' THEN 1 ELSE 0 END, 0),
+                   failed_count = GREATEST(failed_count - CASE
+                     WHEN OLD.status_code >= 400 OR OLD.status = 'error' THEN 1 ELSE 0 END, 0),
+                   context_engine_count = GREATEST(context_engine_count - CASE
+                     WHEN OLD.request_path = '/mcp/tools/call/codebase-retrieval'
+                      AND OLD.status_code = 200 AND OLD.status <> 'error' THEN 1 ELSE 0 END, 0),
+                   updated_at = NOW()
+             WHERE user_id = OLD.user_id;
+            DELETE FROM request_log_user_stats
+             WHERE user_id = OLD.user_id AND total_count = 0;
+
+            UPDATE request_log_daily_stats
+               SET total_count = GREATEST(total_count - 1, 0),
+                   success_count = GREATEST(success_count - CASE
+                     WHEN OLD.status_code >= 200 AND OLD.status_code < 400 AND OLD.status <> 'error' THEN 1 ELSE 0 END, 0),
+                   failed_count = GREATEST(failed_count - CASE
+                     WHEN OLD.status_code >= 400 OR OLD.status = 'error' THEN 1 ELSE 0 END, 0),
+                   updated_at = NOW()
+             WHERE stat_date = (OLD.request_timestamp AT TIME ZONE 'Asia/Shanghai')::date
+               AND user_id = OLD.user_id
+               AND request_path = OLD.request_path;
+            DELETE FROM request_log_daily_stats
+             WHERE stat_date = (OLD.request_timestamp AT TIME ZONE 'Asia/Shanghai')::date
+               AND user_id = OLD.user_id
+               AND request_path = OLD.request_path
+               AND total_count = 0;
+          END IF;
+
+          IF TG_OP <> 'DELETE' THEN
+            INSERT INTO request_log_user_stats (
+              user_id, total_count, success_count, failed_count,
+              context_engine_count, updated_at
+            ) VALUES (
+              NEW.user_id,
+              1,
+              CASE WHEN NEW.status_code >= 200 AND NEW.status_code < 400
+                     AND NEW.status <> 'error' THEN 1 ELSE 0 END,
+              CASE WHEN NEW.status_code >= 400 OR NEW.status = 'error' THEN 1 ELSE 0 END,
+              CASE WHEN NEW.request_path = '/mcp/tools/call/codebase-retrieval'
+                     AND NEW.status_code = 200 AND NEW.status <> 'error' THEN 1 ELSE 0 END,
+              NOW()
+            )
+            ON CONFLICT (user_id) DO UPDATE SET
+              total_count = request_log_user_stats.total_count + EXCLUDED.total_count,
+              success_count = request_log_user_stats.success_count + EXCLUDED.success_count,
+              failed_count = request_log_user_stats.failed_count + EXCLUDED.failed_count,
+              context_engine_count = request_log_user_stats.context_engine_count + EXCLUDED.context_engine_count,
+              updated_at = NOW();
+
+            INSERT INTO request_log_daily_stats (
+              stat_date, user_id, request_path, total_count,
+              success_count, failed_count, updated_at
+            ) VALUES (
+              (NEW.request_timestamp AT TIME ZONE 'Asia/Shanghai')::date,
+              NEW.user_id,
+              NEW.request_path,
+              1,
+              CASE WHEN NEW.status_code >= 200 AND NEW.status_code < 400
+                     AND NEW.status <> 'error' THEN 1 ELSE 0 END,
+              CASE WHEN NEW.status_code >= 400 OR NEW.status = 'error' THEN 1 ELSE 0 END,
+              NOW()
+            )
+            ON CONFLICT (stat_date, user_id, request_path) DO UPDATE SET
+              total_count = request_log_daily_stats.total_count + EXCLUDED.total_count,
+              success_count = request_log_daily_stats.success_count + EXCLUDED.success_count,
+              failed_count = request_log_daily_stats.failed_count + EXCLUDED.failed_count,
+              updated_at = NOW();
+          END IF;
+          RETURN NULL;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        CREATE OR REPLACE FUNCTION reset_request_log_stats()
+        RETURNS TRIGGER AS $$
+        BEGIN
+          TRUNCATE TABLE request_log_user_stats, request_log_daily_stats;
+          RETURN NULL;
+        END;
+        $$ LANGUAGE plpgsql;
+
+        DO $$
+        BEGIN
+          IF (
+            SELECT COUNT(*)
+              FROM pg_trigger
+             WHERE tgrelid = 'request_logs'::regclass
+               AND tgname = ANY (ARRAY[
+                 'request_logs_rollup_insert_v3',
+                 'request_logs_rollup_update_v3',
+                 'request_logs_rollup_delete_v3',
+                 'request_logs_rollup_truncate_v3'
+               ])
+               AND NOT tgisinternal
+               -- Treat disabled or replica-only triggers as missing. Aggregate
+               -- tables are authoritative for pagination/statistics, so merely
+               -- finding four trigger names is insufficient if an operational
+               -- change left one of them unable to fire for normal writes.
+               AND tgenabled IN ('O', 'A')
+          ) <> 4 THEN
+            -- Replace legacy/incomplete trigger definitions once. Normal process
+            -- restarts leave the installed triggers untouched and avoid taking a
+            -- DDL lock on the hot request_logs table.
+            DROP TRIGGER IF EXISTS request_logs_stats_insert ON request_logs;
+            DROP TRIGGER IF EXISTS request_logs_stats_update ON request_logs;
+            DROP TRIGGER IF EXISTS request_logs_stats_delete ON request_logs;
+            DROP TRIGGER IF EXISTS request_logs_stats_truncate ON request_logs;
+            DROP TRIGGER IF EXISTS request_logs_rollup_insert_v3 ON request_logs;
+            DROP TRIGGER IF EXISTS request_logs_rollup_update_v3 ON request_logs;
+            DROP TRIGGER IF EXISTS request_logs_rollup_delete_v3 ON request_logs;
+            DROP TRIGGER IF EXISTS request_logs_rollup_truncate_v3 ON request_logs;
+            CREATE TRIGGER request_logs_rollup_insert_v3
+              AFTER INSERT ON request_logs
+              FOR EACH ROW EXECUTE FUNCTION maintain_request_log_stats();
+            CREATE TRIGGER request_logs_rollup_update_v3
+              AFTER UPDATE OF user_id, status, status_code, request_path, request_timestamp ON request_logs
+              FOR EACH ROW EXECUTE FUNCTION maintain_request_log_stats();
+            CREATE TRIGGER request_logs_rollup_delete_v3
+              AFTER DELETE ON request_logs
+              FOR EACH ROW EXECUTE FUNCTION maintain_request_log_stats();
+            CREATE TRIGGER request_logs_rollup_truncate_v3
+              AFTER TRUNCATE ON request_logs
+              FOR EACH STATEMENT EXECUTE FUNCTION reset_request_log_stats();
+
+            -- A missing/disabled trigger means aggregate rows may already have
+            -- drifted. Recreating future-write maintenance is not enough: force
+            -- the guarded rebuild below to reconcile the historical interval.
+            DELETE FROM frontend_schema_migrations
+             WHERE key = 'request-log-stats-v3';
+          END IF;
+        END;
+        $$;
+
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM frontend_schema_migrations
+             WHERE key = 'request-log-stats-v3'
+          ) THEN
+            -- Block concurrent writes while both aggregate tables are rebuilt.
+            -- This is the only full historical scan; request paths read summaries.
+            LOCK TABLE request_logs IN SHARE ROW EXCLUSIVE MODE;
+            TRUNCATE TABLE request_log_user_stats, request_log_daily_stats;
+            INSERT INTO request_log_user_stats (
+              user_id, total_count, success_count, failed_count,
+              context_engine_count, updated_at
+            )
+            SELECT user_id,
+                   COUNT(*),
+                   COUNT(*) FILTER (WHERE status_code >= 200 AND status_code < 400 AND status <> 'error'),
+                   COUNT(*) FILTER (WHERE status_code >= 400 OR status = 'error'),
+                   COUNT(*) FILTER (
+                     WHERE request_path = '/mcp/tools/call/codebase-retrieval'
+                       AND status_code = 200 AND status <> 'error'
+                   ),
+                   NOW()
+              FROM request_logs
+             GROUP BY user_id;
+            INSERT INTO request_log_daily_stats (
+              stat_date, user_id, request_path, total_count,
+              success_count, failed_count, updated_at
+            )
+            SELECT (request_timestamp AT TIME ZONE 'Asia/Shanghai')::date,
+                   user_id,
+                   request_path,
+                   COUNT(*),
+                   COUNT(*) FILTER (WHERE status_code >= 200 AND status_code < 400 AND status <> 'error'),
+                   COUNT(*) FILTER (WHERE status_code >= 400 OR status = 'error'),
+                   NOW()
+              FROM request_logs
+             GROUP BY 1, user_id, request_path;
+            INSERT INTO frontend_schema_migrations (key)
+            VALUES ('request-log-stats-v3');
+          END IF;
+        END;
+        $$;
       `);
     }
 
@@ -1010,6 +1383,7 @@ export async function getRequestLogs(
   limit: number = 20,
   offset: number = 0
 ): Promise<RequestLogRow[]> {
+  await initDB();
   const client = await pool.connect();
   try {
     const result = await client.query(
@@ -1017,7 +1391,7 @@ export async function getRequestLogs(
               request_timestamp, response_duration_ms, client_ip
        FROM request_logs
        WHERE user_id = $1
-       ORDER BY request_timestamp DESC
+       ORDER BY request_timestamp DESC, id DESC
        LIMIT $2 OFFSET $3`,
       [userId, limit, offset]
     );
@@ -1027,48 +1401,34 @@ export async function getRequestLogs(
   }
 }
 
+export async function countRequestLogs(userId: string): Promise<number> {
+  await initDB();
+  const result = await pool.query(
+    `SELECT total_count FROM request_log_user_stats WHERE user_id = $1`,
+    [userId]
+  );
+  return Number(result.rows[0]?.total_count ?? 0);
+}
+
 export async function getRequestLogStats(userId: string): Promise<{
   successCount: number;
   failedCount: number;
   totalCount: number;
+  contextEngineCount: number;
 }> {
-  const client = await pool.connect();
-  try {
-    const result = await client.query(
-      `SELECT
-         COUNT(*) FILTER (WHERE status_code >= 200 AND status_code < 400) as success_count,
-         COUNT(*) FILTER (WHERE status_code >= 400 OR status = 'error') as failed_count,
-         COUNT(*) as total_count
-       FROM request_logs
-       WHERE user_id = $1`,
-      [userId]
-    );
-    return {
-      successCount: parseInt(result.rows[0].success_count || "0"),
-      failedCount: parseInt(result.rows[0].failed_count || "0"),
-      totalCount: parseInt(result.rows[0].total_count || "0"),
-    };
-  } finally {
-    client.release();
-  }
-}
-
-// ContextEngine count
-export async function getContextEngineCount(userId: string): Promise<number> {
-  const client = await pool.connect();
-  try {
-    const result = await client.query(
-      `SELECT COUNT(*) as count
-       FROM request_logs
-       WHERE user_id = $1
-         AND request_path = '/mcp/tools/call/codebase-retrieval'
-         AND status_code = 200`,
-      [userId]
-    );
-    return parseInt(result.rows[0].count || "0");
-  } finally {
-    client.release();
-  }
+  await initDB();
+  const result = await pool.query(
+    `SELECT success_count, failed_count, total_count, context_engine_count
+       FROM request_log_user_stats
+      WHERE user_id = $1`,
+    [userId]
+  );
+  return {
+    successCount: Number(result.rows[0]?.success_count ?? 0),
+    failedCount: Number(result.rows[0]?.failed_count ?? 0),
+    totalCount: Number(result.rows[0]?.total_count ?? 0),
+    contextEngineCount: Number(result.rows[0]?.context_engine_count ?? 0),
+  };
 }
 
 // Error Details functions
@@ -1206,25 +1566,24 @@ export async function getLeaderboard(dateStr?: string): Promise<LeaderboardEntry
 
   const client = await pool.connect();
   try {
-    // request_logs is the source of truth. Only retrieval and prompt-enhancement
-    // calls represent leaderboard usage; indexing, status polling, symbol-graph,
-    // and protocol traffic are intentionally excluded.
+    // request_logs remains the source of truth; request_log_daily_stats is maintained
+    // transactionally by request-log triggers. Only successful retrieval and prompt-
+    // enhancement calls count; indexing, symbol-graph, and protocol traffic do not.
     const result = await client.query(
       `WITH ranked AS (
          SELECT
            rl.user_id,
            u.name AS user_name,
-           COUNT(*)::bigint AS request_count,
+           SUM(rl.success_count)::bigint AS request_count,
            ROW_NUMBER() OVER (
-             ORDER BY COUNT(*) DESC, rl.user_id ASC
+             ORDER BY SUM(rl.success_count) DESC, rl.user_id ASC
            )::int AS rank
-         FROM request_logs rl
+         FROM request_log_daily_stats rl
          INNER JOIN "user" u ON u.id = rl.user_id
          WHERE rl.request_path IN (${LEADERBOARD_REQUEST_PATHS_SQL})
-           AND rl.status_code = 200
-           AND rl.request_timestamp >= ($1::date::timestamp AT TIME ZONE '${LEADERBOARD_TIMEZONE}')
-           AND rl.request_timestamp < (($1::date + 1)::timestamp AT TIME ZONE '${LEADERBOARD_TIMEZONE}')
+           AND rl.stat_date = $1::date
          GROUP BY rl.user_id, u.name
+         HAVING SUM(rl.success_count) > 0
        )
        SELECT rank, user_id, user_name, request_count
        FROM ranked

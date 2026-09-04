@@ -38,8 +38,11 @@ interface Subscription {
 interface BillingOrder {
   orderNo: string;
   provider: "alipay" | "wechat";
-  status: "pending" | "paid" | "closed" | "failed";
+  status: "pending" | "paid" | "closed" | "canceled" | "failed";
+  fulfillmentStatus: "pending" | "applied" | "manual_review";
+  fulfillmentError: string | null;
   amountFen: number;
+  codeUrl: string | null;
   expiresAt: string;
   createdAt: string;
   planSnapshot: { name: string };
@@ -57,12 +60,22 @@ interface BillingOverview {
     resetAt: string;
   };
   providers: { alipay: boolean; wechat: boolean };
+  purchaseOptions?: Record<string, {
+    allowed: boolean;
+    kind: "new" | "renewal" | "upgrade" | "downgrade" | "upgrade_term_too_short";
+    reason?: string;
+  }>;
 }
 
 interface CheckoutState {
   order: BillingOrder;
   qrCodeDataUrl: string;
 }
+
+type NoticeState = {
+  message: string;
+  tone: "success" | "warning" | "error";
+};
 
 function formatLimit(value: number, unit: string, unlimited: string): string {
   return value === 0
@@ -92,7 +105,7 @@ export function PlansTab() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState("");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<NoticeState | null>(null);
   const [checkout, setCheckout] = useState<CheckoutState | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -135,10 +148,20 @@ export function PlansTab() {
         if (stopped || !response.ok || !payload.order) return;
         if (payload.order.status === "paid") {
           setCheckout(null);
-          setNotice(t("paymentCompletedPlanBenefitsAreActive"));
+          setNotice({
+            message:
+              payload.order.fulfillmentStatus === "applied"
+                ? t("paymentCompletedPlanBenefitsAreActive")
+                : t("paymentReceivedNeedsManualReview"),
+            tone:
+              payload.order.fulfillmentStatus === "applied"
+                ? "success"
+                : "warning",
+          });
           await load();
         } else if (
           payload.order.status === "closed" ||
+          payload.order.status === "canceled" ||
           payload.order.status === "failed"
         ) {
           setCheckout((current) =>
@@ -170,7 +193,7 @@ export function PlansTab() {
   const startCheckout = useCallback(
     async (plan: BillingPlan, provider: "alipay" | "wechat") => {
       setBusy(`${plan.id}:${provider}`);
-      setNotice("");
+      setNotice(null);
       try {
         const response = await fetch("/api/billing/checkout", {
           method: "POST",
@@ -190,13 +213,46 @@ export function PlansTab() {
           qrCodeDataUrl: payload.qrCodeDataUrl,
         });
       } catch (reason) {
-        setNotice(reason instanceof Error ? reason.message : t("failedToCreatePaymentOrder"));
+        setNotice({
+          message: reason instanceof Error ? reason.message : t("failedToCreatePaymentOrder"),
+          tone: "error",
+        });
       } finally {
         setBusy("");
       }
     },
     [t]
   );
+
+  const cancelOrder = useCallback(async (orderNo: string) => {
+    setBusy(`cancel:${orderNo}`);
+    setNotice(null);
+    try {
+      const response = await fetch(
+        `/api/billing/orders/${encodeURIComponent(orderNo)}`,
+        { method: "DELETE" }
+      );
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        order?: BillingOrder;
+      };
+      if (!response.ok || !payload.order) {
+        throw new Error(payload.error || t("failedToCancelOrder"));
+      }
+      setCheckout((current) =>
+        current?.order.orderNo === orderNo ? null : current
+      );
+      setNotice({ message: t("pendingOrderCanceled"), tone: "success" });
+      await load();
+    } catch (reason) {
+      setNotice({
+        message: reason instanceof Error ? reason.message : t("failedToCancelOrder"),
+        tone: "error",
+      });
+    } finally {
+      setBusy("");
+    }
+  }, [load, t]);
 
   const recentOrders = useMemo(() => data?.orders.slice(0, 5) ?? [], [data]);
   const requestPercent = quotaPercent(
@@ -322,14 +378,24 @@ export function PlansTab() {
         </CardContent>
       </Card>
 
+      <div className="rounded-xl border border-white/[0.07] bg-white/[0.025] px-4 py-3 text-xs leading-5 text-slate-500">
+        <p>{t("subscriptionLifecyclePolicy")}</p>
+        <p className="mt-1">{t("subaccountQuotaPolicy")}</p>
+        <p className="mt-1">{t("activeSubscriptionCancellationPolicy")}</p>
+      </div>
+
       {notice && (
         <p
           className={cn(
             "text-sm",
-            /成功|completed/i.test(notice) ? "text-emerald-400" : "text-red-400"
+            notice.tone === "success"
+              ? "text-emerald-400"
+              : notice.tone === "warning"
+                ? "text-amber-400"
+                : "text-red-400"
           )}
         >
-          {notice}
+          {notice.message}
         </p>
       )}
 
@@ -373,6 +439,18 @@ export function PlansTab() {
                     / {plan.durationDays} {t("days")}
                   </span>
                 </div>
+                <p className={cn(
+                  "mt-2 text-xs",
+                  data.purchaseOptions?.[plan.id]?.allowed === false
+                    ? "text-amber-400"
+                    : "text-cyan-400"
+                )}>
+                  {data.purchaseOptions?.[plan.id]?.allowed === false
+                    ? data.purchaseOptions[plan.id]?.kind === "upgrade_term_too_short"
+                      ? t("upgradeTermTooShort")
+                      : t("downgradeUnavailable")
+                    : t(`purchaseKind.${data.purchaseOptions?.[plan.id]?.kind ?? "new"}`)}
+                </p>
                 <div className="mt-5 space-y-3 text-sm">
                   <div className="flex items-center gap-2 text-slate-300">
                     <Check className="h-4 w-4 text-cyan-400" />
@@ -393,6 +471,7 @@ export function PlansTab() {
                     size="sm"
                     disabled={
                       plan.priceFen <= 0 ||
+                      data.purchaseOptions?.[plan.id]?.allowed === false ||
                       !data.providers.alipay ||
                       busy === `${plan.id}:alipay`
                     }
@@ -408,6 +487,7 @@ export function PlansTab() {
                     size="sm"
                     disabled={
                       plan.priceFen <= 0 ||
+                      data.purchaseOptions?.[plan.id]?.allowed === false ||
                       !data.providers.wechat ||
                       busy === `${plan.id}:wechat`
                     }
@@ -419,7 +499,13 @@ export function PlansTab() {
                     {t("wechatPay")}
                   </Button>
                 </div>
-                {plan.priceFen <= 0 ? (
+                {data.purchaseOptions?.[plan.id]?.allowed === false ? (
+                  <p className="mt-2 text-[10px] text-amber-500/80">
+                    {data.purchaseOptions[plan.id]?.kind === "upgrade_term_too_short"
+                      ? t("upgradeTermTooShortHelp")
+                      : t("downgradeContactSupport")}
+                  </p>
+                ) : plan.priceFen <= 0 ? (
                   <p className="mt-2 text-[10px] text-slate-600">
                     {t("freeAndInternalPlansMustBeAssigned")}
                   </p>
@@ -467,9 +553,34 @@ export function PlansTab() {
                 </>
               )}
             </div>
-            <Button variant="ghost" size="sm" onClick={() => setCheckout(null)}>
-              {t("close")}
-            </Button>
+            <p className="text-[11px] text-slate-600">{t("closingQrDoesNotCancel")}</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {checkout.order.status === "pending" && (
+                <Button
+                  variant="glass"
+                  size="sm"
+                  disabled={
+                    busy === `cancel:${checkout.order.orderNo}` ||
+                    !checkout.order.codeUrl
+                  }
+                  title={
+                    checkout.order.codeUrl
+                      ? undefined
+                      : t("providerOrderBeingCreated")
+                  }
+                  onClick={() => void cancelOrder(checkout.order.orderNo)}
+                  className="text-amber-300"
+                >
+                  {busy === `cancel:${checkout.order.orderNo}` && (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  )}
+                  {t("cancelPendingOrder")}
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={() => setCheckout(null)}>
+                {t("close")}
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}
@@ -500,15 +611,36 @@ export function PlansTab() {
                 <span
                   className={cn(
                     "ml-auto",
-                    order.status === "paid"
+                    order.status === "paid" && order.fulfillmentStatus === "applied"
                       ? "text-emerald-400"
-                      : order.status === "pending"
+                      : order.status === "pending" || order.fulfillmentStatus === "manual_review"
                         ? "text-amber-400"
                         : "text-slate-600"
                   )}
+                  title={order.fulfillmentError || undefined}
                 >
-                  {t(`orderStatus.${order.status}`)}
+                  {order.status === "paid" && order.fulfillmentStatus === "manual_review"
+                    ? t("orderNeedsManualReview")
+                    : t(`orderStatus.${order.status}`)}
                 </span>
+                {order.status === "pending" && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={
+                      busy === `cancel:${order.orderNo}` || !order.codeUrl
+                    }
+                    title={
+                      order.codeUrl ? undefined : t("providerOrderBeingCreated")
+                    }
+                    onClick={() => void cancelOrder(order.orderNo)}
+                    className="h-7 px-2 text-[11px] text-amber-300"
+                  >
+                    {busy === `cancel:${order.orderNo}`
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : t("cancel")}
+                  </Button>
+                )}
               </div>
             ))}
           </div>

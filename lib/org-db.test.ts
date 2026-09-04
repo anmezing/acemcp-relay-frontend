@@ -63,6 +63,7 @@ describe("ensureOrgApiKey", () => {
     const insert = mocks.query.mock.calls.find(([sql]) => String(sql).includes("INSERT"));
     expect(insert?.[1]).toEqual(["new-hash", "u1", "lce_new", "o1", "member"]);
     expect(String(insert?.[0])).toContain("WHERE user_id = $2::VARCHAR(255)");
+    expect(String(insert?.[0])).toContain("AND org_id IS NULL");
   });
 
   it("已存在且角色一致时复用，不插入不更新（重复安全）", async () => {
@@ -239,6 +240,8 @@ describe("getOrgUsage（组织用量聚合）", () => {
     daily_request_limit?: string | number | null;
     daily_index_bytes_limit?: string | number | null;
     owner_user_id?: string | null;
+    owner_daily_request_limit?: string | number | null;
+    owner_daily_index_bytes_limit?: string | number | null;
     owner_tier?: string | null;
     plan_name?: string | null;
     subscription_daily_request_limit?: string | number | null;
@@ -301,6 +304,35 @@ describe("getOrgUsage（组织用量聚合）", () => {
     });
   });
 
+
+  it("组织维度未覆盖时继承 canonical owner 的用户管理员覆盖", async () => {
+    mockUsageQueries([{
+      daily_request_limit: null,
+      daily_index_bytes_limit: null,
+      owner_user_id: "owner-1",
+      owner_daily_request_limit: "321",
+      owner_daily_index_bytes_limit: "654321",
+      owner_tier: "free",
+      plan_name: "Team",
+      subscription_daily_request_limit: "2000",
+      subscription_daily_index_bytes_limit: "4096",
+      subscription_expires_at: "2026-10-01T00:00:00.000Z",
+    }]);
+
+    const usage = await getOrgUsage("o1");
+    expect(usage.today).toEqual({
+      used: 7,
+      limit: 321,
+      source: "admin_override",
+      planName: "Team",
+    });
+
+    const quotaSql = mocks.query.mock.calls
+      .map(([sql]) => String(sql))
+      .find((sql) => sql.includes("org_effective_quota"));
+    expect(quotaSql).toContain("LEFT JOIN user_quotas AS owner_overrides");
+  });
+
   it("无管理员覆盖时继承 canonical owner 的有效套餐", async () => {
     mockUsageQueries([{
       daily_request_limit: null,
@@ -356,5 +388,27 @@ describe("listOrgsWithQuotas（管理员覆盖与继承值分离）", () => {
       plan_name: "Team",
       owner_tier: "free",
     });
+
+    const sql = String(mocks.query.mock.calls[0]?.[0]);
+    expect(sql).toContain("WITH member_stats AS");
+    expect(sql).toContain("request_stats AS");
+    expect(sql).toContain("GROUP BY logs.tenant_id");
+    expect(sql).not.toMatch(/SELECT COUNT\(\*\) FROM request_logs rl/);
+    expect(sql).toContain('LEFT JOIN user_quotas AS owner_overrides');
+    expect(sql).toContain('(keys.org_id IS NULL OR keys.org_id = o."id")');
+  });
+
+  it("组织有效配额查询只接受 owner 的个人密钥或当前组织密钥", async () => {
+    mocks.query.mockImplementation(async (sql: string) => {
+      if (sql.includes("AS used")) return { rows: [{ used: "0" }] };
+      return { rows: [] };
+    });
+    await getOrgUsage("org-target");
+    const quotaSql = mocks.query.mock.calls
+      .map(([sql]) => String(sql))
+      .find((sql) => sql.includes("org_effective_quota"));
+    expect(quotaSql).toContain(
+      "(keys.org_id IS NULL OR keys.org_id = requested_org.org_id)"
+    );
   });
 });

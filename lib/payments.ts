@@ -16,6 +16,14 @@ export interface VerifiedPayment {
   paidAt: Date;
 }
 
+/** A signed/structured provider response rejected creation; external state may still require reconciliation. */
+export class PaymentOrderRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PaymentOrderRejectedError";
+  }
+}
+
 function secretValue(name: string): string {
   return (process.env[name] || "").replaceAll("\\n", "\n").trim();
 }
@@ -160,6 +168,15 @@ export function paymentAvailability(): PaymentAvailability {
   };
 }
 
+export async function closeAlipayPaymentOrder(orderNo: string): Promise<void> {
+  const result = await alipaySdk().exec("alipay.trade.close", {
+    bizContent: { outTradeNo: orderNo },
+  });
+  if (result.code !== "10000") {
+    throw new Error(`ALIPAY_CLOSE_FAILED:${result.sub_code || result.code}`);
+  }
+}
+
 export async function createAlipayNativeOrder(
   order: BillingOrder
 ): Promise<string> {
@@ -173,7 +190,9 @@ export async function createAlipayNativeOrder(
     },
   });
   if (result.code !== "10000") {
-    throw new Error(`ALIPAY_CREATE_FAILED:${result.sub_code || result.code}`);
+    throw new PaymentOrderRejectedError(
+      `ALIPAY_CREATE_FAILED:${result.sub_code || result.code}`
+    );
   }
   const codeUrl =
     typeof result.qrCode === "string"
@@ -324,12 +343,48 @@ export async function createWechatNativeOrder(
       return {};
     }
   })();
-  if (!response.ok || !payload.code_url) {
-    throw new Error(
+  if (!response.ok) {
+    throw new PaymentOrderRejectedError(
       `WECHAT_CREATE_FAILED:${payload.code || response.status}`
     );
   }
+  if (!payload.code_url) throw new Error("WECHAT_QR_CODE_MISSING");
   return payload.code_url;
+}
+
+export async function closeWechatPaymentOrder(orderNo: string): Promise<void> {
+  const config = wechatConfig();
+  if (!config) throw new Error("WECHAT_PAY_NOT_CONFIGURED");
+  const path = `/v3/pay/transactions/out-trade-no/${encodeURIComponent(orderNo)}/close`;
+  const body = JSON.stringify({ mchid: config.mchId });
+  const response = await fetch(`${config.apiBase}${path}`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: wechatAuthorization("POST", path, body, config),
+      "User-Agent": "LCE-Billing/1.0",
+    },
+    body,
+    signal: AbortSignal.timeout(10_000),
+  });
+  const responseBody = await response.text();
+  if (response.status === 204) return;
+  verifyWechatSignature(responseBody, response.headers, config);
+  let code = String(response.status);
+  try {
+    const payload = JSON.parse(responseBody) as { code?: string };
+    if (payload.code) code = payload.code;
+  } catch {}
+  throw new Error(`WECHAT_CLOSE_FAILED:${code}`);
+}
+
+export async function closePaymentOrder(order: BillingOrder): Promise<void> {
+  if (order.provider === "alipay") {
+    await closeAlipayPaymentOrder(order.orderNo);
+    return;
+  }
+  await closeWechatPaymentOrder(order.orderNo);
 }
 
 function decryptWechatResource(

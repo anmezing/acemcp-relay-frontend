@@ -1,5 +1,6 @@
 import pool, {
   deleteBannedCache,
+  deleteOrgQuotaCache,
   deleteQuotaLimitCache,
   resetApiKey,
 } from "@/lib/db";
@@ -26,7 +27,7 @@ export async function getAdminOverview(): Promise<AdminOverview> {
       SELECT
         (SELECT COUNT(*) FROM "user") AS users,
         (SELECT COUNT(*) FROM banned_users) AS banned,
-        (SELECT COUNT(*) FROM request_logs) AS total_requests,
+        (SELECT COALESCE(SUM(total_count), 0) FROM request_log_user_stats) AS total_requests,
         (SELECT COUNT(*) FROM request_logs
           WHERE request_timestamp > NOW() - INTERVAL '24 hours') AS requests_24h,
         (SELECT COUNT(DISTINCT user_id) FROM request_logs
@@ -69,8 +70,8 @@ export async function listUsersWithStats(): Promise<AdminUserRow[]> {
   try {
     const result = await client.query(`
       SELECT u.id, u.email, u.name, u."createdAt" AS created_at,
-        COALESCE(r.total, 0)::bigint AS request_count,
-        r.last_at AS last_request_at,
+        COALESCE(r.total_count, 0)::bigint AS request_count,
+        latest.last_at AS last_request_at,
         (b.user_id IS NOT NULL) AS banned,
         COALESCE(s.tier, k.tier, 'free') AS tier,
         COALESCE(k.tier, 'free') AS base_tier,
@@ -78,10 +79,14 @@ export async function listUsersWithStats(): Promise<AdminUserRow[]> {
         s.expires_at AS subscription_expires_at,
         a.auth_providers
       FROM "user" u
-      LEFT JOIN (
-        SELECT user_id, COUNT(*) AS total, MAX(request_timestamp) AS last_at
-        FROM request_logs GROUP BY user_id
-      ) r ON r.user_id = u.id
+      LEFT JOIN request_log_user_stats r ON r.user_id = u.id
+      LEFT JOIN LATERAL (
+        SELECT request_timestamp AS last_at
+          FROM request_logs latest_log
+         WHERE latest_log.user_id = u.id
+         ORDER BY request_timestamp DESC, id DESC
+         LIMIT 1
+      ) latest ON TRUE
       LEFT JOIN banned_users b ON b.user_id = u.id
       LEFT JOIN api_keys k ON k.user_id = u.id AND k.org_id IS NULL
       LEFT JOIN LATERAL (
@@ -98,7 +103,7 @@ export async function listUsersWithStats(): Promise<AdminUserRow[]> {
         FROM account
         GROUP BY "userId"
       ) a ON a.user_id = u.id
-      ORDER BY r.last_at DESC NULLS LAST, u."createdAt" DESC
+      ORDER BY latest.last_at DESC NULLS LAST, u."createdAt" DESC
     `);
     return result.rows.map((r) => ({
       ...r,
@@ -183,7 +188,7 @@ export async function listGlobalLogs(
        FROM request_logs rl
        LEFT JOIN "user" u ON u.id = rl.user_id
        ${where}
-       ORDER BY rl.request_timestamp DESC
+       ORDER BY rl.request_timestamp DESC, rl.id DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset]
     );
@@ -207,31 +212,42 @@ export async function getCallStats(): Promise<CallStats> {
   try {
     const totals = await client.query(`
       SELECT
-        COUNT(*) FILTER (WHERE (request_timestamp AT TIME ZONE '${TZ}')::date
-          = (NOW() AT TIME ZONE '${TZ}')::date) AS today,
-        COUNT(*) FILTER (WHERE request_timestamp > NOW() - INTERVAL '30 days') AS last30d,
-        COUNT(*) AS total
-      FROM request_logs
+        COALESCE((
+          SELECT SUM(total_count)
+            FROM request_log_daily_stats
+           WHERE stat_date = (NOW() AT TIME ZONE '${TZ}')::date
+        ), 0) AS today,
+        COALESCE((
+          SELECT SUM(total_count)
+            FROM request_log_daily_stats
+           WHERE stat_date >= (NOW() AT TIME ZONE '${TZ}')::date - 29
+        ), 0) AS last30d,
+        COALESCE((SELECT SUM(total_count) FROM request_log_user_stats), 0) AS total
     `);
     const daily = await client.query(`
-      SELECT to_char((request_timestamp AT TIME ZONE '${TZ}')::date, 'YYYY-MM-DD') AS date,
-             COUNT(*) AS count
-      FROM request_logs
-      WHERE request_timestamp > NOW() - INTERVAL '14 days'
-      GROUP BY 1 ORDER BY 1
+      SELECT to_char(stat_date, 'YYYY-MM-DD') AS date,
+             SUM(total_count) AS count
+        FROM request_log_daily_stats
+       WHERE stat_date >= (NOW() AT TIME ZONE '${TZ}')::date - 13
+       GROUP BY stat_date
+       ORDER BY stat_date DESC
     `);
     const byPath = await client.query(`
-      SELECT request_path AS path, COUNT(*) AS count
-      FROM request_logs
-      WHERE request_timestamp > NOW() - INTERVAL '30 days'
-      GROUP BY 1 ORDER BY 2 DESC LIMIT 10
+      SELECT request_path AS path, SUM(total_count) AS count
+        FROM request_log_daily_stats
+       WHERE stat_date >= (NOW() AT TIME ZONE '${TZ}')::date - 29
+       GROUP BY request_path
+       ORDER BY count DESC, request_path ASC
+       LIMIT 10
     `);
     const topUsers = await client.query(`
-      SELECT rl.user_id, u.email, COUNT(*) AS count
-      FROM request_logs rl
-      LEFT JOIN "user" u ON u.id = rl.user_id
-      WHERE rl.request_timestamp > NOW() - INTERVAL '30 days'
-      GROUP BY rl.user_id, u.email ORDER BY 3 DESC LIMIT 10
+      SELECT stats.user_id, u.email, SUM(stats.total_count) AS count
+        FROM request_log_daily_stats stats
+        LEFT JOIN "user" u ON u.id = stats.user_id
+       WHERE stats.stat_date >= (NOW() AT TIME ZONE '${TZ}')::date - 29
+       GROUP BY stats.user_id, u.email
+       ORDER BY count DESC, stats.user_id ASC
+       LIMIT 10
     `);
     const t = totals.rows[0];
     return {
@@ -305,7 +321,8 @@ export async function listQuotas(): Promise<QuotaRow[]> {
         SELECT keys.tier
           FROM api_keys keys
          WHERE keys.user_id = u.id
-         ORDER BY (keys.org_id IS NULL) DESC, keys.created_at, keys.id
+           AND keys.org_id IS NULL
+         ORDER BY keys.created_at, keys.id
          LIMIT 1
       ) k ON TRUE
       LEFT JOIN LATERAL (
@@ -319,10 +336,10 @@ export async function listQuotas(): Promise<QuotaRow[]> {
          LIMIT 1
       ) s ON TRUE
       LEFT JOIN (
-        SELECT user_id, COUNT(*) AS cnt FROM request_logs
-        WHERE (request_timestamp AT TIME ZONE '${TZ}')::date
-          = (NOW() AT TIME ZONE '${TZ}')::date
-        GROUP BY user_id
+        SELECT user_id, SUM(total_count) AS cnt
+          FROM request_log_daily_stats
+         WHERE stat_date = (NOW() AT TIME ZONE '${TZ}')::date
+         GROUP BY user_id
       ) t ON t.user_id = u.id
       ORDER BY t.cnt DESC NULLS LAST, u."createdAt" DESC
     `);
@@ -398,48 +415,91 @@ export async function setUserQuota(
   indexBytesLimit: number | null
 ) {
   const client = await pool.connect();
+  let inheritedOrgIds: string[] = [];
   try {
-    if (requestLimit === null && indexBytesLimit === null) {
-      await client.query(`DELETE FROM user_quotas WHERE user_id = $1`, [userId]);
-    } else {
-      await client.query(
-        `INSERT INTO user_quotas (
-           user_id, daily_limit, daily_index_bytes_limit
-         ) VALUES ($1, $2, $3)
-         ON CONFLICT (user_id) DO UPDATE SET
-           daily_limit = EXCLUDED.daily_limit,
-           daily_index_bytes_limit = EXCLUDED.daily_index_bytes_limit,
-           updated_at = NOW()`,
-        [userId, requestLimit, indexBytesLimit]
+    await client.query("BEGIN");
+    try {
+      if (requestLimit === null && indexBytesLimit === null) {
+        await client.query(`DELETE FROM user_quotas WHERE user_id = $1`, [userId]);
+      } else {
+        await client.query(
+          `INSERT INTO user_quotas (
+             user_id, daily_limit, daily_index_bytes_limit
+           ) VALUES ($1, $2, $3)
+           ON CONFLICT (user_id) DO UPDATE SET
+             daily_limit = EXCLUDED.daily_limit,
+             daily_index_bytes_limit = EXCLUDED.daily_index_bytes_limit,
+             updated_at = NOW()`,
+          [userId, requestLimit, indexBytesLimit]
+        );
+      }
+
+      // Relay lets organizations with a NULL org_quotas dimension inherit the
+      // canonical owner's user_quotas value. Invalidate every organization for
+      // which this user is actually the canonical owner, otherwise Relay can
+      // enforce the old inherited value until its five-minute cache expires.
+      const owned = await client.query(
+        `WITH ranked_owners AS (
+           SELECT members."organizationId" AS organization_id,
+                  members."userId" AS owner_user_id,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY members."organizationId"
+                    ORDER BY members."createdAt", members.id
+                  ) AS owner_rank
+             FROM "member" AS members
+            WHERE (',' || regexp_replace(members.role, '\\s', '', 'g') || ',') LIKE '%,owner,%'
+         )
+         SELECT organization_id
+           FROM ranked_owners
+          WHERE owner_rank = 1 AND owner_user_id = $1`,
+        [userId]
       );
+      inheritedOrgIds = owned.rows.map((row) => String(row.organization_id));
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
     }
   } finally {
     client.release();
   }
-  await deleteQuotaLimitCache(userId);
+  await Promise.all([
+    deleteQuotaLimitCache(userId),
+    ...inheritedOrgIds.map((orgId) => deleteOrgQuotaCache(orgId)),
+  ]);
 }
 
 // ── 日志清理 ─────────────────────────────────────────────────────────────
 
-// olderThanDays: undefined = 全部清空。error_details 有外键，先删。
-// 两条 DELETE 必须同一事务：中途失败会留下悬空的 error_details / request_logs。
+// olderThanDays: undefined = 全部清空。完整清理使用 TRUNCATE，按时间清理使用事务内 DELETE。
+// error_details 与 request_logs 必须在同一事务处理，汇总表由 request_logs 触发器同步维护。
 export async function clearRequestLogs(olderThanDays?: number): Promise<number> {
   const client = await pool.connect();
   try {
     const hasCutoff = typeof olderThanDays === "number" && olderThanDays > 0;
-    const cond = hasCutoff
-      ? `WHERE request_timestamp < NOW() - INTERVAL '1 day' * $1`
-      : "";
-    const params = hasCutoff ? [Math.floor(olderThanDays)] : [];
     await client.query("BEGIN");
     try {
+      if (!hasCutoff) {
+        // Avoid firing per-row rollup triggers for a full purge. The AFTER TRUNCATE
+        // trigger on request_logs clears both aggregate tables in the same transaction.
+        const countResult = await client.query(
+          `SELECT COALESCE(SUM(total_count), 0)::bigint AS count
+             FROM request_log_user_stats`
+        );
+        await client.query("TRUNCATE TABLE error_details, request_logs");
+        await client.query("COMMIT");
+        return Number(countResult.rows[0]?.count || 0);
+      }
+
+      const days = Math.floor(olderThanDays!);
+      const cond = `WHERE request_timestamp < NOW() - INTERVAL '1 day' * $1`;
       await client.query(
         `DELETE FROM error_details WHERE request_id IN (
            SELECT id FROM request_logs ${cond}
          )`,
-        params
+        [days]
       );
-      const result = await client.query(`DELETE FROM request_logs ${cond}`, params);
+      const result = await client.query(`DELETE FROM request_logs ${cond}`, [days]);
       await client.query("COMMIT");
       return result.rowCount || 0;
     } catch (error) {

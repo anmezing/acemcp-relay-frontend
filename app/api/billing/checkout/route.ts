@@ -6,9 +6,11 @@ import {
   attachOrderCodeUrl,
   createPendingOrder,
   failOrder,
+  type BillingOrder,
   type PaymentProvider,
 } from "@/lib/billing";
 import {
+  closePaymentOrder,
   createAlipayNativeOrder,
   createWechatNativeOrder,
   paymentAvailability,
@@ -42,7 +44,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let orderId: string | null = null;
+  let newlyCreatedOrder: BillingOrder | null = null;
   try {
     const order = await createPendingOrder(
       session.user.id,
@@ -57,7 +59,11 @@ export async function POST(request: NextRequest) {
       });
       return NextResponse.json({ order, qrCodeDataUrl });
     }
-    orderId = order.id;
+
+    // From this point onward an external order may exist. Never mark the local
+    // order failed after an ambiguous network error unless the provider confirms
+    // closure; otherwise a later signed payment callback could be discarded.
+    newlyCreatedOrder = order;
     const codeUrl =
       provider === "alipay"
         ? await createAlipayNativeOrder(order)
@@ -73,7 +79,22 @@ export async function POST(request: NextRequest) {
       qrCodeDataUrl,
     });
   } catch (error) {
-    if (orderId) await failOrder(orderId).catch(() => {});
+    if (newlyCreatedOrder) {
+      try {
+        // Even a signed business-level rejection can mean "duplicate merchant
+        // order number", so it does not prove that no payable provider order
+        // exists. Close/reconcile first, then make the local failure terminal.
+        await closePaymentOrder(newlyCreatedOrder);
+        await failOrder(newlyCreatedOrder.id);
+      } catch (cleanupError) {
+        // Keep it pending until expiry when provider state is uncertain. A valid
+        // callback can still settle it, avoiding a paid-but-unfulfilled order.
+        console.error(
+          "billing checkout cleanup inconclusive:",
+          cleanupError instanceof Error ? cleanupError.message : "UNKNOWN"
+        );
+      }
+    }
     const message = error instanceof Error ? error.message : "UNKNOWN";
     console.error("billing checkout failed:", message);
     const status =
@@ -81,7 +102,9 @@ export async function POST(request: NextRequest) {
         ? 404
         : message === "PLAN_NOT_PAYABLE"
           ? 400
-          : message === "PAYMENT_ORDER_PENDING"
+          : message === "PAYMENT_ORDER_PENDING" ||
+              message === "SUBSCRIPTION_DOWNGRADE_NOT_ALLOWED" ||
+              message === "SUBSCRIPTION_UPGRADE_TERM_TOO_SHORT"
             ? 409
             : 502;
     return NextResponse.json(
@@ -92,8 +115,12 @@ export async function POST(request: NextRequest) {
             : message === "PLAN_NOT_PAYABLE"
               ? "该套餐不能在线支付"
               : message === "PAYMENT_ORDER_PENDING"
-                ? "该支付渠道已有待支付订单，请完成或等待订单过期"
-                : "支付平台下单失败，请稍后重试",
+                ? "已有待支付订单，请完成或等待订单过期后再更换套餐或支付方式"
+                : message === "SUBSCRIPTION_DOWNGRADE_NOT_ALLOWED"
+                  ? "有效期内只允许续费或提升全部权益；降级请在当前套餐到期后购买"
+                  : message === "SUBSCRIPTION_UPGRADE_TERM_TOO_SHORT"
+                    ? "该升级套餐的有效期不足以覆盖当前剩余期限；请选择更长期限的升级套餐，或等待当前套餐临近到期后再升级"
+                    : "支付平台下单失败，请稍后重试",
       },
       { status }
     );

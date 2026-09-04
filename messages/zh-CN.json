@@ -272,7 +272,10 @@
     "dismissFailureWarningTitle": "⚠️ 注意：此操作将删除失败的索引数据",
     "dismissFailureWarning1": "删除失败任务和相关的索引数据",
     "dismissFailureWarning2": "如果该项目没有任何可用的索引快照（首次索引失败），将完全清理索引状态",
-    "dismissFailureWarning3": "需要重启 IDE 或重新加载窗口才能触发重新索引"
+    "dismissFailureWarning3": "需要重启 IDE 或重新加载窗口才能触发重新索引",
+    "logPaginationSummary": "共 {total} 条 · 第 {page} / {totalPages} 页",
+    "jumpToPage": "跳转页码",
+    "jump": "跳转"
   },
   "Leaderboard": {
     "loading": "加载中...",
@@ -449,6 +452,7 @@
       "paid": "已支付",
       "pending": "待支付",
       "closed": "已关闭",
+      "canceled": "已取消",
       "failed": "失败"
     },
     "failedToLoadPlans": "套餐信息加载失败",
@@ -485,7 +489,27 @@
     "paymentQrCode": "支付二维码",
     "waitingForPayment": "正在等待支付结果",
     "close": "关闭",
-    "recentOrders": "最近订单"
+    "recentOrders": "最近订单",
+    "subscriptionLifecyclePolicy": "套餐为一次性固定天数权益，不会自动续费。相同套餐会从当前到期时间续期；更高套餐立即生效，但所购期限必须覆盖当前剩余有效期；有效期内不允许降低任一权益。",
+    "subaccountQuotaPolicy": "子账号额度按套餐购买者（owner）统一计算，跨其所有组织共享，不会为每个组织重复发放。",
+    "activeSubscriptionCancellationPolicy": "已支付套餐为固定期限、非自动续费权益。当前不提供自助提前终止或自动退款；如需退款须人工审核，未退款时权益持续到到期时间。",
+    "downgradeUnavailable": "当前有效期内不可降级",
+    "upgradeTermTooShort": "升级期限不足",
+    "upgradeTermTooShortHelp": "当前系统不做价格抵扣或按比例补差。为避免缩短已购期限或超额赠送高阶权益，请选择能覆盖当前剩余有效期的升级套餐，或临近到期后再升级。",
+    "downgradeContactSupport": "为避免已购权益被提前削减，请等待当前套餐到期后购买较低套餐。",
+    "closingQrDoesNotCancel": "关闭二维码只关闭此窗口，不会取消已生效套餐；未支付订单会在超时后自动关闭。",
+    "providerOrderBeingCreated": "支付平台正在创建订单，请稍后再取消",
+    "paymentReceivedNeedsManualReview": "支付已收到，但套餐激活需要人工审核。",
+    "failedToCancelOrder": "取消订单失败",
+    "pendingOrderCanceled": "待支付订单已取消",
+    "cancelPendingOrder": "取消待支付订单",
+    "orderNeedsManualReview": "订单需要人工审核",
+    "cancel": "取消",
+    "purchaseKind": {
+      "new": "新购",
+      "renewal": "续费（从当前到期日顺延）",
+      "upgrade": "升级（立即生效，所购期限覆盖剩余有效期）"
+    }
   },
   "UserModels": {
     "failedToLoadRefreshAndTryAgain": "加载失败，请刷新重试",
@@ -509,7 +533,11 @@
     "enterAnApiKeyThenLoadModels": "填写 API Key 后获取模型",
     "noModelsAvailable": "暂无可用模型",
     "save": "保存",
-    "restorePlatformSettings": "恢复平台配置"
+    "restorePlatformSettings": "恢复平台配置",
+    "personalRerankIsActive": "当前检索请求使用你保存的 Rerank 配置和 API Key。API Key 仅写入保存，不会回显。",
+    "platformRerankIsActive": "当前检索请求使用平台统一管理的 Rerank 配置。保存个人配置后将优先使用个人 API Key。",
+    "personalSource": "个人配置生效中",
+    "platformSource": "平台配置生效中"
   },
   "AdminLogs": {
     "deletedRecords": "已清理 {p0} 条",
@@ -689,6 +717,7 @@
     "priceFormat": "价格格式应为 0.00",
     "priceOutOfRange": "价格超出安全范围",
     "mustBeNonNegativeInteger": "{label}必须是非负整数",
+    "mustBeInteger": "{label}必须是整数",
     "outOfRange": "{label}超出安全范围",
     "completeRequiredFields": "请完整填写套餐标识、名称和有效天数",
     "failedToSave": "保存失败",
@@ -698,7 +727,7 @@
     "planDeleted": "套餐已删除",
     "editPlan": "编辑套餐",
     "newPlan": "新增套餐",
-    "snapshotDescription": "0 表示不限；索引额度直接填写数值并选择 B、KiB、MiB、GiB 或 TiB。历史订单保存购买快照，修改套餐不会倒改已购权益。",
+    "snapshotDescription": "请求量和索引额度填 0 表示不限；子账号数填 0 表示不允许子账号。索引额度直接填写数值并选择 B、KiB、MiB、GiB 或 TiB。历史订单保存购买快照；同套餐续费不会降低既有权益，跨套餐只允许全部权益单调提升。",
     "new": "新增",
     "planCode": "套餐标识",
     "planName": "套餐名称",
@@ -727,7 +756,21 @@
     "days": "{count} 天",
     "requests": "请求",
     "unlimited": "不限",
-    "index": "索引"
+    "index": "索引",
+    "manualReviewOrders": "待人工履约订单",
+    "manualReviewDescription": "支付已确认但套餐权益尚未生效的订单。重试时会沿用原始结算时间，并重新校验当前套餐和子账号席位。",
+    "failedToLoadManualReviewOrders": "待人工履约订单加载失败",
+    "refreshManualReviewOrders": "刷新待人工履约订单",
+    "noManualReviewOrders": "当前没有待人工履约订单。",
+    "retryFulfillment": "重试履约",
+    "retryingFulfillment": "重试中...",
+    "fulfillmentRetryFailed": "订单履约重试失败",
+    "fulfillmentApplied": "订单权益已成功生效",
+    "fulfillmentStillBlocked": "订单仍不满足生效条件，请先处理冲突后再重试",
+    "unknownFulfillmentError": "未知履约冲突",
+    "unknownPaymentTime": "支付时间未知",
+    "paidAt": "支付时间",
+    "userId": "用户"
   },
   "CurrentVersion": {
     "loadFailed": "版本信息加载失败，请重试",

@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DarkSelect } from "@/components/ui/dark-select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { ByteQuotaInput } from "@/components/admin/ByteQuotaInput";
 import {
   bytesToQuotaDraft,
@@ -29,6 +30,20 @@ interface BillingPlan {
   subaccountLimit: number;
   active: boolean;
   sortOrder: number;
+}
+
+interface ManualReviewOrder {
+  orderNo: string;
+  userId: string;
+  provider: "alipay" | "wechat";
+  amountFen: number;
+  currency: string;
+  planSnapshot: {
+    name: string;
+  };
+  fulfillmentError: string | null;
+  paidAt: string | null;
+  updatedAt: string;
 }
 
 interface PlanDraft {
@@ -62,9 +77,16 @@ function createEmptyDraft(): PlanDraft {
   };
 }
 
-function parseInteger(value: string, invalidMessage: string, rangeMessage: string): number {
-  if (!/^\d+$/.test(value.trim())) throw new Error(invalidMessage);
-  const parsed = Number(value);
+function parseInteger(
+  value: string,
+  invalidMessage: string,
+  rangeMessage: string,
+  signed = false
+): number {
+  const normalized = value.trim();
+  const pattern = signed ? /^-?\d+$/ : /^\d+$/;
+  if (!pattern.test(normalized)) throw new Error(invalidMessage);
+  const parsed = Number(normalized);
   if (!Number.isSafeInteger(parsed)) throw new Error(rangeMessage);
   return parsed;
 }
@@ -83,12 +105,20 @@ function yuanToFen(value: string, formatMessage: string, rangeMessage: string): 
 
 export function AdminPlansTab() {
   const t = useTranslations("AdminPlans");
+  const locale = useLocale();
   const [plans, setPlans] = useState<BillingPlan[] | null>(null);
+  const [manualReviewOrders, setManualReviewOrders] = useState<
+    ManualReviewOrder[] | null
+  >(null);
   const [draft, setDraft] = useState<PlanDraft>(createEmptyDraft);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [noticeOk, setNoticeOk] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [reviewError, setReviewError] = useState("");
+  const [reviewNotice, setReviewNotice] = useState("");
+  const [reviewNoticeOk, setReviewNoticeOk] = useState(false);
+  const [reconcilingOrderNo, setReconcilingOrderNo] = useState<string | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     const response = await fetch("/api/admin/plans", { signal });
@@ -116,6 +146,81 @@ export function AdminPlansTab() {
       });
     return () => controller.abort();
   }, [load, t]);
+
+  const loadManualReviewOrders = useCallback(async (signal?: AbortSignal) => {
+    const response = await fetch("/api/admin/billing-orders", { signal });
+    const payload = (await response.json().catch(() => ({}))) as {
+      orders?: ManualReviewOrder[];
+      error?: string;
+    };
+    if (!response.ok || !payload.orders) {
+      throw new Error(payload.error || t("failedToLoadManualReviewOrders"));
+    }
+    if (!signal?.aborted) {
+      setManualReviewOrders(payload.orders);
+      setReviewError("");
+    }
+  }, [t]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.resolve()
+      .then(() => loadManualReviewOrders(controller.signal))
+      .catch((reason) => {
+        if (!controller.signal.aborted) {
+          setReviewError(
+            reason instanceof Error
+              ? reason.message
+              : t("failedToLoadManualReviewOrders")
+          );
+        }
+      });
+    return () => controller.abort();
+  }, [loadManualReviewOrders, t]);
+
+  const retryFulfillment = async (orderNo: string) => {
+    setReconcilingOrderNo(orderNo);
+    setReviewNotice("");
+    try {
+      const response = await fetch("/api/admin/billing-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderNo }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as {
+        resolved?: boolean;
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(payload.error || t("fulfillmentRetryFailed"));
+      }
+      await loadManualReviewOrders();
+      setReviewNotice(
+        payload.resolved
+          ? t("fulfillmentApplied")
+          : t("fulfillmentStillBlocked")
+      );
+      setReviewNoticeOk(Boolean(payload.resolved));
+    } catch (reason) {
+      setReviewNotice(
+        reason instanceof Error ? reason.message : t("fulfillmentRetryFailed")
+      );
+      setReviewNoticeOk(false);
+    } finally {
+      setReconcilingOrderNo(null);
+    }
+  };
+
+  const formatReviewTime = (value: string | null) => {
+    if (!value) return t("unknownPaymentTime");
+    const date = new Date(value);
+    return Number.isFinite(date.getTime())
+      ? new Intl.DateTimeFormat(locale, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }).format(date)
+      : t("unknownPaymentTime");
+  };
 
   const edit = (plan: BillingPlan) => {
     setDraft({
@@ -157,7 +262,12 @@ export function AdminPlansTab() {
         dailyRequestLimit: parseInteger(draft.dailyRequestLimit, t("mustBeNonNegativeInteger", { label: t("dailyRequests") }), t("outOfRange", { label: t("dailyRequests") })),
         dailyIndexBytesLimit,
         subaccountLimit: parseInteger(draft.subaccountLimit, t("mustBeNonNegativeInteger", { label: t("subaccounts") }), t("outOfRange", { label: t("subaccounts") })),
-        sortOrder: parseInteger(draft.sortOrder, t("mustBeNonNegativeInteger", { label: t("sortOrder") }), t("outOfRange", { label: t("sortOrder") })),
+        sortOrder: parseInteger(
+          draft.sortOrder,
+          t("mustBeInteger", { label: t("sortOrder") }),
+          t("outOfRange", { label: t("sortOrder") }),
+          true
+        ),
         active: draft.active,
       };
       if (!body.code || !body.name || body.durationDays <= 0) {
@@ -259,19 +369,20 @@ export function AdminPlansTab() {
               />
             </Field>
             <Field label={t("tier")}>
-              <select
+              <DarkSelect
                 value={draft.tier}
-                onChange={(event) =>
+                options={[
+                  { value: "free", label: "Free" },
+                  { value: "pro", label: "Pro" },
+                ]}
+                onValueChange={(value) =>
                   setDraft((current) => ({
                     ...current,
-                    tier: event.target.value === "free" ? "free" : "pro",
+                    tier: value === "free" ? "free" : "pro",
                   }))
                 }
-                className="field-input"
-              >
-                <option value="free">Free</option>
-                <option value="pro">Pro</option>
-              </select>
+                ariaLabel={t("tier")}
+              />
             </Field>
             <Field label={t("priceYuan")}>
               <input
@@ -457,6 +568,91 @@ export function AdminPlansTab() {
           ))}
         </div>
       )}
+      <div className="mt-8 flex items-center justify-between">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-medium text-white">
+            <AlertTriangle className="h-4 w-4 text-amber-400" />
+            {t("manualReviewOrders")}
+          </h3>
+          <p className="mt-1 text-xs text-slate-500">
+            {t("manualReviewDescription")}
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => void loadManualReviewOrders()}
+          aria-label={t("refreshManualReviewOrders")}
+        >
+          <RefreshCw className="h-4 w-4" />
+        </Button>
+      </div>
+      {reviewError && <p className="text-xs text-red-400">{reviewError}</p>}
+      {reviewNotice && (
+        <p
+          className={cn(
+            "text-xs",
+            reviewNoticeOk ? "text-emerald-400" : "text-amber-400"
+          )}
+        >
+          {reviewNotice}
+        </p>
+      )}
+      {manualReviewOrders === null ? (
+        <div className="space-y-2">
+          <Skeleton className="h-20 rounded-xl bg-white/[0.04]" />
+        </div>
+      ) : manualReviewOrders.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-white/[0.1] py-8 text-center text-sm text-slate-500">
+          {t("noManualReviewOrders")}
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {manualReviewOrders.map((order) => (
+            <div
+              key={order.orderNo}
+              className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-amber-500/15 bg-amber-500/[0.03] px-4 py-3 text-xs"
+            >
+              <div className="min-w-48">
+                <p className="text-sm font-medium text-slate-200">
+                  {order.planSnapshot.name}
+                </p>
+                <p className="font-mono text-slate-600">{order.orderNo}</p>
+              </div>
+              <span className="text-slate-400">
+                {t("userId")}: <span className="font-mono">{order.userId}</span>
+              </span>
+              <span className="font-mono text-slate-300">
+                {order.currency} {(order.amountFen / 100).toFixed(2)}
+              </span>
+              <span className="text-slate-500">
+                {t("paidAt")}: {formatReviewTime(order.paidAt)}
+              </span>
+              <span className="max-w-full break-all text-amber-300/80">
+                {order.fulfillmentError || t("unknownFulfillmentError")}
+              </span>
+              <Button
+                className="ml-auto"
+                variant="outline"
+                size="sm"
+                disabled={reconcilingOrderNo !== null}
+                onClick={() => void retryFulfillment(order.orderNo)}
+              >
+                <RefreshCw
+                  className={cn(
+                    "mr-1.5 h-3.5 w-3.5",
+                    reconcilingOrderNo === order.orderNo && "animate-spin"
+                  )}
+                />
+                {reconcilingOrderNo === order.orderNo
+                  ? t("retryingFulfillment")
+                  : t("retryFulfillment")}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <style jsx>{`
         :global(.field-input) {
           width: 100%;
