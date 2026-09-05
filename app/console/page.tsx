@@ -2133,10 +2133,13 @@ export default function ConsolePage() {
       <AlertDialog
         open={rootPendingAction !== null}
         onOpenChange={(open) => {
-          if (!open) setRootPendingAction(null);
+          if (!open && !rootActionLoading) setRootPendingAction(null);
         }}
       >
-        <AlertDialogContent className="bg-[#0d1424] border-white/[0.08]">
+        <AlertDialogContent
+          className="bg-[#0d1424] border-white/[0.08]"
+          aria-busy={rootActionLoading}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle className="text-white">
               {rootPendingAction?.kind === "dismiss_failure"
@@ -2170,9 +2173,22 @@ export default function ConsolePage() {
                     })
                 : ""}
             </AlertDialogDescription>
+            {rootActionLoading && rootPendingAction && (
+              <div
+                className="mt-3 flex items-center gap-2 text-xs text-cyan-300"
+                role="status"
+                aria-live="polite"
+              >
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                {rootPendingAction.kind === "delete_index" ? t("deleting") : t("processing")}
+              </div>
+            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="bg-transparent border-white/[0.08] text-slate-400 hover:text-white hover:bg-white/[0.06]">
+            <AlertDialogCancel
+              disabled={rootActionLoading}
+              className="bg-transparent border-white/[0.08] text-slate-400 hover:text-white hover:bg-white/[0.06]"
+            >
               {t("cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
@@ -2185,8 +2201,12 @@ export default function ConsolePage() {
                   : "border-red-500/30 bg-red-500/20 hover:bg-red-500/30",
               )}
             >
-              {rootActionLoading
-                ? t("processing")
+              {rootActionLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  {rootPendingAction?.kind === "delete_index" ? t("deleting") : t("processing")}
+                </>
+              )
                 : rootPendingAction?.kind === "dismiss_failure"
                   ? t("dismissFailureRecord")
                   : t("deleteIndex")}
