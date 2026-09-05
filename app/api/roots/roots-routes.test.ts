@@ -189,6 +189,22 @@ describe("POST /api/roots/delete", () => {
     expect(init.headers.Authorization).toBe("Bearer sk-test");
   });
 
+  it("为同步删除保留覆盖 Relay LCE 调用窗口的超时", async () => {
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockImplementation(() => new AbortController().signal);
+    fetchMock.mockResolvedValue(relayResponse(200, { deleted: true, deleted_files: 1 }));
+
+    try {
+      const res = await deleteRoot(rootActionRequest("delete", { root_id: "root-1" }));
+
+      expect(res.status).toBe(200);
+      expect(timeout).toHaveBeenCalledWith(360_000);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
   it("缺少 root_id 返回 400 且不请求 relay", async () => {
     const res = await deleteRoot(rootActionRequest("delete", {}));
 

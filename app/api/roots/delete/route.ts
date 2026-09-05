@@ -7,6 +7,10 @@ import { getRelayConsoleHeaders } from "@/lib/relay-console";
 import { isRelayConnectionError, RELAY_UNAVAILABLE_RESPONSE } from "@/lib/relay-network-error";
 
 const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
+// Relay delete-root may synchronously wait for LCE to remove the cloud root.
+// Keep this just above Relay's 330s upstream window so the frontend does not
+// cancel the request first and turn a slow delete into a misleading 502.
+const DELETE_ROOT_TIMEOUT_MS = 360_000;
 
 // 谁能调：登录用户删自己个人租户的索引；body.org_id 时仅该组织 owner
 // （成员 403，前端先挡；Relay 再按 Better Auth member.role 权威校验）。
@@ -62,7 +66,7 @@ export async function POST(request: Request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ root_id: rootId }),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(DELETE_ROOT_TIMEOUT_MS),
     });
 
     const data = await res.json().catch(() => ({}));
