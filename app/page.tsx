@@ -8,7 +8,7 @@ import { GraphGlobe } from "@/components/GraphGlobe";
 
 export default function Home() {
   return (
-    <div className="relative min-h-screen overflow-clip bg-[#060b14] animate-page-fade-in">
+    <div className="relative isolate min-h-screen overflow-x-clip bg-[#060b14] animate-page-fade-in">
       {/* Interactive relationship graph backdrop */}
       <div className="pointer-events-none absolute inset-x-0 top-14 z-0 h-[650px] md:h-[760px]">
         <GraphGlobe />
@@ -19,7 +19,7 @@ export default function Home() {
 
       <Header />
 
-      <main className="relative pt-28 pb-20 px-6 pointer-events-none">
+      <main className="relative z-10 pt-28 pb-20 px-6 pointer-events-none">
         {/* Hero */}
         <section className="relative z-20 text-center space-y-8 mb-24 pointer-events-none">
           <div className="relative inline-block opacity-0 animate-scale-in">
@@ -84,7 +84,7 @@ export default function Home() {
           </div>
         </section>
 
-        <div className="max-w-4xl mx-auto space-y-20">
+        <div className="relative max-w-4xl mx-auto space-y-20 pointer-events-auto">
           {/* What is LCE */}
           <section>
             <SectionTitle><I18nText id="whatIsLce" /></SectionTitle>
@@ -196,7 +196,7 @@ export default function Home() {
 
       </main>
 
-      <footer className="relative px-6 py-6 text-center">
+      <footer className="relative z-10 px-6 py-6 text-center">
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-slate-700/50 to-transparent" />
         <div className="space-y-2">
           <p className="text-sm text-slate-500">

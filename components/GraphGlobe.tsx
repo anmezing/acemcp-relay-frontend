@@ -254,13 +254,12 @@ export function GraphGlobe() {
     controls.enableDamping = true;
     controls.dampingFactor = 0.055;
     controls.enablePan = false;
-    controls.minDistance = 6.2;
-    controls.maxDistance = 11;
+    controls.enableZoom = false;
     controls.rotateSpeed = 0.55;
-    controls.zoomSpeed = 0.5;
     controls.autoRotate = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     controls.autoRotateSpeed = 0.35;
     controls.target.set(0, 0, 0);
+    renderer.domElement.style.touchAction = "pan-y";
 
     const timer = new THREE.Timer();
     timer.connect(document);
@@ -336,7 +335,7 @@ export function GraphGlobe() {
       <div className="graph-globe-vignette" aria-hidden="true" />
       <div className="graph-globe-hint" aria-hidden="true">
         <span className="graph-globe-hint-dot" />
-        拖拽旋转 · 滚轮缩放
+        拖拽旋转
       </div>
     </div>
   );
