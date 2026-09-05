@@ -196,6 +196,7 @@
     "indexStateBuilding": "正在索引",
     "indexStateUpdatingAvailable": "正在更新（当前索引可用）",
     "indexStateReady": "索引可用",
+    "indexStateEmpty": "无可检索文件",
     "indexStateFailed": "索引失败",
     "indexStateFailedAvailable": "同步失败（当前索引可用）",
     "indexStateSuperseded": "已由新任务接管",

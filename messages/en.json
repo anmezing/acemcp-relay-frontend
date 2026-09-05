@@ -196,6 +196,7 @@
     "indexStateBuilding": "Indexing",
     "indexStateUpdatingAvailable": "Updating (current index available)",
     "indexStateReady": "Index ready",
+    "indexStateEmpty": "No searchable files",
     "indexStateFailed": "Index failed",
     "indexStateFailedAvailable": "Sync failed (current index available)",
     "indexStateSuperseded": "Replaced by a newer job",

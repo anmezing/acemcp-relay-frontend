@@ -18,6 +18,23 @@ describe("index root status", () => {
     expect(resolveRootIndexCounts(root)).toEqual({ indexed: 27, total: 27 });
   });
 
+  it("does not call an empty published snapshot ready", () => {
+    const root = {
+      index_state: "ready",
+      index_available: true,
+      indexed_at: "2026-08-29T00:00:00Z",
+      file_count: 0,
+    };
+
+    expect(resolveRootIndexState(root)).toBe("empty");
+    expect(resolveRootIndexProgress(root)).toBe(0);
+    expect(resolveRootIndexCounts(root)).toEqual({ indexed: 0, total: 0 });
+    expect(resolveRootIndexActions(root, true)).toEqual({
+      canDismissFailure: false,
+      canDeleteIndex: false,
+    });
+  });
+
   it("uses the current task counters and clamps malformed percentages", () => {
     const root = {
       index_state: "building",

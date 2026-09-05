@@ -9,8 +9,10 @@ export interface IndexRootStatusLike {
 }
 
 export function resolveRootIndexState(root: IndexRootStatusLike): string {
+  if (root.index_state === "ready" && root.file_count <= 0) return "empty";
   if (root.index_state) return root.index_state;
-  return root.indexed_at ? "ready" : "not_started";
+  if (root.indexed_at && root.file_count > 0) return "ready";
+  return root.indexed_at ? "empty" : "not_started";
 }
 
 export function resolveRootIndexProgress(root: IndexRootStatusLike): number {
@@ -44,7 +46,8 @@ export function resolveRootIndexActions(
     return { canDismissFailure: false, canDeleteIndex: false };
   }
   const state = resolveRootIndexState(root);
-  const indexAvailable = root.index_available ?? Boolean(root.indexed_at);
+  const indexAvailable =
+    (root.index_available ?? Boolean(root.indexed_at)) && root.file_count > 0;
   const resetFailedRoot = state === "failed" && requiresRootReset;
   return {
     canDismissFailure: state === "failed" && !resetFailedRoot,

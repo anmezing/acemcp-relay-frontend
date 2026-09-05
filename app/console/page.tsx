@@ -2562,7 +2562,8 @@ function RootIndexStatus({ root }: { root: RelayRoot }) {
   const state = resolveRootIndexState(root);
   const progress = resolveRootIndexProgress(root);
   const counts = resolveRootIndexCounts(root);
-  const indexAvailable = root.index_available ?? Boolean(root.indexed_at);
+  const indexAvailable =
+    (root.index_available ?? Boolean(root.indexed_at)) && root.file_count > 0;
   const waitingForClient = state === "building" && isIndexJobWaitingForClient(root.index_phase);
   const [diagnosticCopied, setDiagnosticCopied] = useState(false);
   const stateLabel =
@@ -2578,6 +2579,8 @@ function RootIndexStatus({ root }: { root: RelayRoot }) {
           : t("indexStateFailed")
         : state === "superseded"
           ? t("indexStateSuperseded")
+          : state === "empty"
+            ? t("indexStateEmpty")
           : state === "ready"
             ? t("indexStateReady")
             : t("indexStateNotStarted");
