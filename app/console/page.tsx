@@ -2192,7 +2192,10 @@ export default function ConsolePage() {
               {t("cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleRootManagementAction}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleRootManagementAction();
+              }}
               disabled={rootActionLoading}
               className={cn(
                 "border text-white",
