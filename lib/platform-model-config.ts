@@ -26,7 +26,7 @@ export interface PlatformModelConfigView {
   };
   promptEnhancer: {
     enabled: boolean;
-    provider: "openai-compatible" | "anthropic" | "gemini";
+    provider: "openai-compatible" | "openai-responses" | "anthropic" | "gemini";
     model: string;
     baseUrl: string;
     apiKeyConfigured: boolean;
@@ -77,6 +77,7 @@ function parseView(value: unknown): PlatformModelConfigView {
   }
   if (
     promptEnhancerValue.provider !== "openai-compatible" &&
+    promptEnhancerValue.provider !== "openai-responses" &&
     promptEnhancerValue.provider !== "anthropic" &&
     promptEnhancerValue.provider !== "gemini"
   ) {

@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 
 type EmbeddingProvider = "openai-compatible" | "voyage";
-type PromptEnhancerProvider = "openai-compatible" | "anthropic" | "gemini";
+type PromptEnhancerProvider = "openai-compatible" | "openai-responses" | "anthropic" | "gemini";
 type ModelKind = "embeddings" | "rerank" | "promptEnhancer";
 
 interface ModelForm {
@@ -64,7 +64,8 @@ const VOYAGE_EMBEDDING_URL = "https://api.voyageai.com/v1/embeddings";
 const VOYAGE_EMBEDDING_MODELS = ["voyage-code-3"] as const;
 const CLOUD_INDEX_DIMENSIONS = 1024;
 const PROMPT_ENHANCER_PROVIDER_PRESETS: Record<PromptEnhancerProvider, { label: string; baseUrl: string }> = {
-  "openai-compatible": { label: "OpenAI-compatible / Custom", baseUrl: "" },
+  "openai-compatible": { label: "OpenAI-compatible / Chat Completions", baseUrl: "" },
+  "openai-responses": { label: "OpenAI Responses", baseUrl: "" },
   anthropic: { label: "Anthropic", baseUrl: "https://api.anthropic.com/v1/messages" },
   gemini: { label: "Google Gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta/models" },
 };
@@ -774,8 +775,8 @@ export function AdminModelsTab() {
                 <input
                   disabled={!form.promptEnhancer.enabled}
                   value={form.promptEnhancer.baseUrl}
-                  placeholder={form.promptEnhancer.provider === "openai-compatible"
-                    ? "https://api.example.com/v1/chat/completions"
+                  placeholder={form.promptEnhancer.provider === "openai-compatible" || form.promptEnhancer.provider === "openai-responses"
+                    ? "https://api.example.com/v1"
                     : PROMPT_ENHANCER_PROVIDER_PRESETS[form.promptEnhancer.provider].baseUrl}
                   onChange={(event) => {
                     setPromptEnhancerModels([]);
