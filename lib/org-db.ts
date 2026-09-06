@@ -436,7 +436,7 @@ export async function getOrgUsage(orgId: string): Promise<OrgUsage> {
               COUNT(*) AS count
        FROM request_logs
        WHERE tenant_id = $1 AND request_timestamp > NOW() - INTERVAL '30 days'
-       GROUP BY 1 ORDER BY 1`,
+       GROUP BY 1 ORDER BY 1 DESC`,
       [orgId]
     );
     const topMembers = await client.query(

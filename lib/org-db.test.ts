@@ -284,6 +284,7 @@ describe("getOrgUsage（组织用量聚合）", () => {
     const logQueries = mocks.query.mock.calls.filter(([sql]) =>
       String(sql).includes("request_logs")
     );
+    expect(String(logQueries[0]?.[0])).toContain("GROUP BY 1 ORDER BY 1 DESC");
     expect(logQueries.length).toBe(3);
     for (const [sql, params] of logQueries) {
       expect(String(sql)).toMatch(/tenant_id = \$1/);
