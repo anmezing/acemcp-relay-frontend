@@ -1468,7 +1468,7 @@ export async function getErrorDetailsByRequestId(
       `SELECT id, request_id, source, error, created_at
        FROM error_details
        WHERE request_id = $1
-       ORDER BY created_at ASC`,
+       ORDER BY created_at DESC, id DESC`,
       [requestId]
     );
     return result.rows;
