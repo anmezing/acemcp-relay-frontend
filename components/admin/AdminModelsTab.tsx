@@ -71,10 +71,10 @@ const VOYAGE_EMBEDDING_URL = "https://api.voyageai.com/v1/embeddings";
 const VOYAGE_EMBEDDING_MODELS = ["voyage-code-3"] as const;
 const CLOUD_INDEX_DIMENSIONS = 1024;
 const PROMPT_ENHANCER_PROVIDER_PRESETS: Record<PromptEnhancerProvider, { label: string; baseUrl: string }> = {
-  "openai-compatible": { label: "OpenAI-compatible / Chat Completions", baseUrl: "" },
+  "openai-compatible": { label: "OpenAI Chat Completions", baseUrl: "" },
   "openai-responses": { label: "OpenAI Responses", baseUrl: "" },
-  anthropic: { label: "Anthropic", baseUrl: "https://api.anthropic.com/v1/messages" },
-  gemini: { label: "Google Gemini", baseUrl: "https://generativelanguage.googleapis.com/v1beta/models" },
+  anthropic: { label: "Anthropic Messages", baseUrl: "https://api.anthropic.com/v1/messages" },
+  gemini: { label: "Gemini GenerateContent", baseUrl: "https://generativelanguage.googleapis.com/v1beta/models" },
 };
 
 function toForm(config: ModelView): ModelForm {
@@ -785,8 +785,10 @@ export function AdminModelsTab() {
               </label>
             </div>
             <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
-              <Field label={t("1Provider")}>
+              <Field label={t("1ApiType")}>
                 <select
+                  id="prompt-enhancer-api-type"
+                  aria-label={t("1ApiType")}
                   value={form.promptEnhancer.provider}
                   disabled={!form.promptEnhancer.enabled}
                   onChange={(event) => {
