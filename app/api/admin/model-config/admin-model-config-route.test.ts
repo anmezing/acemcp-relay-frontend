@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 vi.mock("@/lib/admin", () => ({ requireAdminSession: vi.fn() }));
@@ -9,6 +9,7 @@ import { requireAdminSession } from "@/lib/admin";
 import { fetchPlatformModelConfig } from "@/lib/platform-model-config";
 import { getRelayAdminHeaders } from "@/lib/relay-console";
 import { GET, POST } from "./route";
+import { MODEL_CONFIG_SAVE_PROXY_TIMEOUT_MS } from "@/lib/model-config-request";
 
 const admin = vi.mocked(requireAdminSession);
 const platform = vi.mocked(fetchPlatformModelConfig);
@@ -58,6 +59,8 @@ beforeEach(() => {
   }));
 });
 
+afterEach(() => vi.useRealTimers());
+
 describe("admin model config routes", () => {
   it("requires admin access", async () => {
     admin.mockResolvedValueOnce(null);
@@ -87,5 +90,39 @@ describe("admin model config routes", () => {
     const response = await POST(request("x".repeat(64 * 1024 + 1)));
     expect(response.status).toBe(413);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a bounded timeout before the public proxy does and cancels relay work", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementationOnce(() => new Promise(() => {}));
+    const response = POST(request(JSON.stringify({ section: "promptEnhancer", config: { promptEnhancer: {} } })));
+    await vi.advanceTimersByTimeAsync(MODEL_CONFIG_SAVE_PROXY_TIMEOUT_MS);
+    const result = await response;
+    expect(result.status).toBe(504);
+    expect((await result.json()).error).toContain("保存结果尚未确认");
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("also bounds a stalled response body", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockResolvedValueOnce(new Response(new ReadableStream({ start() {} })));
+    const response = POST(request("{}"));
+    await vi.advanceTimersByTimeAsync(MODEL_CONFIG_SAVE_PROXY_TIMEOUT_MS);
+    expect((await response).status).toBe(504);
+  });
+
+  it("propagates a browser disconnect to the relay request", async () => {
+    const controller = new AbortController();
+    let started!: () => void;
+    const pending = new Promise<void>((resolve) => { started = resolve; });
+    fetchMock.mockImplementationOnce(() => { started(); return new Promise(() => {}); });
+    const response = POST(new Request("http://localhost/api/admin/model-config", {
+      method: "POST", body: "{}", signal: controller.signal,
+    }));
+    await pending;
+    controller.abort();
+    expect((await response).status).toBe(504);
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
   });
 });

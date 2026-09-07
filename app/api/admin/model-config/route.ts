@@ -3,6 +3,11 @@ import { NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/admin";
 import { getRelayAdminHeaders } from "@/lib/relay-console";
 import { fetchPlatformModelConfig } from "@/lib/platform-model-config";
+import {
+  MODEL_CONFIG_SAVE_PROXY_TIMEOUT_MS,
+  ModelConfigRequestTimeoutError,
+  withModelConfigDeadline,
+} from "@/lib/model-config-request";
 
 const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
 const CONFIG_URL = `${RELAY_URL}/internal/platform-model-config`;
@@ -49,14 +54,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "请求体必须是 JSON" }, { status: 400 });
   }
   try {
-    const response = await fetch(CONFIG_URL, {
-      method: "POST",
-      headers: { ...getRelayAdminHeaders(), "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(360_000),
-    });
-    return relayResponse(response);
+    return await withModelConfigDeadline(async (signal) => {
+      const response = await fetch(CONFIG_URL, {
+        method: "POST",
+        headers: { ...getRelayAdminHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal,
+      });
+      return await relayResponse(response);
+    }, MODEL_CONFIG_SAVE_PROXY_TIMEOUT_MS, request.signal);
   } catch (error) {
+    if (error instanceof ModelConfigRequestTimeoutError || request.signal.aborted) {
+      return NextResponse.json({
+        error: "模型配置请求已超时或取消，保存结果尚未确认，请刷新配置核对后再重试",
+      }, { status: 504 });
+    }
     console.error("admin model config save failed:", error);
     return NextResponse.json({ error: "模型配置服务不可用" }, { status: 502 });
   }

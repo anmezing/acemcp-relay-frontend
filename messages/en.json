@@ -629,6 +629,8 @@
     "enterTheCompleteRerankEndpointUrlFor": "Enter the complete rerank endpoint URL for a custom service",
     "customServiceModelName": "Custom service model name",
     "invalidModelConfigurationResponse": "The model configuration service returned an invalid response",
+    "modelConfigurationRequestTimedOut": "The model configuration request timed out. Please try again later.",
+    "modelConfigurationSaveTimedOut": "Timed out waiting for the save result. Reload the configuration to check whether it took effect before retrying.",
     "sectionConfigurationSavedAndAppliedImmediately": "{section} configuration saved and applied immediately",
     "saveEmbeddingConfiguration": "Save Embedding configuration",
     "saveRerankConfiguration": "Save Rerank configuration",

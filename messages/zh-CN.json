@@ -629,6 +629,8 @@
     "enterTheCompleteRerankEndpointUrlFor": "自定义服务需填写完整 rerank 接口地址",
     "customServiceModelName": "自定义服务模型名",
     "invalidModelConfigurationResponse": "模型配置服务返回了无效响应",
+    "modelConfigurationRequestTimedOut": "模型配置请求超时，请稍后重试",
+    "modelConfigurationSaveTimedOut": "等待保存结果超时，请刷新配置核对是否生效后再重试",
     "sectionConfigurationSavedAndAppliedImmediately": "{section} 配置已保存并立即生效",
     "saveEmbeddingConfiguration": "保存 Embedding 配置",
     "saveRerankConfiguration": "保存 Rerank 配置",

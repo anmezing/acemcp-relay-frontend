@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 
 import {
@@ -20,6 +20,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { RERANK_PROVIDER_PRESETS, type RerankProvider } from "@/lib/rerank-providers";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
+import {
+  MODEL_CONFIG_DISCOVERY_TIMEOUT_MS,
+  MODEL_CONFIG_READ_TIMEOUT_MS,
+  MODEL_CONFIG_SAVE_CLIENT_TIMEOUT_MS,
+  ModelConfigRequestTimeoutError,
+  withModelConfigDeadline,
+} from "@/lib/model-config-request";
 
 type EmbeddingProvider = "openai-compatible" | "voyage";
 type PromptEnhancerProvider = "openai-compatible" | "openai-responses" | "anthropic" | "gemini";
@@ -190,15 +197,20 @@ export function AdminModelsTab() {
   const [rerankModels, setRerankModels] = useState<string[]>([]);
   const [promptEnhancerModels, setPromptEnhancerModels] = useState<string[]>([]);
   const [confirmReset, setConfirmReset] = useState(false);
+  const lifecycle = useRef<AbortController | null>(null);
+  const saveInFlight = useRef(false);
   const busy = savingKind !== null;
 
   const load = useCallback(async (signal?: AbortSignal, clearNotice = true) => {
     try {
-      const response = await fetch("/api/admin/model-config", {
-        signal,
-        cache: "no-store",
-      });
-      const data = await response.json().catch(() => ({}));
+      const { response, data } = await withModelConfigDeadline(async (requestSignal) => {
+        const response = await fetch("/api/admin/model-config", {
+          signal: requestSignal,
+          cache: "no-store",
+        });
+        const data = await response.json().catch(() => ({}));
+        return { response, data };
+      }, MODEL_CONFIG_READ_TIMEOUT_MS, signal);
       if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
       if (signal?.aborted) return;
       setView(data.config);
@@ -209,7 +221,9 @@ export function AdminModelsTab() {
       if (clearNotice) setNotice("");
     } catch (error) {
       if (signal?.aborted) return;
-      setNotice(error instanceof Error ? error.message : t("failedToLoadTryAgain"));
+      setNotice(error instanceof ModelConfigRequestTimeoutError
+        ? t("modelConfigurationRequestTimedOut")
+        : error instanceof Error ? error.message : t("failedToLoadTryAgain"));
       setNoticeOk(false);
     } finally {
       if (!signal?.aborted) setLoading(false);
@@ -218,6 +232,7 @@ export function AdminModelsTab() {
 
   useEffect(() => {
     const controller = new AbortController();
+    lifecycle.current = controller;
     const timer = window.setTimeout(() => void load(controller.signal), 0);
     return () => {
       window.clearTimeout(timer);
@@ -273,18 +288,23 @@ export function AdminModelsTab() {
     const target = form[kind];
     setModelsLoading(kind);
     setNotice("");
+    const signal = lifecycle.current?.signal;
     try {
-      const response = await fetch("/api/admin/model-config/models", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind,
-          provider: target.provider,
-          baseUrl: target.baseUrl,
-          apiKey: parseKeyInput(target.apiKey)[0] ?? "",
-        }),
-      });
-      const data = await response.json().catch(() => ({}));
+      const { response, data } = await withModelConfigDeadline(async (requestSignal) => {
+        const response = await fetch("/api/admin/model-config/models", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: requestSignal,
+          body: JSON.stringify({
+            kind,
+            provider: target.provider,
+            baseUrl: target.baseUrl,
+            apiKey: parseKeyInput(target.apiKey)[0] ?? "",
+          }),
+        });
+        const data = await response.json().catch(() => ({}));
+        return { response, data };
+      }, MODEL_CONFIG_DISCOVERY_TIMEOUT_MS, signal);
       if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
       const models = Array.isArray(data.models)
         ? data.models.filter((model: unknown): model is string => typeof model === "string" && model.trim() !== "")
@@ -304,7 +324,10 @@ export function AdminModelsTab() {
       setNotice(t("loadedModels", { count: models.length, kind: kindLabel }));
       setNoticeOk(true);
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      if (signal?.aborted) return;
+      const reason = error instanceof ModelConfigRequestTimeoutError
+        ? t("modelConfigurationRequestTimedOut")
+        : error instanceof Error ? error.message : String(error);
       setNotice(kind === "promptEnhancer"
         ? t("failedToLoadPromptEnhancerModelsUseManual", { p0: reason })
         : t("failedToLoadModels", { p0: reason }));
@@ -315,20 +338,27 @@ export function AdminModelsTab() {
   }, [form, updateEmbeddings, updatePromptEnhancer, updateRerank, t]);
 
   const submit = useCallback(async (kind: ModelKind, confirmEmbeddingReset: boolean) => {
-    if (!form) return;
+    if (!form || saveInFlight.current) return;
+    saveInFlight.current = true;
     setSavingKind(kind);
     setNotice("");
+    const signal = lifecycle.current?.signal;
     try {
-      const response = await fetch("/api/admin/model-config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          section: kind,
-          config: modelConfigPatch(kind, form),
-          confirmEmbeddingReset,
-        }),
-      });
-      const data = await response.json().catch(() => ({}));
+      const { response, data } = await withModelConfigDeadline(async (requestSignal) => {
+        const response = await fetch("/api/admin/model-config", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: requestSignal,
+          body: JSON.stringify({
+            section: kind,
+            config: modelConfigPatch(kind, form),
+            confirmEmbeddingReset,
+          }),
+        });
+        const data = await response.json().catch(() => ({}));
+        return { response, data };
+      }, MODEL_CONFIG_SAVE_CLIENT_TIMEOUT_MS, signal);
+      if (response.status === 524) throw new ModelConfigRequestTimeoutError();
       if (kind === "embeddings" && response.status === 409 && data.requiresEmbeddingReset) {
         setConfirmReset(true);
         return;
@@ -354,9 +384,14 @@ export function AdminModelsTab() {
         : t("sectionConfigurationSavedAndAppliedImmediately", { section }));
       setNoticeOk(true);
     } catch (error) {
-      setNotice(t("failedToSave", {p0: error instanceof Error ? error.message : String(error)}));
+      if (signal?.aborted) return;
+      const reason = error instanceof ModelConfigRequestTimeoutError
+        ? t("modelConfigurationSaveTimedOut")
+        : error instanceof Error ? error.message : String(error);
+      setNotice(t("failedToSave", {p0: reason}));
       setNoticeOk(false);
     } finally {
+      saveInFlight.current = false;
       setSavingKind(null);
     }
   }, [form, t]);
