@@ -796,9 +796,9 @@ export function AdminModelsTab() {
                     setPromptEnhancerModels([]);
                     updatePromptEnhancer({
                       provider,
-                      baseUrl: PROMPT_ENHANCER_PROVIDER_PRESETS[provider].baseUrl,
-                      apiKey: "",
-                      model: "",
+                      baseUrl: form.promptEnhancer.baseUrl.trim()
+                        ? form.promptEnhancer.baseUrl
+                        : PROMPT_ENHANCER_PROVIDER_PRESETS[provider].baseUrl,
                     });
                   }}
                   className={cn(inputClass, !form.promptEnhancer.enabled && "cursor-not-allowed text-slate-600")}
