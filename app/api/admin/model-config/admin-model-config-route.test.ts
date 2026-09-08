@@ -92,6 +92,12 @@ describe("admin model config routes", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("forwards reasoning options in the prompt-only configuration patch", async () => {
+    const patch = { section: "promptEnhancer", config: { promptEnhancer: { reasoningMode: "thinking-disabled", jsonMode: true } } };
+    expect((await POST(request(JSON.stringify(patch)))).status).toBe(200);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual(patch);
+  });
+
   it("returns a bounded timeout before the public proxy does and cancels relay work", async () => {
     vi.useFakeTimers();
     fetchMock.mockImplementationOnce(() => new Promise(() => {}));

@@ -54,6 +54,8 @@ describe("platform prompt enhancer config parsing", () => {
       baseUrl: "https://api.example.com/v1/chat/completions",
       apiKeyConfigured: true,
       apiKeyCount: 3,
+      reasoningMode: "provider-default",
+      jsonMode: false,
     });
     expect(JSON.stringify(result)).not.toContain("must-not-pass-through");
   });
@@ -82,6 +84,14 @@ describe("platform prompt enhancer config parsing", () => {
       const result = await fetchPlatformModelConfig();
       expect(result.promptEnhancer.provider).toBe(provider);
     }
+  });
+
+  it("preserves explicit reasoning and JSON settings from the backend", async () => {
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(responseConfig({
+      enabled: true, provider: "openai-compatible", model: "test-model", baseUrl: "https://api.example.com",
+      apiKeyConfigured: true, apiKeyCount: 1, reasoningMode: "thinking-disabled", jsonMode: true,
+    })), { status: 200 }));
+    expect((await fetchPlatformModelConfig()).promptEnhancer).toMatchObject({ reasoningMode: "thinking-disabled", jsonMode: true });
   });
 });
 

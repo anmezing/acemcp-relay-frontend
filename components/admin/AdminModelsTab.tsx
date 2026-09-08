@@ -19,6 +19,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RERANK_PROVIDER_PRESETS, type RerankProvider } from "@/lib/rerank-providers";
 import { cn } from "@/lib/utils";
+import { promptReasoningModes, type PromptReasoningMode } from "@/lib/prompt-enhancer-options";
 import { useTranslations } from "next-intl";
 import {
   MODEL_CONFIG_DISCOVERY_TIMEOUT_MS,
@@ -56,6 +57,8 @@ interface ModelForm {
     model: string;
     baseUrl: string;
     apiKey: string;
+    reasoningMode?: PromptReasoningMode;
+    jsonMode?: boolean;
   };
 }
 
@@ -90,7 +93,7 @@ function toForm(config: ModelView): ModelForm {
   return {
     embeddings: { ...embeddings, apiKey: "" },
     rerank: { ...rerank, apiKey: "" },
-    promptEnhancer: { ...promptEnhancer, apiKey: "" },
+    promptEnhancer: { ...promptEnhancer, apiKey: "", reasoningMode: promptEnhancer.reasoningMode ?? "provider-default", jsonMode: promptEnhancer.jsonMode ?? false },
   };
 }
 
@@ -796,6 +799,9 @@ export function AdminModelsTab() {
                     setPromptEnhancerModels([]);
                     updatePromptEnhancer({
                       provider,
+                      reasoningMode: promptReasoningModes(provider).includes(form.promptEnhancer.reasoningMode ?? "provider-default")
+                        ? form.promptEnhancer.reasoningMode ?? "provider-default" : "provider-default",
+                      jsonMode: provider === "openai-compatible" && form.promptEnhancer.jsonMode === true,
                       baseUrl: form.promptEnhancer.baseUrl.trim()
                         ? form.promptEnhancer.baseUrl
                         : PROMPT_ENHANCER_PROVIDER_PRESETS[provider].baseUrl,
@@ -876,6 +882,33 @@ export function AdminModelsTab() {
                   {promptEnhancerOptions.map((model) => <option key={model} value={model} />)}
                 </datalist>
               </Field>
+              {(form.promptEnhancer.provider === "openai-compatible" || form.promptEnhancer.provider === "openai-responses") && (
+                <Field label={t("reasoningMode")}>
+                  <select
+                    id="prompt-enhancer-reasoning-mode"
+                    aria-label={t("reasoningMode")}
+                    value={form.promptEnhancer.reasoningMode ?? "provider-default"}
+                    disabled={!form.promptEnhancer.enabled}
+                    onChange={(event) => updatePromptEnhancer({ reasoningMode: event.target.value as PromptReasoningMode })}
+                    className={inputClass}
+                  >
+                    {promptReasoningModes(form.promptEnhancer.provider).map((mode) => (
+                      <option key={mode} value={mode}>{t(`reasoningModes.${mode}`)}</option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+              {form.promptEnhancer.provider === "openai-compatible" && (
+                <label htmlFor="prompt-enhancer-json-mode" className="flex items-center gap-2 text-xs text-slate-400">
+                  <Checkbox
+                    id="prompt-enhancer-json-mode"
+                    checked={form.promptEnhancer.jsonMode === true}
+                    disabled={!form.promptEnhancer.enabled}
+                    onCheckedChange={(checked) => updatePromptEnhancer({ jsonMode: checked === true })}
+                  />
+                  {t("jsonMode")}
+                </label>
+              )}
             </div>
             <div className="flex flex-col items-start gap-2 border-t border-white/[0.06] pt-4">
               {validationErrors.promptEnhancer && <p className="text-xs text-amber-400">{validationErrors.promptEnhancer}</p>}

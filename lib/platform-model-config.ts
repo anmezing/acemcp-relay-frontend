@@ -1,4 +1,5 @@
 import { getRelayAdminHeaders } from "@/lib/relay-console";
+import { parsePromptEnhancerOptions, type PromptReasoningMode } from "@/lib/prompt-enhancer-options";
 
 const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
 const CONFIG_URL = `${RELAY_URL}/internal/platform-model-config`;
@@ -29,6 +30,8 @@ export interface PlatformModelConfigView {
     provider: "openai-compatible" | "openai-responses" | "anthropic" | "gemini";
     model: string;
     baseUrl: string;
+    reasoningMode?: PromptReasoningMode;
+    jsonMode?: boolean;
     apiKeyConfigured: boolean;
     apiKeyCount: number;
   };
@@ -137,6 +140,7 @@ function parseView(value: unknown): PlatformModelConfigView {
     promptEnhancer: {
       enabled: promptEnhancerValue.enabled,
       provider: promptEnhancerValue.provider,
+      ...parsePromptEnhancerOptions(promptEnhancerValue.provider, promptEnhancerValue),
       model: typeof promptEnhancerValue.model === "string" ? promptEnhancerValue.model.trim() : "",
       baseUrl: typeof promptEnhancerValue.baseUrl === "string" ? promptEnhancerValue.baseUrl.trim() : "",
       apiKeyConfigured: promptEnhancerValue.apiKeyConfigured === true,
