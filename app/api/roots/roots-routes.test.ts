@@ -25,7 +25,7 @@ import { auth } from "@/lib/auth";
 import { getApiKey } from "@/lib/db";
 import { ensureOrgApiKey, getMemberRole } from "@/lib/org-db";
 import { GET } from "./route";
-import { POST as deleteRoot } from "./delete/route";
+import { GET as getRootDeletions, POST as deleteRoot } from "./delete/route";
 import { POST as dismissRootFailure } from "./dismiss-failure/route";
 
 const getSession = vi.mocked(auth.api.getSession);
@@ -64,6 +64,19 @@ function rootActionRequest(path: "delete" | "dismiss-failure", body: unknown) {
     body: typeof body === "string" ? body : JSON.stringify(body),
   });
 }
+
+function deletionRequest(orgId?: string) {
+  return new NextRequest(`http://localhost/api/roots/delete${orgId ? `?orgId=${orgId}` : ""}`);
+}
+
+const queuedDeletion = {
+  id: "deletion-1",
+  root_id: "root-1",
+  status: "queued",
+  deleted_files: 0,
+  created_at: "2026-09-08T00:00:00Z",
+  updated_at: "2026-09-08T00:00:00Z",
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -176,30 +189,30 @@ describe("GET /api/roots", () => {
 });
 
 describe("POST /api/roots/delete", () => {
-  it("转发 root_id 并透传删除结果", async () => {
-    fetchMock.mockResolvedValue(relayResponse(200, { deleted: true, deleted_files: 42 }));
+  it("转发 root_id 并保留 202，受理任务不等于已删除", async () => {
+    fetchMock.mockResolvedValue(relayResponse(202, { deletion: queuedDeletion }));
 
     const res = await deleteRoot(rootActionRequest("delete", { root_id: "root-1" }));
 
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ deleted: true, deleted_files: 42 });
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ deletion: queuedDeletion });
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toContain("/mcp/delete-root");
+    expect(url).toContain("/mcp/root-deletions");
     expect(JSON.parse(init.body)).toEqual({ root_id: "root-1" });
     expect(init.headers.Authorization).toBe("Bearer sk-test");
   });
 
-  it("为同步删除保留覆盖 Relay LCE 调用窗口的超时", async () => {
+  it("提交任务使用 10 秒短超时，不再等待同步删除", async () => {
     const timeout = vi
       .spyOn(AbortSignal, "timeout")
       .mockImplementation(() => new AbortController().signal);
-    fetchMock.mockResolvedValue(relayResponse(200, { deleted: true, deleted_files: 1 }));
+    fetchMock.mockResolvedValue(relayResponse(202, { deletion: queuedDeletion }));
 
     try {
       const res = await deleteRoot(rootActionRequest("delete", { root_id: "root-1" }));
 
-      expect(res.status).toBe(200);
-      expect(timeout).toHaveBeenCalledWith(360_000);
+      expect(res.status).toBe(202);
+      expect(timeout).toHaveBeenCalledWith(10_000);
     } finally {
       timeout.mockRestore();
     }
@@ -268,16 +281,91 @@ describe("POST /api/roots/delete", () => {
 
   it("组织索引：owner 用组织密钥转发删除", async () => {
     getMemberRoleMock.mockResolvedValue("owner");
-    fetchMock.mockResolvedValue(relayResponse(200, { deleted: true }));
+    fetchMock.mockResolvedValue(relayResponse(202, { deletion: queuedDeletion }));
 
     const res = await deleteRoot(rootActionRequest("delete", { root_id: "root-1", org_id: "org-1" }));
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(202);
     expect(ensureOrgApiKeyMock).toHaveBeenCalledWith("user-1", "org-1", "owner");
     const [, init] = fetchMock.mock.calls[0];
     expect(init.headers.Authorization).toBe("Bearer sk-org");
     // relay 只收 root_id（org 归属由密钥的 org_id 决定）
     expect(JSON.parse(init.body)).toEqual({ root_id: "root-1" });
+  });
+
+  it("提交连接超时返回可重试 503，不虚构删除失败结果", async () => {
+    fetchMock.mockRejectedValue(new DOMException("timeout", "TimeoutError"));
+
+    const res = await deleteRoot(rootActionRequest("delete", { root_id: "root-1" }));
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ code: "relay_unavailable" });
+  });
+});
+
+describe("GET /api/roots/delete", () => {
+  it("透传当前租户任务列表，禁用缓存并使用短超时", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation(() => new AbortController().signal);
+    fetchMock.mockResolvedValue(relayResponse(200, { deletions: [queuedDeletion] }));
+    try {
+      const res = await getRootDeletions(deletionRequest());
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ deletions: [queuedDeletion] });
+      expect(res.headers.get("Cache-Control")).toBe("no-store");
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/mcp/root-deletions"), expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: "Bearer sk-test" }),
+        cache: "no-store",
+      }));
+      expect(timeout).toHaveBeenCalledWith(10_000);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
+  it("未登录拒绝读取任务", async () => {
+    loginAs(null);
+    const res = await getRootDeletions(deletionRequest());
+    expect(res.status).toBe(401);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("无个人 API Key 时返回空列表", async () => {
+    getApiKeyMock.mockResolvedValue(null as Awaited<ReturnType<typeof getApiKey>>);
+    const res = await getRootDeletions(deletionRequest());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ deletions: [] });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("组织成员可读取组织删除任务，但不使用个人密钥", async () => {
+    getMemberRoleMock.mockResolvedValue("member");
+    fetchMock.mockResolvedValue(relayResponse(200, { deletions: [queuedDeletion] }));
+    const res = await getRootDeletions(deletionRequest("org-1"));
+    expect(res.status).toBe(200);
+    expect(ensureOrgApiKeyMock).toHaveBeenCalledWith("user-1", "org-1", "member");
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe("Bearer sk-org");
+    expect(getApiKeyMock).not.toHaveBeenCalled();
+  });
+
+  it("非成员不能读取组织删除任务", async () => {
+    const res = await getRootDeletions(deletionRequest("org-1"));
+    expect(res.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("保留任务查询的上游错误", async () => {
+    fetchMock.mockResolvedValue(relayResponse(502, { error: "temporary failure" }));
+    const res = await getRootDeletions(deletionRequest());
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "temporary failure" });
+  });
+
+  it("查询连接超时返回可重试 503", async () => {
+    fetchMock.mockRejectedValue(new DOMException("timeout", "TimeoutError"));
+    const res = await getRootDeletions(deletionRequest());
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ code: "relay_unavailable" });
   });
 });
 

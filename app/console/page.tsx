@@ -77,6 +77,17 @@ import {
   isIndexJobWaitingForClient,
   resolveIndexPhaseTranslationKey,
 } from "@/lib/index-job-phase";
+import {
+  isActiveRootDeletion,
+  isRootDeletion,
+  mergeRootDeletions,
+  readRootDeletions,
+  reconcileRootDeletions,
+  requestRootDeletionJson,
+  startRootDeletionMonitor,
+  type RootDeletion,
+  type RootDeletions,
+} from "@/lib/root-deletions";
 
 type Tab =
   | "keys" | "plans" | "docs" | "profile" | "model-config" | "version" | "team"
@@ -259,7 +270,7 @@ interface RelayRoot {
 
 type RootManagementAction = {
   kind: "dismiss_failure" | "delete_index";
-  root: RelayRoot;
+  root: Pick<RelayRoot, "root_id" | "workspace_id" | "branch" | "base_root_id" | "view_branch">;
 };
 
 const INDEX_FAILURE_TITLE_KEYS: Record<IndexFailureCode, string> = {
@@ -359,7 +370,7 @@ function formatSizeBytes(bytes: number): string {
 // 分支视图归属：优先用 relay 派生的 base_root_id + view_branch；旧 relay
 // 缺失时按最后一个 '@' 拆分 root_id 兜底（无 '@' 时 base=root_id、
 // branch="default"）。不使用 git 元数据 branch 做分组。
-function resolveRootView(root: RelayRoot): { baseRootId: string; branch: string } {
+function resolveRootView(root: RootManagementAction["root"]): { baseRootId: string; branch: string } {
   if (root.base_root_id && root.view_branch) {
     return { baseRootId: root.base_root_id, branch: root.view_branch };
   }
@@ -372,7 +383,7 @@ function resolveRootView(root: RelayRoot): { baseRootId: string; branch: string 
 
 // 徽标文案："default" 视图沿用 start 上报的 git 分支（与旧展示一致），
 // 具名分支视图显示视图分支名
-function rootBranchLabel(root: RelayRoot): string {
+function rootBranchLabel(root: RootManagementAction["root"]): string {
   const { branch } = resolveRootView(root);
   return branch !== "default" ? branch : root.branch || "";
 }
@@ -460,10 +471,17 @@ function useCopyFeedback(duration = 2000): {
 }
 
 export default function ConsolePage() {
+  const { data: session, isPending } = authClient.useSession();
+  return <ConsoleContent key={session ? `user:${session.user.id}` : "anonymous"} session={session} isPending={isPending} />;
+}
+
+function ConsoleContent({ session, isPending }: {
+  session: ReturnType<typeof authClient.useSession>["data"];
+  isPending: boolean;
+}) {
   const locale = useLocale();
   const t = useTranslations("Console");
   const tNavigation = useTranslations("Navigation");
-  const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("keys");
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
@@ -497,6 +515,16 @@ export default function ConsolePage() {
   const [rootPendingAction, setRootPendingAction] = useState<RootManagementAction | null>(null);
   const [rootActionLoading, setRootActionLoading] = useState(false);
   const [rootActionResult, setRootActionResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [rootDeletions, setRootDeletions] = useState<RootDeletions>(() => Object.create(null));
+  const rootDeletionsRef = useRef<RootDeletions>(Object.create(null));
+  const [rootDeletionsReady, setRootDeletionsReady] = useState(false);
+  const [rootDeletionStatusError, setRootDeletionStatusError] = useState<string | null>(null);
+  const rootDeletionMonitorRef = useRef<ReturnType<typeof startRootDeletionMonitor> | null>(null);
+  const rootActionControllerRef = useRef<AbortController | null>(null);
+  const rootDeletionSubmissionVersionRef = useRef(0);
+  const indexContextVersionRef = useRef(0);
+  const rootsRequestRef = useRef(0);
+  const statsRequestRef = useRef(0);
   // 索引上下文：null = 个人租户；组织时按组织密钥查询，删除权限依 orgRole
   const [rootsOrg, setRootsOrg] = useState<IndexOrganizationContext | null>(null);
   const rootsOrgRef = useRef<IndexOrganizationContext | null>(null);
@@ -572,6 +600,10 @@ export default function ConsolePage() {
     background = false,
     orgContext = rootsOrgRef.current,
   ) => {
+    const version = indexContextVersionRef.current;
+    const requestId = ++statsRequestRef.current;
+    const isCurrent = () => version === indexContextVersionRef.current &&
+      requestId === statsRequestRef.current && isCurrentIndexContext(rootsOrgRef.current, orgContext);
     if (!background) {
       setTenantStatsLoading(true);
       setTenantStatsError(null);
@@ -594,16 +626,16 @@ export default function ConsolePage() {
         throw new Error(t("invalidIndexStatisticsResponse"));
       }
 
-      if (!isCurrentIndexContext(rootsOrgRef.current, orgContext)) return;
+      if (!isCurrent()) return;
       setTenantStats(data);
       if (background) setTenantStatsError(null);
     } catch (error) {
       console.error("获取索引统计失败:", error);
-      if (!background && isCurrentIndexContext(rootsOrgRef.current, orgContext)) {
+      if (!background && isCurrent()) {
         setTenantStatsError(error instanceof Error ? error.message : t("failedToLoadIndexStatistics"));
       }
     } finally {
-      if (!background && isCurrentIndexContext(rootsOrgRef.current, orgContext)) {
+      if (isCurrent()) {
         setTenantStatsLoading(false);
       }
     }
@@ -613,6 +645,10 @@ export default function ConsolePage() {
     background = false,
     orgContext = rootsOrgRef.current,
   ) => {
+    const version = indexContextVersionRef.current;
+    const requestId = ++rootsRequestRef.current;
+    const isCurrent = () => version === indexContextVersionRef.current &&
+      requestId === rootsRequestRef.current && isCurrentIndexContext(rootsOrgRef.current, orgContext);
     if (!background) {
       rootsLoadingRef.current = true;
       setRootsLoading(true);
@@ -640,18 +676,18 @@ export default function ConsolePage() {
         throw new Error(t("invalidIndexListResponse"));
       }
 
-      if (!isCurrentIndexContext(rootsOrgRef.current, orgContext)) return;
+      if (!isCurrent()) return;
       setRoots((data as { roots: RelayRoot[] }).roots);
       const orgRole = (data as { orgRole?: unknown }).orgRole;
       setRootsOrgRole(orgRole === "owner" || orgRole === "member" ? orgRole : null);
       if (background) setRootsError(null);
     } catch (error) {
       console.error("获取索引列表失败:", error);
-      if (!background && isCurrentIndexContext(rootsOrgRef.current, orgContext)) {
+      if (!background && isCurrent()) {
         setRootsError(error instanceof Error ? error.message : t("failedToLoadIndexList"));
       }
     } finally {
-      if (!background && isCurrentIndexContext(rootsOrgRef.current, orgContext)) {
+      if (isCurrent()) {
         rootsLoadingRef.current = false;
         setRootsLoading(false);
       }
@@ -659,47 +695,137 @@ export default function ConsolePage() {
   }, [t]);
 
   const handleRootManagementAction = useCallback(async () => {
-    if (!rootPendingAction) return;
+    if (!rootPendingAction || rootActionControllerRef.current) return;
     const { kind, root } = rootPendingAction;
+    if (!rootDeletionsReady || isActiveRootDeletion(rootDeletionsRef.current[root.root_id])) return;
     const dismissing = kind === "dismiss_failure";
+    const orgContext = rootsOrgRef.current;
+    const version = indexContextVersionRef.current;
+    const controller = new AbortController();
+    rootActionControllerRef.current = controller;
+    rootDeletionSubmissionVersionRef.current += 1;
+    const isCurrent = () => !controller.signal.aborted && version === indexContextVersionRef.current &&
+      isCurrentIndexContext(rootsOrgRef.current, orgContext);
     setRootActionLoading(true);
+    setRootDeletionsReady(false);
     setRootActionResult(null);
     try {
-      const res = await fetch(dismissing ? "/api/roots/dismiss-failure" : "/api/roots/delete", {
+      const { ok, status, data } = await requestRootDeletionJson(dismissing ? "/api/roots/dismiss-failure" : "/api/roots/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           root_id: root.root_id,
-          ...(rootsOrg ? { org_id: rootsOrg.id } : {}),
+          ...(orgContext ? { org_id: orgContext.id } : {}),
         }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
+      }, controller.signal);
+      if (!isCurrent()) return;
+      const result = data && typeof data === "object" ? data : {};
+      if (ok && !dismissing) {
+        if (status !== 202 || !("deletion" in result) || !isRootDeletion(result.deletion) || result.deletion.root_id !== root.root_id) {
+          throw new Error(t("deletionSubmissionUnconfirmed"));
+        }
+        rootDeletionsRef.current = mergeRootDeletions(rootDeletionsRef.current, [result.deletion]);
+        setRootDeletions(rootDeletionsRef.current);
+        const accepted = rootDeletionsRef.current[root.root_id];
+        if (accepted.status === "succeeded") {
+          setRootActionResult({ success: true, message: t("indexDeleted", { count: accepted.deleted_files }) });
+          void Promise.all([fetchRoots(true, orgContext), fetchTenantStats(true, orgContext)]);
+        }
+        rootDeletionMonitorRef.current?.refresh();
+      } else if (ok) {
         setRootActionResult({
           success: true,
-          message: dismissing
-            ? t("indexFailureDismissed", { count: data.dismissed_jobs ?? 0 })
-            : t("indexDeleted", { count: data.deleted_files ?? 0 }),
+          message: t("indexFailureDismissed", {
+            count: "dismissed_jobs" in result && typeof result.dismissed_jobs === "number" ? result.dismissed_jobs : 0,
+          }),
         });
-        await Promise.all([fetchRoots(false, rootsOrg), fetchTenantStats(false, rootsOrg)]);
-      } else if (res.status === 409) {
+        void Promise.all([fetchRoots(false, orgContext), fetchTenantStats(false, orgContext)]);
+      } else if (status === 409) {
         setRootActionResult({
           success: false,
-          message: data.error || t("projectIsBeingIndexed"),
+          message: "error" in result && typeof result.error === "string" ? result.error : t("projectIsBeingIndexed"),
         });
       } else {
         setRootActionResult({
           success: false,
-          message: data.error || (dismissing ? t("dismissFailureFailed") : t("deleteFailed")),
+          message: !dismissing && status >= 500 ? t("deletionSubmissionUnconfirmed")
+            : "error" in result && typeof result.error === "string" ? result.error
+              : dismissing ? t("dismissFailureFailed") : t("deleteFailed"),
         });
       }
     } catch {
-      setRootActionResult({ success: false, message: t("networkError") });
+      if (isCurrent()) {
+        setRootActionResult({ success: false, message: dismissing ? t("networkError") : t("deletionSubmissionUnconfirmed") });
+      }
     } finally {
-      setRootActionLoading(false);
-      setRootPendingAction(null);
+      if (isCurrent()) {
+        rootActionControllerRef.current = null;
+        rootDeletionSubmissionVersionRef.current += 1;
+        setRootActionLoading(false);
+        setRootPendingAction(null);
+        rootDeletionMonitorRef.current?.refresh();
+      }
     }
-  }, [rootPendingAction, rootsOrg, fetchRoots, fetchTenantStats, t]);
+  }, [rootPendingAction, rootDeletionsReady, fetchRoots, fetchTenantStats, t]);
+
+  useEffect(() => {
+    return () => {
+      indexContextVersionRef.current += 1;
+      rootActionControllerRef.current?.abort();
+      rootActionControllerRef.current = null;
+    };
+  }, [session?.user.id]);
+
+  useEffect(() => {
+    if (activeTab !== "index" || !session?.user.id) return;
+    const orgContext = rootsOrg;
+    const version = indexContextVersionRef.current;
+    let requestSubmissionVersion = -1;
+    const isCurrent = () => version === indexContextVersionRef.current &&
+      isCurrentIndexContext(rootsOrgRef.current, orgContext);
+    const monitor = startRootDeletionMonitor({
+      load: async (signal) => {
+        requestSubmissionVersion = rootDeletionSubmissionVersionRef.current;
+        const url = orgContext
+          ? `/api/roots/delete?orgId=${encodeURIComponent(orgContext.id)}`
+          : "/api/roots/delete";
+        const { ok, data } = await requestRootDeletionJson(url, {}, signal);
+        const jobs = ok ? readRootDeletions(data) : null;
+        if (!jobs) throw new Error(t("deletionStatusUnavailable"));
+        return jobs;
+      },
+      onUpdate: (jobs) => {
+        if (!isCurrent() || requestSubmissionVersion !== rootDeletionSubmissionVersionRef.current || rootActionControllerRef.current) return;
+        const previous = rootDeletionsRef.current;
+        const next = reconcileRootDeletions(previous, jobs);
+        const expiredActive = Object.values(previous).some((job) => isActiveRootDeletion(job) && !next[job.root_id]);
+        const completed = Object.values(next).filter((job) =>
+          job.status === "succeeded" && previous[job.root_id]?.id === job.id && isActiveRootDeletion(previous[job.root_id]));
+        rootDeletionsRef.current = next;
+        setRootDeletions(next);
+        setRootDeletionsReady(true);
+        setRootDeletionStatusError(null);
+        if (completed.length > 0) {
+          setRootActionResult({
+            success: true,
+            message: t("indexDeleted", { count: completed.reduce((total, job) => total + job.deleted_files, 0) }),
+          });
+        }
+        if (completed.length > 0 || expiredActive) {
+          void Promise.all([fetchRoots(true, orgContext), fetchTenantStats(true, orgContext)]);
+        }
+      },
+      onError: () => {
+        if (isCurrent()) setRootDeletionStatusError(t("deletionStatusUnavailable"));
+      },
+      hasActive: () => Object.values(rootDeletionsRef.current).some(isActiveRootDeletion),
+    });
+    rootDeletionMonitorRef.current = monitor;
+    return () => {
+      monitor.stop();
+      if (rootDeletionMonitorRef.current === monitor) rootDeletionMonitorRef.current = null;
+    };
+  }, [activeTab, session?.user.id, rootsOrg, fetchRoots, fetchTenantStats, t]);
 
   const fetchNavigationAccess = useCallback(async (userId: string, signal?: AbortSignal) => {
     const [adminResult, menuResult] = await Promise.allSettled([
@@ -733,7 +859,7 @@ export default function ConsolePage() {
     rootCount: roots?.length ?? 0,
     loading: rootsLoading,
     hasError: rootsError !== null,
-    hasActionResult: rootActionResult !== null,
+    hasActionResult: rootActionResult !== null || rootDeletionStatusError !== null || Object.values(rootDeletions).some((job) => job.status !== "succeeded"),
   });
 
   const sections = useMemo(
@@ -1729,8 +1855,23 @@ export default function ConsolePage() {
                       orgOptions={(myOrgs ?? []).map((org) => ({ id: org.id, name: org.name }))}
                       activeOrg={rootsOrg}
                       onSelectOrg={(org) => {
+                        if (isCurrentIndexContext(rootsOrgRef.current, org)) {
+                          rootDeletionMonitorRef.current?.refresh();
+                          return;
+                        }
+                        indexContextVersionRef.current += 1;
+                        rootActionControllerRef.current?.abort();
+                        rootActionControllerRef.current = null;
+                        rootDeletionMonitorRef.current?.stop();
+                        rootDeletionMonitorRef.current = null;
+                        rootDeletionsRef.current = Object.create(null);
                         rootsOrgRef.current = org;
                         setRootsOrg(org);
+                        setRootDeletions(rootDeletionsRef.current);
+                        setRootDeletionsReady(false);
+                        setRootDeletionStatusError(null);
+                        setRootPendingAction(null);
+                        setRootActionLoading(false);
                         setRootsOrgRole(null);
                         setRoots(null);
                         setTenantStats(null);
@@ -1905,9 +2046,15 @@ export default function ConsolePage() {
                         loading={rootsLoading}
                         error={rootsError}
                         actionResult={rootActionResult}
+                        deletions={rootDeletions}
+                        deletionStatusError={rootDeletionStatusError}
+                        managementDisabled={!rootDeletionsReady}
                         activeOrg={rootsOrg}
                         canManage={!rootsOrg || rootsOrgRole === "owner"}
-                        onRefresh={() => fetchRoots(false, rootsOrgRef.current)}
+                        onRefresh={() => {
+                          rootDeletionMonitorRef.current?.refresh();
+                          void fetchRoots(false, rootsOrgRef.current);
+                        }}
                         onDismissFailure={(root) => {
                           setRootActionResult(null);
                           setRootPendingAction({ kind: "dismiss_failure", root });
@@ -1915,6 +2062,13 @@ export default function ConsolePage() {
                         onDelete={(root) => {
                           setRootActionResult(null);
                           setRootPendingAction({ kind: "delete_index", root });
+                        }}
+                        onRetryDeletion={(job) => {
+                          setRootActionResult(null);
+                          setRootPendingAction({
+                            kind: "delete_index",
+                            root: { root_id: job.root_id, workspace_id: job.root_id, branch: "" },
+                          });
                         }}
                       />
                     )}
@@ -1935,7 +2089,7 @@ export default function ConsolePage() {
                                 variant="warning"
                                 size="sm"
                                 onClick={() => setShowClearConfirm(true)}
-                                disabled={clearLoading || (!!rootsOrg && rootsOrgRole !== "owner")}
+                                disabled={clearLoading || !rootDeletionsReady || Object.values(rootDeletions).some(isActiveRootDeletion) || (!!rootsOrg && rootsOrgRole !== "owner")}
                                 className="shrink-0"
                               >
                                 <Trash2 className="w-4 h-4 mr-1" />
@@ -2173,16 +2327,6 @@ export default function ConsolePage() {
                     })
                 : ""}
             </AlertDialogDescription>
-            {rootActionLoading && rootPendingAction && (
-              <div
-                className="mt-3 flex items-center gap-2 text-xs text-cyan-300"
-                role="status"
-                aria-live="polite"
-              >
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                {rootPendingAction.kind === "delete_index" ? t("deleting") : t("processing")}
-              </div>
-            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel
@@ -2748,12 +2892,16 @@ function IndexContextSwitcher({
 function RootManagementButtons({
   root,
   canManage,
+  disabled,
+  deletion,
   compact = false,
   onDismissFailure,
   onDelete,
 }: {
   root: RelayRoot;
   canManage: boolean;
+  disabled: boolean;
+  deletion?: RootDeletion;
   compact?: boolean;
   onDismissFailure: (root: RelayRoot) => void;
   onDelete: (root: RelayRoot) => void;
@@ -2763,7 +2911,13 @@ function RootManagementButtons({
   const requiresRootReset =
     state === "failed" && resolveIndexFailurePresentation(root).recovery === "reset_root";
   const actions = resolveRootIndexActions(root, canManage, requiresRootReset);
-  if (!actions.canDismissFailure && !actions.canDeleteIndex) return null;
+  const retryingDeletion = deletion?.status === "failed";
+  const canDelete = actions.canDeleteIndex || (canManage && retryingDeletion);
+  const deleteLabel = retryingDeletion ? t("retryDeletion") : t("deleteBranchIndex", {
+    workspace: root.workspace_id,
+    branch: rootBranchLabel(root) || t("defaultBranch"),
+  });
+  if (!actions.canDismissFailure && !canDelete) return null;
 
   return (
     <div className={cn("flex shrink-0 items-center gap-1", compact && "flex-col items-end sm:flex-row")}>
@@ -2772,6 +2926,7 @@ function RootManagementButtons({
           variant="ghost"
           size="sm"
           onClick={() => onDismissFailure(root)}
+          disabled={disabled || isActiveRootDeletion(deletion)}
           className="h-8 px-2 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
           aria-label={t("dismissFailureFor", { workspace: root.workspace_id, branch: rootBranchLabel(root) })}
           title={t("dismissFailureHint")}
@@ -2780,24 +2935,46 @@ function RootManagementButtons({
           <span className="text-[11px]">{t("dismissFailureRecord")}</span>
         </Button>
       )}
-      {actions.canDeleteIndex && (
+      {canDelete && (
         <Button
           variant="ghost"
           size="sm"
           onClick={() => onDelete(root)}
+          disabled={disabled || isActiveRootDeletion(deletion)}
           className={cn(
             "h-8 text-slate-500 hover:bg-red-500/10 hover:text-red-400",
             requiresRootReset ? "px-2" : "w-8 p-0",
           )}
-          aria-label={t("deleteBranchIndex", {
-            workspace: root.workspace_id,
-            branch: rootBranchLabel(root) || t("defaultBranch"),
-          })}
+          aria-label={deleteLabel}
+          title={deleteLabel}
         >
-          <Trash2 className={cn("h-4 w-4", requiresRootReset && "mr-1")} />
+          {retryingDeletion
+            ? <RefreshCw className={cn("h-4 w-4", requiresRootReset && "mr-1")} />
+            : <Trash2 className={cn("h-4 w-4", requiresRootReset && "mr-1")} />}
           {requiresRootReset && <span className="text-[11px]">{t("resetCloudIndex")}</span>}
         </Button>
       )}
+    </div>
+  );
+}
+
+function RootDeletionStatus({ deletion }: { deletion: RootDeletion | undefined }) {
+  const t = useTranslations("Console");
+  if (!deletion || deletion.status === "succeeded") return null;
+  const active = isActiveRootDeletion(deletion);
+  return (
+    <div
+      className={cn("mt-2 text-xs", active ? "text-amber-300" : "text-red-400")}
+      role="status"
+      data-testid="root-deletion-status"
+      data-status={deletion.status}
+      data-job-id={deletion.id}
+    >
+      <span className="inline-flex items-center gap-1.5">
+        {active ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
+        {deletion.status === "queued" ? t("deletionQueued") : active ? t("deleting") : t("deleteFailed")}
+      </span>
+      {deletion.error && <p className="mt-1 break-words [overflow-wrap:anywhere]" title={deletion.error}>{deletion.error}</p>}
     </div>
   );
 }
@@ -2809,21 +2986,29 @@ function RootsSection({
   loading,
   error,
   actionResult,
+  deletions,
+  deletionStatusError,
+  managementDisabled,
   activeOrg,
   canManage,
   onRefresh,
   onDismissFailure,
   onDelete,
+  onRetryDeletion,
 }: {
   roots: RelayRoot[] | null;
   loading: boolean;
   error: string | null;
   actionResult: { success: boolean; message: string } | null;
+  deletions: RootDeletions;
+  deletionStatusError: string | null;
+  managementDisabled: boolean;
   activeOrg: { id: string; name: string } | null;
   canManage: boolean;
   onRefresh: () => void;
   onDismissFailure: (root: RelayRoot) => void;
   onDelete: (root: RelayRoot) => void;
+  onRetryDeletion: (job: RootDeletion) => void;
 }) {
   const locale = useLocale();
   const t = useTranslations("Console");
@@ -2875,6 +3060,22 @@ function RootsSection({
         </p>
       )}
 
+      {deletionStatusError && <p className="mb-3 text-xs text-amber-300" role="status">{deletionStatusError}</p>}
+
+      {Object.values(deletions).filter((job) => job.status !== "succeeded" && !roots?.some((root) => root.root_id === job.root_id)).map((job) => (
+        <div key={job.id} className="mb-3 flex items-center justify-between gap-3 border-b border-white/[0.06] pb-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-mono text-slate-400" title={job.root_id}>{job.root_id}</p>
+            <RootDeletionStatus deletion={job} />
+          </div>
+          {job.status === "failed" && canManage && (
+            <Button variant="ghost" size="sm" disabled={managementDisabled} onClick={() => onRetryDeletion(job)} title={t("retryDeletion")} aria-label={t("retryDeletion")} className="h-8 w-8 shrink-0 p-0 text-red-400">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      ))}
+
       {error ? (
         <div className="flex flex-col gap-3 rounded-lg border border-red-500/20 bg-red-500/[0.05] p-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-red-300">{error}</p>
@@ -2920,11 +3121,14 @@ function RootsSection({
                           ? `${t("lastIndexed")} ${new Date(group.entries[0].root.indexed_at).toLocaleString(locale)}`
                           : t("notIndexedYet")}
                       </p>
-                      <RootIndexStatus root={group.entries[0].root} />
+                      {!isActiveRootDeletion(deletions[group.entries[0].root.root_id]) && <RootIndexStatus root={group.entries[0].root} />}
+                      <RootDeletionStatus deletion={deletions[group.entries[0].root.root_id]} />
                     </div>
                     <RootManagementButtons
                       root={group.entries[0].root}
                       canManage={canManage}
+                      disabled={managementDisabled}
+                      deletion={deletions[group.entries[0].root.root_id]}
                       onDismissFailure={onDismissFailure}
                       onDelete={onDelete}
                     />
@@ -2964,11 +3168,14 @@ function RootsSection({
                                 : t("notIndexedYet")}
                             </p>
                           </div>
-                          <RootIndexStatus root={root} />
+                          {!isActiveRootDeletion(deletions[root.root_id]) && <RootIndexStatus root={root} />}
+                          <RootDeletionStatus deletion={deletions[root.root_id]} />
                         </div>
                         <RootManagementButtons
                           root={root}
                           canManage={canManage}
+                          disabled={managementDisabled}
+                          deletion={deletions[root.root_id]}
                           compact
                           onDismissFailure={onDismissFailure}
                           onDelete={onDelete}
