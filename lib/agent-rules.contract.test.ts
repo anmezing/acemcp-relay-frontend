@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   AGENT_RULES_CLOUD,
+  AGENT_RULES_CLOUD_EN,
   CLOUD_TOOLS,
   NPM_LOCAL_TOOLS,
 } from "@/lib/agent-rules";
@@ -106,6 +107,43 @@ describe(
       const mentioned = AGENT_RULES_CLOUD.match(/`(codebase[\w-]*)`/g) || [];
       const mentionedNames = [...new Set(mentioned.map((m) => m.slice(1, -1)))];
       expect([...mentionedNames].sort()).toEqual([...surface].sort());
+    });
+
+    it("钉住 deep graph 开放发现、调用关系默认值与有界算法文案", () => {
+      const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
+      expect(contract.deepGraph.input.optionalFields).toContain("target_symbol");
+      expect(contract.deepGraph.input.defaults.relationship_types).toEqual([
+        "CALLS",
+        "DISPATCHES_TO",
+        "CALL_BOUNDARY",
+      ]);
+      expect(contract.deepGraph.relationshipTypes).toEqual([
+        "CALLS",
+        "DISPATCHES_TO",
+        "CALL_BOUNDARY",
+        "TYPE_USES",
+        "IMPLEMENTS",
+        "EXTENDS",
+        "IMPORTS",
+        "REFERENCES",
+        "DECLARES",
+      ]);
+      expect(contract.deepGraph.semantics).toContain("target_symbol is optional");
+      expect(contract.deepGraph.semantics).toContain("bounded open discovery");
+
+      for (const rules of [AGENT_RULES_CLOUD, AGENT_RULES_CLOUD_EN]) {
+        expect(rules).toContain("target_symbol");
+        expect(rules).toContain("CALLS");
+        expect(rules).toContain("DISPATCHES_TO");
+        expect(rules).toContain("CALL_BOUNDARY");
+        expect(rules).toContain("bounded");
+      }
+      expect(AGENT_RULES_CLOUD).toContain("中心性文本优先使用符号名和源码位置");
+      expect(AGENT_RULES_CLOUD_EN).toContain(
+        "centrality text should prefer symbol names and source locations",
+      );
+      expect(AGENT_RULES_CLOUD).toContain("callers/callees 的 depth=1–3");
+      expect(AGENT_RULES_CLOUD_EN).toContain("callers/callees with depth=1–3");
     });
   }
 );

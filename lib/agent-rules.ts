@@ -22,8 +22,8 @@ export const CLOUD_TOOLS = [
 export const AGENT_RULES_CLOUD = `## LCE 工具使用规则
 
 - 查找、理解、定位代码优先使用 \`codebase-retrieval\`，用自然语言描述功能、符号或逻辑，不要先用 grep、rg 或逐文件浏览。
-- 分析符号定义、引用、调用链、依赖关系与修改影响使用 \`codebase_symbol_graph\`。
-- 需要 3 跳以上的传播链、多路径、环或有界邻域分析时使用 \`codebase_deep_graph\`；必须传当前索引分支对应的 \`root_id\`。结果中的 SCC/中心性仅代表返回的有界邻域，不能表述为全租户图结论。
+- 分析符号定义、引用、调用链、依赖关系与修改影响使用 \`codebase_symbol_graph\`；callers/callees 的 depth=1–3 会沿已解析调用边做有界（bounded）多跳，仍不等于运行时分派证明。
+- 需要更深传播链、开放式路径发现、环或有界邻域分析时使用 \`codebase_deep_graph\`；必须传当前索引分支对应的 \`root_id\`。paths 的 \`target_symbol\` 可省略以从起点做有界开放发现，提供时才约束到目标；默认关系是 \`CALLS\`、\`DISPATCHES_TO\` 和 \`CALL_BOUNDARY\`，结构关系需显式加入。结果中的 SCC/中心性仅代表返回的有界邻域，中心性文本优先使用符号名和源码位置；不能表述为全租户图结论。
 - 需要整根图的 SCC 或中心性时使用 \`codebase_graph_algorithm\`：提交任务传 \`operation=submit\`、\`root_id\` 和 \`algorithm\`，查询任务传 \`operation=status\` 和 \`job_id\`。这是异步能力；若返回执行器不可用，应如实说明，不要假装已计算或退回同步全图计算。
 - 当用户明确要求增强/优化提示词，或要求先生成基于当前代码的实施说明时，调用 \`codebase_enhance_prompt\`：完整原始任务放入 \`prompt\`，已知符号、文件名或错误码放入可选的 \`technical_terms\`。将返回结果作为补充计划，原始要求始终优先；不要对每个普通任务自动调用。
 - 当检索提示索引未就绪、正在构建或失败，或者用户询问索引进度时，调用 \`codebase_index_status\`；已知项目路径时传 \`repo_path\`，已知索引根标识时传 \`root_id\`，都不传则查看全部项目根。直接向用户说明状态、进度和失败原因，不要要求用户打开控制台确认。
@@ -34,8 +34,8 @@ export const AGENT_RULES_CLOUD = `## LCE 工具使用规则
 export const AGENT_RULES_CLOUD_EN = `## LCE Tool Usage
 
 - Use \`codebase-retrieval\` first when finding, understanding, or locating code. Describe the feature, symbol, or logic in natural language instead of starting with grep, rg, or browsing files.
-- Use \`codebase_symbol_graph\` for symbol definitions, references, call chains, dependencies, and change impact.
-- Use \`codebase_deep_graph\` for propagation chains beyond three hops, multiple paths, cycles, or bounded-neighborhood analysis, and pass the \`root_id\` for the current indexed branch. Treat online SCC and centrality as bounded-neighborhood results, not tenant-wide graph conclusions.
+- Use \`codebase_symbol_graph\` for symbol definitions, references, call chains, dependencies, and change impact; callers/callees with depth=1–3 follow resolved call edges as bounded multi-hop, but do not prove runtime dispatch.
+- Use \`codebase_deep_graph\` for deeper propagation, open path discovery, cycles, or bounded-neighborhood analysis, and pass the \`root_id\` for the current indexed branch. Omit \`target_symbol\` for bounded open discovery; provide it to constrain paths to a target. The default relationships are \`CALLS\`, \`DISPATCHES_TO\`, and \`CALL_BOUNDARY\`; opt into structural relationships explicitly. Treat online SCC and centrality as bounded-neighborhood results; centrality text should prefer symbol names and source locations, not opaque IDs, and never claim tenant-wide conclusions.
 - Use \`codebase_graph_algorithm\` for whole-root SCC or centrality: submit with \`operation=submit\`, \`root_id\`, and \`algorithm\`; inspect with \`operation=status\` and \`job_id\`. This is asynchronous. If the executor is unavailable, report that explicitly instead of claiming a result or running a synchronous whole-graph fallback.
 - When the user explicitly asks to enhance/refine a prompt or requests a code-grounded implementation brief first, call \`codebase_enhance_prompt\`: put the complete original task in \`prompt\` and known symbols, file names, or error codes in optional \`technical_terms\`. Treat the result as a supplemental plan and keep the original request authoritative; do not call it automatically for every ordinary task.
 - When retrieval reports that an index is not ready, building, or failed, or when the user asks about indexing progress, call \`codebase_index_status\`. Pass \`repo_path\` when the project path is known, \`root_id\` when the indexed root ID is known, or neither to inspect all roots. Report the state, progress, and failure reason directly instead of asking the user to open the console.
