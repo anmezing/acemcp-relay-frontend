@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { LceBrand } from "@/components/LceBrand";
 import { I18nText } from "@/components/I18nText";
 import { GraphGlobe } from "@/components/GraphGlobe";
+import Link from "next/link";
 
 export default function Home() {
   return (
@@ -209,6 +210,7 @@ export default function Home() {
           <p className="text-sm text-slate-500">
             <I18nText id="copyrightNotice" />
           </p>
+          <p className="flex justify-center gap-4 text-sm"><Link href="/privacy" className="text-cyan-400 hover:text-cyan-300">隐私政策</Link><Link href="/terms" className="text-cyan-400 hover:text-cyan-300">服务条款</Link></p>
         </div>
       </footer>
     </div>
