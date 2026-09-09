@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import {
   buildCloudMcpConfigJson,
   buildCloudMcpConfigToml,
+  buildOpenCodeMcpConfigJson,
   type McpLaunchMode,
 } from "@/lib/mcp-config";
 import {
@@ -533,15 +534,19 @@ function ConsoleContent({ session, isPending }: {
   const [rootsOrgRole, setRootsOrgRole] = useState<"owner" | "member" | null>(null);
   const { data: myOrgs } = authClient.useListOrganizations();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [mcpClient, setMcpClient] = useState<"generic" | "opencode">("generic");
   const [mcpConfigFormat, setMcpConfigFormat] = useState<"json" | "toml">("json");
   const [mcpLaunchMode, setMcpLaunchMode] = useState<McpLaunchMode>("npx");
   const [mcpRepoPath, setMcpRepoPath] = useState("");
 
   const mcpConfig = useMemo(() => {
+    if (mcpClient === "opencode") {
+      return buildOpenCodeMcpConfigJson(fullKey, mcpRepoPath, mcpLaunchMode);
+    }
     return mcpConfigFormat === "toml"
       ? buildCloudMcpConfigToml(fullKey, mcpRepoPath, mcpLaunchMode)
       : buildCloudMcpConfigJson(fullKey, mcpRepoPath, mcpLaunchMode);
-  }, [fullKey, mcpConfigFormat, mcpLaunchMode, mcpRepoPath]);
+  }, [fullKey, mcpClient, mcpConfigFormat, mcpLaunchMode, mcpRepoPath]);
 
   const generateAndCopyConfig = async () => {
     if (loading) return;
@@ -556,9 +561,11 @@ function ConsoleContent({ session, isPending }: {
       setFullKey(key);
       await fetchKeyInfo();
 
-      const config = mcpConfigFormat === "toml"
-        ? buildCloudMcpConfigToml(key, mcpRepoPath, mcpLaunchMode)
-        : buildCloudMcpConfigJson(key, mcpRepoPath, mcpLaunchMode);
+      const config = mcpClient === "opencode"
+        ? buildOpenCodeMcpConfigJson(key, mcpRepoPath, mcpLaunchMode)
+        : mcpConfigFormat === "toml"
+          ? buildCloudMcpConfigToml(key, mcpRepoPath, mcpLaunchMode)
+          : buildCloudMcpConfigJson(key, mcpRepoPath, mcpLaunchMode);
       await navigator.clipboard.writeText(config);
       markConfigCopied();
     } catch (error) {
@@ -1558,37 +1565,74 @@ function ConsoleContent({ session, isPending }: {
                             )}
                           </div>
 
-                          {/* Format toggle: JSON / TOML */}
+                          {/* Client format toggle */}
                           <div
                             role="tablist"
-                            aria-label={t("mcpClientConfigurationFormat")}
+                            aria-label={t("mcpClientType")}
                             className="mb-3 grid grid-cols-2 rounded-lg border border-white/[0.08] bg-[#0a0f1a] p-1"
                           >
-                            {[
-                              { value: "json" as const, label: t("genericJsonConfig") },
-                              { value: "toml" as const, label: t("genericTomlConfig") },
-                            ].map((option) => (
+                            {([
+                              { value: "generic" as const, label: t("genericMcpClient") },
+                              { value: "opencode" as const, label: t("openCodeMcpClient") },
+                            ]).map((option) => (
                               <button
                                 key={option.value}
                                 type="button"
                                 role="tab"
-                                aria-selected={mcpConfigFormat === option.value}
+                                aria-selected={mcpClient === option.value}
                                 onClick={() => {
-                                  setMcpConfigFormat(option.value);
+                                  setMcpClient(option.value);
                                   resetConfigCopied();
                                   setConfigError("");
                                 }}
                                 className={cn(
                                   "min-h-9 rounded-md px-3 py-2 text-xs font-medium transition-colors",
-                                  mcpConfigFormat === option.value
+                                  mcpClient === option.value
                                     ? "bg-white/[0.08] text-white"
-                                    : "text-slate-500 hover:text-slate-300"
+                                    : "text-slate-500 hover:text-slate-300",
                                 )}
                               >
                                 {option.label}
                               </button>
                             ))}
                           </div>
+                          <p className="mb-3 text-xs leading-relaxed text-slate-500">
+                            {mcpClient === "opencode" ? t("openCodeMcpClientHelp") : t("genericMcpClientHelp")}
+                          </p>
+
+                          {/* Generic format toggle: JSON / TOML */}
+                          {mcpClient === "generic" && (
+                            <div
+                              role="tablist"
+                              aria-label={t("mcpClientConfigurationFormat")}
+                              className="mb-3 grid grid-cols-2 rounded-lg border border-white/[0.08] bg-[#0a0f1a] p-1"
+                            >
+                              {[
+                                { value: "json" as const, label: t("genericJsonConfig") },
+                                { value: "toml" as const, label: t("genericTomlConfig") },
+                              ].map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  role="tab"
+                                  aria-selected={mcpConfigFormat === option.value}
+                                  onClick={() => {
+                                    setMcpConfigFormat(option.value);
+                                    resetConfigCopied();
+                                    setConfigError("");
+                                  }}
+                                  className={cn(
+                                    "min-h-9 rounded-md px-3 py-2 text-xs font-medium transition-colors",
+                                    mcpConfigFormat === option.value
+                                      ? "bg-white/[0.08] text-white"
+                                      : "text-slate-500 hover:text-slate-300"
+                                  )}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                           <div className="relative group">
                             <div className="bg-[#0a0f1a] border border-white/[0.08] rounded-lg p-3 font-mono text-sm overflow-x-auto">
                               <pre className="text-slate-300 whitespace-pre-wrap break-all">

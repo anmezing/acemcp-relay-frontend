@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { buildCloudMcpConfigJson, buildCloudMcpConfigToml } from "./mcp-config";
+import { buildCloudMcpConfigJson, buildCloudMcpConfigToml, buildOpenCodeMcpConfigJson } from "./mcp-config";
 
 describe("MCP config", () => {
   describe("cloud stdio mode", () => {
+    it("generates an OpenCode local MCP config", () => {
+      const config = JSON.parse(buildOpenCodeMcpConfigJson("sk-test"));
+
+      expect(config).toEqual({
+        mcp: {
+          lce: {
+            type: "local",
+            command: ["npx", "-y", "@anmezing/lce-cloud@latest", "--key", "sk-test"],
+            enabled: true,
+            timeout: 30_000,
+          },
+        },
+      });
+    });
+
     it("generates npx config with api key", () => {
       const config = JSON.parse(buildCloudMcpConfigJson("sk-test"));
 

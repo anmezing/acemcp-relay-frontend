@@ -6,6 +6,27 @@ const GLOBAL_CLOUD_COMMAND = "lce-cloud";
 
 export type McpLaunchMode = "npx" | "global";
 
+export function buildOpenCodeMcpConfigJson(
+  apiKey: string | null,
+  repoPath?: string,
+  launchMode: McpLaunchMode = "npx",
+): string {
+  return JSON.stringify(
+    {
+      mcp: {
+        lce: {
+          type: "local",
+          command: [cloudCommand(launchMode), ...cloudArgs(apiKey, repoPath, launchMode)],
+          enabled: true,
+          timeout: 30_000,
+        },
+      },
+    },
+    null,
+    2,
+  );
+}
+
 // ── Cloud Mode (stdio, 推荐) ──────────────────────────────────
 
 function cloudArgs(
