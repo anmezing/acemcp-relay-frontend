@@ -12,6 +12,7 @@ import {
   Eye,
   EyeOff,
   Github,
+  Chrome,
   Loader2,
   LockKeyhole,
   LogIn,
@@ -217,6 +218,14 @@ function LoginContent() {
   const handleGithubLogin = () => {
     authClient.signIn.social({
       provider: "github",
+      callbackURL: callbackUrl,
+      errorCallbackURL: errorCallbackUrl,
+    });
+  };
+
+  const handleGoogleLogin = () => {
+    authClient.signIn.social({
+      provider: "google",
       callbackURL: callbackUrl,
       errorCallbackURL: errorCallbackUrl,
     });
@@ -430,6 +439,11 @@ function LoginContent() {
           </div>
 
           <div className="flex flex-col gap-2.5">
+            <Button onClick={handleGoogleLogin} variant="glass" size="lg" className="w-full justify-center rounded-lg group">
+              <Chrome className="h-5 w-5 text-slate-200" />
+              <span className="font-light">{mode === "register" ? t("signUpWithGoogle") : t("logInWithGoogle")}</span>
+              <ChevronRight className="h-4 w-4 text-slate-500 transition-transform group-hover:translate-x-0.5 group-hover:text-cyan-400" />
+            </Button>
             <Button
               onClick={handleLinuxDoLogin}
               variant="glass"

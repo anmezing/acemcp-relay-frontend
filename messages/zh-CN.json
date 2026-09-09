@@ -340,7 +340,9 @@
     "signUpWithLinuxdo": "使用 LinuxDo 注册",
     "logInWithLinuxdo": "使用 LinuxDo 登录",
     "signUpWithGithub": "使用 GitHub 注册",
-    "logInWithGithub": "使用 GitHub 登录",
+      "logInWithGithub": "使用 GitHub 登录",
+      "signUpWithGoogle": "使用 Google 注册",
+      "logInWithGoogle": "使用 Google 登录",
     "backToHome": "返回首页"
   },
   "Status": {

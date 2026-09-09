@@ -340,7 +340,9 @@
     "signUpWithLinuxdo": "Sign up with LinuxDo",
     "logInWithLinuxdo": "Log in with LinuxDo",
     "signUpWithGithub": "Sign up with GitHub",
-    "logInWithGithub": "Log in with GitHub",
+      "logInWithGithub": "Log in with GitHub",
+      "signUpWithGoogle": "Sign up with Google",
+      "logInWithGoogle": "Log in with Google",
     "backToHome": "Back to home"
   },
   "Status": {
