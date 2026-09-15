@@ -30,7 +30,7 @@ describe(
 
     it("钉住无成本重复索引结果", () => {
       const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
-      expect(contract.schemaVersion).toBe("1.9");
+      expect(contract.schemaVersion).toBe("1.10");
       expect(contract.codebaseIndex.startOutcomes).toEqual({
         created: {
           requiredFields: ["job"],
@@ -127,6 +127,7 @@ describe(
         "IMPORTS",
         "REFERENCES",
         "DECLARES",
+        "CONTAINS",
       ]);
       expect(contract.deepGraph.semantics).toContain("target_symbol is optional");
       expect(contract.deepGraph.semantics).toContain("bounded open discovery");
