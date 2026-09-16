@@ -189,6 +189,19 @@ describe("GET /api/roots", () => {
 });
 
 describe("POST /api/roots/delete", () => {
+  it("forwards the original task identity for explicit recovery", async () => {
+    const retry_job_id = "1aa907f1-5a18-4559-8939-ac6f6db93091";
+    fetchMock.mockResolvedValue(relayResponse(202, { deletion: queuedDeletion }));
+    const res = await deleteRoot(rootActionRequest("delete", { root_id: "root-1", retry_job_id }));
+    expect(res.status).toBe(202);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ root_id: "root-1", retry_job_id });
+  });
+
+  it("rejects malformed recovery identities before forwarding", async () => {
+    const res = await deleteRoot(rootActionRequest("delete", { root_id: "root-1", retry_job_id: "not-a-task" }));
+    expect(res.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
   it("转发 root_id 并保留 202，受理任务不等于已删除", async () => {
     fetchMock.mockResolvedValue(relayResponse(202, { deletion: queuedDeletion }));
 

@@ -37,6 +37,10 @@ export interface IndexRootActions {
   canDeleteIndex: boolean;
 }
 
+export function isRootIndexAvailable(root: IndexRootStatusLike): boolean {
+  return (root.index_available ?? Boolean(root.indexed_at)) && root.file_count > 0;
+}
+
 export function resolveRootIndexActions(
   root: IndexRootStatusLike,
   canManage: boolean,
@@ -46,8 +50,7 @@ export function resolveRootIndexActions(
     return { canDismissFailure: false, canDeleteIndex: false };
   }
   const state = resolveRootIndexState(root);
-  const indexAvailable =
-    (root.index_available ?? Boolean(root.indexed_at)) && root.file_count > 0;
+  const indexAvailable = isRootIndexAvailable(root);
   const resetFailedRoot = state === "failed" && requiresRootReset;
   return {
     canDismissFailure: state === "failed" && !resetFailedRoot,

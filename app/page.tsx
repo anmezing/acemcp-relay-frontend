@@ -210,7 +210,7 @@ export default function Home() {
           <p className="text-sm text-slate-500">
             <I18nText id="copyrightNotice" />
           </p>
-          <p className="flex justify-center gap-4 text-sm"><Link href="/privacy" className="text-cyan-400 hover:text-cyan-300">隐私政策</Link><Link href="/terms" className="text-cyan-400 hover:text-cyan-300">服务条款</Link></p>
+          <p className="flex justify-center gap-4 text-sm"><Link href="/privacy" className="text-cyan-400 hover:text-cyan-300"><I18nText id="privacyTitle" /></Link><Link href="/terms" className="text-cyan-400 hover:text-cyan-300"><I18nText id="termsTitle" /></Link></p>
         </div>
       </footer>
     </div>

@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/admin";
 import { getRelayAdminHeaders } from "@/lib/relay-console";
 import { fetchPlatformModelConfig } from "@/lib/platform-model-config";
+import { JsonBodyTooLargeError, readBoundedJson } from "@/lib/bounded-json";
+import { validateModelConfigRequest } from "@/lib/model-config-validation";
 import {
   MODEL_CONFIG_SAVE_PROXY_TIMEOUT_MS,
   ModelConfigRequestTimeoutError,
@@ -13,25 +15,32 @@ const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
 const CONFIG_URL = `${RELAY_URL}/internal/platform-model-config`;
 const MAX_BODY_BYTES = 64 * 1024;
 
-async function relayResponse(response: Response): Promise<NextResponse> {
-  const text = await response.text();
-  if (Buffer.byteLength(text, "utf8") > MAX_BODY_BYTES) {
-    return NextResponse.json({ error: "模型配置响应过大" }, { status: 502 });
-  }
+async function relayResponse(response: Response, signal: AbortSignal): Promise<NextResponse> {
   let body: unknown;
   try {
-    body = JSON.parse(text);
+    body = await readBoundedJson(response, MAX_BODY_BYTES, signal);
   } catch {
     return NextResponse.json({ error: "模型配置服务返回了无效响应" }, { status: 502 });
   }
   return NextResponse.json(body, { status: response.status });
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   if (!(await requireAdminSession())) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
   try {
+    const operation = new URL(request.url).searchParams.get("operation");
+    if (operation) {
+      if (operation !== "latest" && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(operation))
+        return NextResponse.json({ error: "Invalid configuration operation identity" }, { status: 400 });
+      return await withModelConfigDeadline(async (signal) => {
+        const response = await fetch(`${CONFIG_URL}?operation=${encodeURIComponent(operation)}`, {
+          headers: getRelayAdminHeaders(), signal, cache: "no-store",
+        });
+        return relayResponse(response, signal);
+      }, 15_000, request.signal);
+    }
     return NextResponse.json({ config: await fetchPlatformModelConfig() });
   } catch (error) {
     console.error("admin model config read failed:", error);
@@ -43,15 +52,13 @@ export async function POST(request: Request) {
   if (!(await requireAdminSession())) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  const text = await request.text();
-  if (Buffer.byteLength(text, "utf8") > MAX_BODY_BYTES) {
-    return NextResponse.json({ error: "请求体过大" }, { status: 413 });
-  }
   let body: unknown;
   try {
-    body = JSON.parse(text);
-  } catch {
-    return NextResponse.json({ error: "请求体必须是 JSON" }, { status: 400 });
+    body = await readBoundedJson(request, MAX_BODY_BYTES);
+    validateModelConfigRequest(body);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "请求体必须是 JSON" },
+      { status: error instanceof JsonBodyTooLargeError ? 413 : 400 });
   }
   try {
     return await withModelConfigDeadline(async (signal) => {
@@ -61,7 +68,7 @@ export async function POST(request: Request) {
         body: JSON.stringify(body),
         signal,
       });
-      return await relayResponse(response);
+      return await relayResponse(response, signal);
     }, MODEL_CONFIG_SAVE_PROXY_TIMEOUT_MS, request.signal);
   } catch (error) {
     if (error instanceof ModelConfigRequestTimeoutError || request.signal.aborted) {

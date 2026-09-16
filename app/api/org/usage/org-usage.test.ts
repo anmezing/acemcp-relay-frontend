@@ -29,6 +29,7 @@ const getMemberRoleMock = vi.mocked(getMemberRole);
 const getOrgUsageMock = vi.mocked(getOrgUsage);
 
 const usagePayload = {
+  synchronization: { today: 8, daily: [{ date: "2026-08-01", count: 20 }] },
   daily: [{ date: "2026-08-01", count: 12 }],
   topMembers: [{ user_id: "u1", email: "a@b.dev", name: "A", count: 9 }],
   today: { used: 3, limit: 100, source: "subscription" as const, planName: "Team" },

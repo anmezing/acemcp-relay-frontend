@@ -42,6 +42,7 @@ interface OrgInvitation {
 }
 
 interface OrgUsageData {
+  synchronization: { today: number; daily: { date: string; count: number }[] };
   daily: { date: string; count: number }[];
   topMembers: { user_id: string; email: string | null; name: string | null; count: number }[];
   // limit 是 relay 最终执行额度；0 = 不限。
@@ -721,6 +722,10 @@ function OrgUsageSection({ orgId }: { orgId: string }) {
               </div>
 
               {/* 每日请求数 */}
+              <div className="flex justify-between gap-3 text-xs text-slate-400">
+                <span>{t("swiftSynchronizationRequests")}</span>
+                <span className="font-mono">{usage.synchronization.today.toLocaleString()}</span>
+              </div>
               <div>
                 <p className="text-xs text-slate-500 mb-2">{t("dailyRequests")}</p>
                 {usage.daily.length === 0 ? (

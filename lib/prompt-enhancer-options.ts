@@ -1,5 +1,18 @@
 export type PromptEnhancerProvider = "openai-compatible" | "openai-responses" | "anthropic" | "gemini";
 
+export const PROMPT_ENHANCER_PROVIDER_PRESETS: Record<PromptEnhancerProvider, { label: string; baseUrl: string }> = {
+  "openai-compatible": { label: "OpenAI Chat Completions", baseUrl: "" },
+  "openai-responses": { label: "OpenAI Responses", baseUrl: "" },
+  anthropic: { label: "Anthropic Messages", baseUrl: "https://api.anthropic.com/v1/messages" },
+  gemini: { label: "Gemini GenerateContent", baseUrl: "https://generativelanguage.googleapis.com/v1beta/models" },
+};
+
+export function promptProviderBaseUrl(current: string, provider: PromptEnhancerProvider): string {
+  const normalize = (url: string) => url.trim().replace(/\/+$/, "");
+  return Object.values(PROMPT_ENHANCER_PROVIDER_PRESETS).some((preset) => normalize(preset.baseUrl) === normalize(current))
+    ? PROMPT_ENHANCER_PROVIDER_PRESETS[provider].baseUrl : current;
+}
+
 export const PROMPT_REASONING_MODES = [
   "provider-default",
   "effort-none", "effort-minimal", "effort-low", "effort-medium", "effort-high", "effort-xhigh", "effort-max",

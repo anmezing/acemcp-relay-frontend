@@ -62,14 +62,29 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("admin model config routes", () => {
+  it("proxies operation status independently of live LCE configuration reads", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ operation: null })));
+    const response = await GET(new Request("http://localhost/api/admin/model-config?operation=latest"));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ operation: null });
+    expect(platform).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls[0][0]).toContain("?operation=latest");
+  });
+  it("preserves accepted recovery responses", async () => {
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ operation: { id: "original" } }), { status: 202 }));
+    const body = { action: "recover", operationId: "f223a6b2-a315-4c52-b40b-5dc43df041ba" };
+    const response = await POST(request(JSON.stringify(body)));
+    expect(response.status).toBe(202);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual(body);
+  });
   it("requires admin access", async () => {
     admin.mockResolvedValueOnce(null);
-    expect((await GET()).status).toBe(403);
+    expect((await GET(new Request("http://localhost/api/admin/model-config"))).status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("reads live config and forwards writes with console authentication", async () => {
-    expect((await GET()).status).toBe(200);
+    expect((await GET(new Request("http://localhost/api/admin/model-config"))).status).toBe(200);
     const patch = {
       section: "promptEnhancer",
       config: { promptEnhancer: { enabled: true, model: "gpt-5-mini" } },
@@ -113,7 +128,7 @@ describe("admin model config routes", () => {
   it("also bounds a stalled response body", async () => {
     vi.useFakeTimers();
     fetchMock.mockResolvedValueOnce(new Response(new ReadableStream({ start() {} })));
-    const response = POST(request("{}"));
+    const response = POST(request(JSON.stringify({ section: "promptEnhancer", config: { promptEnhancer: {} } })));
     await vi.advanceTimersByTimeAsync(MODEL_CONFIG_SAVE_PROXY_TIMEOUT_MS);
     expect((await response).status).toBe(504);
   });
@@ -124,7 +139,7 @@ describe("admin model config routes", () => {
     const pending = new Promise<void>((resolve) => { started = resolve; });
     fetchMock.mockImplementationOnce(() => { started(); return new Promise(() => {}); });
     const response = POST(new Request("http://localhost/api/admin/model-config", {
-      method: "POST", body: "{}", signal: controller.signal,
+      method: "POST", body: JSON.stringify({ section: "promptEnhancer", config: { promptEnhancer: {} } }), signal: controller.signal,
     }));
     await pending;
     controller.abort();

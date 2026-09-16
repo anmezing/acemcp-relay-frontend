@@ -19,8 +19,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RERANK_PROVIDER_PRESETS, type RerankProvider } from "@/lib/rerank-providers";
 import { cn } from "@/lib/utils";
-import { promptReasoningModes, type PromptReasoningMode } from "@/lib/prompt-enhancer-options";
+import { promptReasoningModes, promptProviderBaseUrl, PROMPT_ENHANCER_PROVIDER_PRESETS, type PromptReasoningMode } from "@/lib/prompt-enhancer-options";
 import { useTranslations } from "next-intl";
+import { isModelConfigOperationActive, parseModelConfigOperation, requestModelConfigOperation, type ModelConfigOperation } from "@/lib/model-config-operation";
 import {
   MODEL_CONFIG_DISCOVERY_TIMEOUT_MS,
   MODEL_CONFIG_READ_TIMEOUT_MS,
@@ -73,12 +74,6 @@ const inputClass =
 const VOYAGE_EMBEDDING_URL = "https://api.voyageai.com/v1/embeddings";
 const VOYAGE_EMBEDDING_MODELS = ["voyage-code-3"] as const;
 const CLOUD_INDEX_DIMENSIONS = 1024;
-const PROMPT_ENHANCER_PROVIDER_PRESETS: Record<PromptEnhancerProvider, { label: string; baseUrl: string }> = {
-  "openai-compatible": { label: "OpenAI Chat Completions", baseUrl: "" },
-  "openai-responses": { label: "OpenAI Responses", baseUrl: "" },
-  anthropic: { label: "Anthropic Messages", baseUrl: "https://api.anthropic.com/v1/messages" },
-  gemini: { label: "Gemini GenerateContent", baseUrl: "https://generativelanguage.googleapis.com/v1beta/models" },
-};
 
 function toForm(config: ModelView): ModelForm {
   const embeddings = { ...config.embeddings };
@@ -202,7 +197,10 @@ export function AdminModelsTab() {
   const [confirmReset, setConfirmReset] = useState(false);
   const lifecycle = useRef<AbortController | null>(null);
   const saveInFlight = useRef(false);
-  const busy = savingKind !== null;
+  const [operation, setOperation] = useState<ModelConfigOperation | null>(null);
+  const operationRef = useRef<ModelConfigOperation | null>(null);
+  const [operationReady, setOperationReady] = useState(false);
+  const busy = savingKind !== null || !operationReady || isModelConfigOperationActive(operation);
 
   const load = useCallback(async (signal?: AbortSignal, clearNotice = true) => {
     try {
@@ -222,6 +220,7 @@ export function AdminModelsTab() {
       setRerankModels([]);
       setPromptEnhancerModels([]);
       if (clearNotice) setNotice("");
+      return true;
     } catch (error) {
       if (signal?.aborted) return;
       setNotice(error instanceof ModelConfigRequestTimeoutError
@@ -242,6 +241,61 @@ export function AdminModelsTab() {
       controller.abort();
     };
   }, [load]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    let inFlight = false;
+    const poll = async () => {
+      if (controller.signal.aborted || document.hidden || inFlight) return;
+      inFlight = true;
+      const previous = operationRef.current;
+      try {
+        const next = await requestModelConfigOperation("latest", controller.signal);
+        if (controller.signal.aborted) return;
+        // A status read started before submission must not clear the new task.
+        if (operationRef.current !== previous) return;
+        operationRef.current = next;
+        setOperation(next);
+        setOperationReady(true);
+        if (next?.status === "succeeded" && previous?.id === next.id && isModelConfigOperationActive(previous)) {
+          if (await load(controller.signal, false)) {
+            setNotice(t("modelConfigOperationCompleted"));
+            setNoticeOk(true);
+          }
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setOperationReady(false);
+          setNotice(t("modelConfigOperationStatusUnavailable"));
+          setNoticeOk(false);
+        }
+      } finally {
+        inFlight = false;
+        if (!controller.signal.aborted && !document.hidden) timer = setTimeout(() => void poll(),
+          isModelConfigOperationActive(operationRef.current) && !operationRef.current?.recovery_required ? 3000 : 30000);
+      }
+    };
+    const visibility = () => { clearTimeout(timer); if (!document.hidden) void poll(); };
+    document.addEventListener("visibilitychange", visibility);
+    void poll();
+    return () => { controller.abort(); clearTimeout(timer); document.removeEventListener("visibilitychange", visibility); };
+  }, [load, t, operation?.id, operation?.recovery_required]);
+
+  const recoverOperation = async () => {
+    const current = operationRef.current;
+    if (!current?.recovery_required || saveInFlight.current) return;
+    saveInFlight.current = true;
+    try {
+      const resumed = await requestModelConfigOperation(current.id, lifecycle.current?.signal, true);
+      if (lifecycle.current?.signal.aborted) return;
+      operationRef.current = resumed;
+      setOperation(resumed);
+      setOperationReady(true);
+    } catch {
+      if (!lifecycle.current?.signal.aborted) { setNotice(t("modelConfigOperationStatusUnavailable")); setNoticeOk(false); }
+    } finally { saveInFlight.current = false; }
+  };
 
   const updateEmbeddings = useCallback((patch: Partial<ModelForm["embeddings"]>) => {
     setForm((current) => current && {
@@ -341,7 +395,7 @@ export function AdminModelsTab() {
   }, [form, updateEmbeddings, updatePromptEnhancer, updateRerank, t]);
 
   const submit = useCallback(async (kind: ModelKind, confirmEmbeddingReset: boolean) => {
-    if (!form || saveInFlight.current) return;
+    if (!form || saveInFlight.current || !operationReady || isModelConfigOperationActive(operationRef.current)) return;
     saveInFlight.current = true;
     setSavingKind(kind);
     setNotice("");
@@ -367,6 +421,16 @@ export function AdminModelsTab() {
         return;
       }
       if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+      if (response.status === 202) {
+        const accepted = parseModelConfigOperation(data);
+        if (!accepted) throw new Error(t("invalidModelConfigurationResponse"));
+        operationRef.current = accepted;
+        setOperation(accepted);
+        setConfirmReset(false);
+        setNotice(t("modelConfigOperationPending"));
+        setNoticeOk(true);
+        return;
+      }
       if (!data.config) throw new Error(t("invalidModelConfigurationResponse"));
       setConfirmReset(false);
       const savedView = data.config as ModelView;
@@ -391,13 +455,14 @@ export function AdminModelsTab() {
       const reason = error instanceof ModelConfigRequestTimeoutError
         ? t("modelConfigurationSaveTimedOut")
         : error instanceof Error ? error.message : String(error);
+      setOperationReady(false);
       setNotice(t("failedToSave", {p0: reason}));
       setNoticeOk(false);
     } finally {
       saveInFlight.current = false;
       setSavingKind(null);
     }
-  }, [form, t]);
+  }, [form, operationReady, t]);
 
   const validationErrors = useMemo<Record<ModelKind, string>>(() => {
     const empty = { embeddings: "", rerank: "", promptEnhancer: "" };
@@ -802,9 +867,9 @@ export function AdminModelsTab() {
                       reasoningMode: promptReasoningModes(provider).includes(form.promptEnhancer.reasoningMode ?? "provider-default")
                         ? form.promptEnhancer.reasoningMode ?? "provider-default" : "provider-default",
                       jsonMode: provider === "openai-compatible" && form.promptEnhancer.jsonMode === true,
-                      baseUrl: form.promptEnhancer.baseUrl.trim()
-                        ? form.promptEnhancer.baseUrl
-                        : PROMPT_ENHANCER_PROVIDER_PRESETS[provider].baseUrl,
+                      baseUrl: promptProviderBaseUrl(form.promptEnhancer.baseUrl, provider),
+                      apiKey: "",
+                      model: "",
                     });
                   }}
                   className={cn(inputClass, !form.promptEnhancer.enabled && "cursor-not-allowed text-slate-600")}
@@ -928,6 +993,14 @@ export function AdminModelsTab() {
         </Card>
       </div>
 
+      {operation && (isModelConfigOperationActive(operation) || operation.status === "rejected") && (
+        <div role="status" className="flex items-center gap-2 text-xs text-amber-300">
+          <span className="min-w-0 break-words">{operation.recovery_required ? t("modelConfigOperationRecovery") : operation.status === "rejected" ? t("modelConfigOperationRejected") : t("modelConfigOperationPending")}</span>
+          {operation.recovery_required && <Button variant="ghost" size="sm" className="h-8 w-8 shrink-0 p-0" onClick={() => void recoverOperation()} title={t("modelConfigOperationResume")} aria-label={t("modelConfigOperationResume")}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>}
+        </div>
+      )}
       {notice && (
         <p className={cn("text-xs", noticeOk ? "text-emerald-400" : "text-red-400")}>
           {notice}

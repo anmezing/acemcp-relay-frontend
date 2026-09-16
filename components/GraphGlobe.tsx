@@ -264,6 +264,7 @@ export function GraphGlobe() {
     const timer = new THREE.Timer();
     timer.connect(document);
     let animationFrame = 0;
+    let inViewport = true;
 
     const resize = () => {
       const width = mount.clientWidth;
@@ -279,6 +280,8 @@ export function GraphGlobe() {
     resize();
 
     const animate = (timestamp: number) => {
+      animationFrame = 0;
+      if (!inViewport || document.hidden) return;
       animationFrame = window.requestAnimationFrame(animate);
       timer.update(timestamp);
       const elapsed = timer.getElapsed();
@@ -298,10 +301,26 @@ export function GraphGlobe() {
       renderer.render(scene, camera);
     };
 
-    animationFrame = window.requestAnimationFrame(animate);
+    const updateAnimation = () => {
+      if (!inViewport || document.hidden) {
+        window.cancelAnimationFrame(animationFrame);
+        animationFrame = 0;
+      } else if (!animationFrame) {
+        animationFrame = window.requestAnimationFrame(animate);
+      }
+    };
+    const intersectionObserver = new IntersectionObserver(([entry]) => {
+      inViewport = entry.isIntersecting;
+      updateAnimation();
+    });
+    intersectionObserver.observe(mount);
+    document.addEventListener("visibilitychange", updateAnimation);
+    updateAnimation();
 
     return () => {
       window.cancelAnimationFrame(animationFrame);
+      intersectionObserver.disconnect();
+      document.removeEventListener("visibilitychange", updateAnimation);
       timer.dispose();
       resizeObserver.disconnect();
       controls.dispose();

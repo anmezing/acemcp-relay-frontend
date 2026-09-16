@@ -252,11 +252,11 @@ describe("getOrgUsage（组织用量聚合）", () => {
   const mockUsageQueries = (quotaRows: QuotaRow[]) => {
     mocks.query.mockImplementation(async (sql: string) => {
       if (sql.includes("org_effective_quota")) return { rows: quotaRows };
-      if (sql.includes("AS used")) return { rows: [{ used: "7" }] };
+      if (sql.includes("AS used")) return { rows: [{ used: "7", sync_count: "11" }] };
       if (sql.includes("LEFT JOIN \"user\"")) {
         return { rows: [{ user_id: "u1", email: "a@b.dev", name: "A", count: "3" }] };
       }
-      if (sql.includes("to_char")) return { rows: [{ date: "2026-08-01", count: "5" }] };
+      if (sql.includes("to_char")) return { rows: [{ date: "2026-08-01", count: "5", sync_count: "8" }] };
       return { rows: [] };
     });
   };
@@ -271,6 +271,7 @@ describe("getOrgUsage（组织用量聚合）", () => {
 
     const usage = await getOrgUsage("o1");
     expect(usage.daily).toEqual([{ date: "2026-08-01", count: 5 }]);
+    expect(usage.synchronization).toEqual({ today: 11, daily: [{ date: "2026-08-01", count: 8 }] });
     expect(usage.topMembers).toEqual([
       { user_id: "u1", email: "a@b.dev", name: "A", count: 3 },
     ]);
@@ -289,7 +290,8 @@ describe("getOrgUsage（组织用量聚合）", () => {
     for (const [sql, params] of logQueries) {
       expect(String(sql)).toMatch(/tenant_id = \$1/);
       expect(String(sql)).toMatch(/INTERVAL '\d+ days'/);
-      expect(params).toEqual(["o1"]);
+      expect(params).toEqual(["o1", "/mcp/tools/call/codebase_swift_sync"]);
+      expect(String(sql)).toContain("request_path IS DISTINCT FROM $2");
     }
   });
 

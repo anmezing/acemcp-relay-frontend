@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   isActiveRootDeletion,
+  canRetryRootDeletion,
   isRootDeletion,
   mergeRootDeletions,
   readRootDeletions,
+  readRootDeletionList,
   reconcileRootDeletions,
   requestRootDeletionJson,
   startRootDeletionMonitor,
@@ -28,6 +30,33 @@ afterEach(() => {
 });
 
 describe("root deletion state", () => {
+  it("allows explicit recovery without releasing the active fence", () => {
+    const paused = deletion({ status: "running", recovery_required: true, attempt_count: 5 });
+    expect(isRootDeletion(paused)).toBe(true);
+    expect(isActiveRootDeletion(paused)).toBe(true);
+    expect(canRetryRootDeletion(paused)).toBe(true);
+    expect(canRetryRootDeletion(deletion({ status: "running" }))).toBe(false);
+    expect(isRootDeletion({ ...paused, recovery_required: "yes" })).toBe(false);
+    expect(isRootDeletion({ ...paused, status: "succeeded" })).toBe(false);
+    const resumed = { ...paused, recovery_required: false, attempt_count: 0, updated_at: "2026-09-09T00:00:00Z" };
+    expect(mergeRootDeletions({ "root-1": paused }, [resumed])["root-1"]).toEqual(resumed);
+    expect(mergeRootDeletions({ "root-1": resumed }, [paused])["root-1"]).toEqual(resumed);
+  });
+  it("retains uncertain per-root fences while accepting other valid records", () => {
+    const previous = { "root-1": deletion({ status: "running" }) };
+    const completed = deletion({ root_id: "root-2", status: "succeeded" });
+    const list = readRootDeletionList({ deletions: [{ root_id: "root-1", status: "future-state" }, completed] })!;
+    expect(list.jobs).toEqual([completed]);
+    expect(list.uncertainRoots).toEqual(new Set(["root-1"]));
+    expect(reconcileRootDeletions(previous, list.jobs, list.uncertainRoots, list.unscoped)["root-1"]).toEqual(previous["root-1"]);
+    const unscoped = readRootDeletionList({ deletions: [{}] })!;
+    expect(reconcileRootDeletions(previous, unscoped.jobs, unscoped.uncertainRoots, unscoped.unscoped)).toEqual(previous);
+  });
+  it("rejects conflicting duplicate root observations", () => {
+    const list = readRootDeletionList({ deletions: [deletion(), deletion({ status: "succeeded" })] })!;
+    expect(list.jobs).toEqual([]);
+    expect(list.uncertainRoots.has("root-1")).toBe(true);
+  });
   it("requires an explicit job contract, not a legacy deletion response", () => {
     expect(isRootDeletion(deletion())).toBe(true);
     expect(isRootDeletion({ deleted: true, deleted_files: 5 })).toBe(false);
@@ -183,6 +212,26 @@ describe("root deletion monitoring", () => {
 });
 
 describe("root deletion request deadline", () => {
+  it("pauses hidden pages and refreshes immediately on return", async () => {
+    vi.useFakeTimers();
+    const visibility = Object.assign(new EventTarget(), { hidden: true });
+    const load = vi.fn(async () => []);
+    const monitor = startRootDeletionMonitor({ load, visibility, onUpdate: vi.fn(), onError: vi.fn(), hasActive: () => true });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(load).not.toHaveBeenCalled();
+    visibility.hidden = false;
+    visibility.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(load).toHaveBeenCalledOnce();
+    visibility.hidden = true;
+    visibility.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(load).toHaveBeenCalledOnce();
+    monitor.stop();
+    visibility.hidden = false;
+    visibility.dispatchEvent(new Event("visibilitychange"));
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it("aborts requests after 12 seconds, below the edge proxy timeout", async () => {
     vi.useFakeTimers();
     vi.stubGlobal("fetch", vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {

@@ -61,6 +61,7 @@ import { CurrentVersionTab } from "@/components/CurrentVersionTab";
 import { useLocale, useTranslations } from "next-intl";
 import {
   hasBuildingIndexRoot,
+  isRootIndexAvailable,
   resolveIndexPollingPolicy,
   resolveRootIndexActions,
   resolveRootIndexCounts,
@@ -80,9 +81,10 @@ import {
 } from "@/lib/index-job-phase";
 import {
   isActiveRootDeletion,
+  canRetryRootDeletion,
   isRootDeletion,
   mergeRootDeletions,
-  readRootDeletions,
+  readRootDeletionList,
   reconcileRootDeletions,
   requestRootDeletionJson,
   startRootDeletionMonitor,
@@ -519,6 +521,7 @@ function ConsoleContent({ session, isPending }: {
   const [rootDeletions, setRootDeletions] = useState<RootDeletions>(() => Object.create(null));
   const rootDeletionsRef = useRef<RootDeletions>(Object.create(null));
   const [rootDeletionsReady, setRootDeletionsReady] = useState(false);
+  const [uncertainDeletionRoots, setUncertainDeletionRoots] = useState<Set<string>>(() => new Set());
   const [rootDeletionStatusError, setRootDeletionStatusError] = useState<string | null>(null);
   const rootDeletionMonitorRef = useRef<ReturnType<typeof startRootDeletionMonitor> | null>(null);
   const rootActionControllerRef = useRef<AbortController | null>(null);
@@ -704,8 +707,10 @@ function ConsoleContent({ session, isPending }: {
   const handleRootManagementAction = useCallback(async () => {
     if (!rootPendingAction || rootActionControllerRef.current) return;
     const { kind, root } = rootPendingAction;
-    if (!rootDeletionsReady || isActiveRootDeletion(rootDeletionsRef.current[root.root_id])) return;
     const dismissing = kind === "dismiss_failure";
+    const deletion = rootDeletionsRef.current[root.root_id];
+    if (!rootDeletionsReady || uncertainDeletionRoots.has(root.root_id) ||
+      (isActiveRootDeletion(deletion) && (dismissing || !canRetryRootDeletion(deletion)))) return;
     const orgContext = rootsOrgRef.current;
     const version = indexContextVersionRef.current;
     const controller = new AbortController();
@@ -722,6 +727,7 @@ function ConsoleContent({ session, isPending }: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           root_id: root.root_id,
+          ...(!dismissing && deletion?.recovery_required ? { retry_job_id: deletion.id } : {}),
           ...(orgContext ? { org_id: orgContext.id } : {}),
         }),
       }, controller.signal);
@@ -773,7 +779,7 @@ function ConsoleContent({ session, isPending }: {
         rootDeletionMonitorRef.current?.refresh();
       }
     }
-  }, [rootPendingAction, rootDeletionsReady, fetchRoots, fetchTenantStats, t]);
+  }, [rootPendingAction, rootDeletionsReady, uncertainDeletionRoots, fetchRoots, fetchTenantStats, t]);
 
   useEffect(() => {
     return () => {
@@ -797,27 +803,29 @@ function ConsoleContent({ session, isPending }: {
           ? `/api/roots/delete?orgId=${encodeURIComponent(orgContext.id)}`
           : "/api/roots/delete";
         const { ok, data } = await requestRootDeletionJson(url, {}, signal);
-        const jobs = ok ? readRootDeletions(data) : null;
+        const jobs = ok ? readRootDeletionList(data) : null;
         if (!jobs) throw new Error(t("deletionStatusUnavailable"));
         return jobs;
       },
-      onUpdate: (jobs) => {
+      onUpdate: (list) => {
         if (!isCurrent() || requestSubmissionVersion !== rootDeletionSubmissionVersionRef.current || rootActionControllerRef.current) return;
         const previous = rootDeletionsRef.current;
-        const next = reconcileRootDeletions(previous, jobs);
+        const next = reconcileRootDeletions(previous, list.jobs, list.uncertainRoots, list.unscoped);
         const expiredActive = Object.values(previous).some((job) => isActiveRootDeletion(job) && !next[job.root_id]);
         const completed = Object.values(next).filter((job) =>
           job.status === "succeeded" && previous[job.root_id]?.id === job.id && isActiveRootDeletion(previous[job.root_id]));
         rootDeletionsRef.current = next;
         setRootDeletions(next);
-        setRootDeletionsReady(true);
-        setRootDeletionStatusError(null);
+        setRootDeletionsReady(!list.unscoped);
+        setUncertainDeletionRoots(list.uncertainRoots);
+        setRootDeletionStatusError(list.unscoped || list.uncertainRoots.size ? t("deletionStatusUnavailable") : null);
         if (completed.length > 0) {
           setRootActionResult({
             success: true,
             message: t("indexDeleted", { count: completed.reduce((total, job) => total + job.deleted_files, 0) }),
           });
         }
+        if (expiredActive) setRootActionResult({ success: false, message: t("deletionResultExpired") });
         if (completed.length > 0 || expiredActive) {
           void Promise.all([fetchRoots(true, orgContext), fetchTenantStats(true, orgContext)]);
         }
@@ -825,7 +833,7 @@ function ConsoleContent({ session, isPending }: {
       onError: () => {
         if (isCurrent()) setRootDeletionStatusError(t("deletionStatusUnavailable"));
       },
-      hasActive: () => Object.values(rootDeletionsRef.current).some(isActiveRootDeletion),
+      hasActive: () => Object.values(rootDeletionsRef.current).some((job) => isActiveRootDeletion(job) && !job.recovery_required),
     });
     rootDeletionMonitorRef.current = monitor;
     return () => {
@@ -1913,6 +1921,7 @@ function ConsoleContent({ session, isPending }: {
                         setRootsOrg(org);
                         setRootDeletions(rootDeletionsRef.current);
                         setRootDeletionsReady(false);
+                        setUncertainDeletionRoots(new Set());
                         setRootDeletionStatusError(null);
                         setRootPendingAction(null);
                         setRootActionLoading(false);
@@ -2091,6 +2100,7 @@ function ConsoleContent({ session, isPending }: {
                         error={rootsError}
                         actionResult={rootActionResult}
                         deletions={rootDeletions}
+                        uncertainRoots={uncertainDeletionRoots}
                         deletionStatusError={rootDeletionStatusError}
                         managementDisabled={!rootDeletionsReady}
                         activeOrg={rootsOrg}
@@ -2133,7 +2143,7 @@ function ConsoleContent({ session, isPending }: {
                                 variant="warning"
                                 size="sm"
                                 onClick={() => setShowClearConfirm(true)}
-                                disabled={clearLoading || !rootDeletionsReady || Object.values(rootDeletions).some(isActiveRootDeletion) || (!!rootsOrg && rootsOrgRole !== "owner")}
+                                disabled={clearLoading || !rootDeletionsReady || uncertainDeletionRoots.size > 0 || Object.values(rootDeletions).some(isActiveRootDeletion) || (!!rootsOrg && rootsOrgRole !== "owner")}
                                 className="shrink-0"
                               >
                                 <Trash2 className="w-4 h-4 mr-1" />
@@ -2753,8 +2763,7 @@ function RootIndexStatus({ root }: { root: RelayRoot }) {
   const state = resolveRootIndexState(root);
   const progress = resolveRootIndexProgress(root);
   const counts = resolveRootIndexCounts(root);
-  const indexAvailable =
-    (root.index_available ?? Boolean(root.indexed_at)) && root.file_count > 0;
+  const indexAvailable = isRootIndexAvailable(root);
   const waitingForClient = state === "building" && isIndexJobWaitingForClient(root.index_phase);
   const [diagnosticCopied, setDiagnosticCopied] = useState(false);
   const stateLabel =
@@ -2955,7 +2964,7 @@ function RootManagementButtons({
   const requiresRootReset =
     state === "failed" && resolveIndexFailurePresentation(root).recovery === "reset_root";
   const actions = resolveRootIndexActions(root, canManage, requiresRootReset);
-  const retryingDeletion = deletion?.status === "failed";
+  const retryingDeletion = canRetryRootDeletion(deletion);
   const canDelete = actions.canDeleteIndex || (canManage && retryingDeletion);
   const deleteLabel = retryingDeletion ? t("retryDeletion") : t("deleteBranchIndex", {
     workspace: root.workspace_id,
@@ -2984,7 +2993,7 @@ function RootManagementButtons({
           variant="ghost"
           size="sm"
           onClick={() => onDelete(root)}
-          disabled={disabled || isActiveRootDeletion(deletion)}
+          disabled={disabled || (isActiveRootDeletion(deletion) && !retryingDeletion)}
           className={cn(
             "h-8 text-slate-500 hover:bg-red-500/10 hover:text-red-400",
             requiresRootReset ? "px-2" : "w-8 p-0",
@@ -3005,7 +3014,7 @@ function RootManagementButtons({
 function RootDeletionStatus({ deletion }: { deletion: RootDeletion | undefined }) {
   const t = useTranslations("Console");
   if (!deletion || deletion.status === "succeeded") return null;
-  const active = isActiveRootDeletion(deletion);
+  const active = isActiveRootDeletion(deletion) && !deletion.recovery_required;
   return (
     <div
       className={cn("mt-2 text-xs", active ? "text-amber-300" : "text-red-400")}
@@ -3016,7 +3025,7 @@ function RootDeletionStatus({ deletion }: { deletion: RootDeletion | undefined }
     >
       <span className="inline-flex items-center gap-1.5">
         {active ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
-        {deletion.status === "queued" ? t("deletionQueued") : active ? t("deleting") : t("deleteFailed")}
+        {deletion.recovery_required ? t("deletionRecoveryRequired") : deletion.status === "queued" ? t("deletionQueued") : active ? t("deleting") : t("deleteFailed")}
       </span>
       {deletion.error && <p className="mt-1 break-words [overflow-wrap:anywhere]" title={deletion.error}>{deletion.error}</p>}
     </div>
@@ -3031,6 +3040,7 @@ function RootsSection({
   error,
   actionResult,
   deletions,
+  uncertainRoots,
   deletionStatusError,
   managementDisabled,
   activeOrg,
@@ -3045,6 +3055,7 @@ function RootsSection({
   error: string | null;
   actionResult: { success: boolean; message: string } | null;
   deletions: RootDeletions;
+  uncertainRoots: ReadonlySet<string>;
   deletionStatusError: string | null;
   managementDisabled: boolean;
   activeOrg: { id: string; name: string } | null;
@@ -3112,8 +3123,8 @@ function RootsSection({
             <p className="truncate text-xs font-mono text-slate-400" title={job.root_id}>{job.root_id}</p>
             <RootDeletionStatus deletion={job} />
           </div>
-          {job.status === "failed" && canManage && (
-            <Button variant="ghost" size="sm" disabled={managementDisabled} onClick={() => onRetryDeletion(job)} title={t("retryDeletion")} aria-label={t("retryDeletion")} className="h-8 w-8 shrink-0 p-0 text-red-400">
+          {canRetryRootDeletion(job) && canManage && (
+            <Button variant="ghost" size="sm" disabled={managementDisabled || uncertainRoots.has(job.root_id)} onClick={() => onRetryDeletion(job)} title={t("retryDeletion")} aria-label={t("retryDeletion")} className="h-8 w-8 shrink-0 p-0 text-red-400">
               <RefreshCw className="h-4 w-4" />
             </Button>
           )}
@@ -3171,7 +3182,7 @@ function RootsSection({
                     <RootManagementButtons
                       root={group.entries[0].root}
                       canManage={canManage}
-                      disabled={managementDisabled}
+                      disabled={managementDisabled || uncertainRoots.has(group.entries[0].root.root_id)}
                       deletion={deletions[group.entries[0].root.root_id]}
                       onDismissFailure={onDismissFailure}
                       onDelete={onDelete}
@@ -3218,7 +3229,7 @@ function RootsSection({
                         <RootManagementButtons
                           root={root}
                           canManage={canManage}
-                          disabled={managementDisabled}
+                          disabled={managementDisabled || uncertainRoots.has(root.root_id)}
                           deletion={deletions[root.root_id]}
                           compact
                           onDismissFailure={onDismissFailure}

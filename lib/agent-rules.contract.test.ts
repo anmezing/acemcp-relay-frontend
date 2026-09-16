@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
+import { SWIFT_SYNC_REQUEST_PATH } from "./org-db";
+import { parseModelConfigOperation } from "./model-config-operation";
+import { isRootDeletion } from "./root-deletions";
 import {
   AGENT_RULES_CLOUD,
   AGENT_RULES_CLOUD_EN,
@@ -30,7 +33,7 @@ describe(
 
     it("钉住无成本重复索引结果", () => {
       const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
-      expect(contract.schemaVersion).toBe("1.10");
+      expect(contract.schemaVersion).toBe("1.11");
       expect(contract.codebaseIndex.startOutcomes).toEqual({
         created: {
           requiredFields: ["job"],
@@ -49,6 +52,23 @@ describe(
         },
         busyRetryPolicy: "client_waits_without_consuming_failure_retry_budget",
       });
+    });
+
+    it("pins synchronization accounting and durable operation states", () => {
+      const contract = JSON.parse(fs.readFileSync(contractPath, "utf8"));
+      expect(contract.swiftSync.accounting.usageLogPath).toBe(SWIFT_SYNC_REQUEST_PATH);
+      expect(contract.swiftSync.accounting.interactiveRequestQuota).toBe(false);
+      for (const status of contract.platformConfiguration.states) {
+        expect(parseModelConfigOperation({ operation: {
+          id: "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa", section: "embeddings", embeddingChanged: true,
+          status, attempt_count: 1, recovery_required: false, updated_at: new Date().toISOString(),
+        } })?.status).toBe(status);
+      }
+      for (const status of contract.rootDeletions.states) {
+        expect(isRootDeletion({ id: "job", root_id: "root", status, deleted_files: 0,
+          created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+          attempt_count: 0, recovery_required: false })).toBe(true);
+      }
     });
 
     it("钉住索引失败诊断原子契约和错误响应字段", () => {

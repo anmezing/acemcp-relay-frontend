@@ -14,6 +14,7 @@ import pool, {
 // 用量统计里的“今天”统一按 Asia/Shanghai 自然日，与 relay 配额计数、
 // admin-db 统计口径一致。
 const TZ = "Asia/Shanghai";
+export const SWIFT_SYNC_REQUEST_PATH = "/mcp/tools/call/codebase_swift_sync";
 
 export type OrgRole = "owner" | "member";
 
@@ -424,6 +425,7 @@ export interface OrgUsage {
   topMembers: { user_id: string; email: string | null; name: string | null; count: number }[];
   // limit 是 relay 实际执行的最终额度；0 = 不限。
   today: { used: number; limit: number; source: OrgQuotaSource; planName: string | null };
+  synchronization: { today: number; daily: { date: string; count: number }[] };
 }
 
 // 组织近 30 天用量。所有 request_logs 查询都带 tenant_id 等值 + 时间窗，
@@ -433,34 +435,40 @@ export async function getOrgUsage(orgId: string): Promise<OrgUsage> {
   try {
     const daily = await client.query(
       `SELECT to_char((request_timestamp AT TIME ZONE '${TZ}')::date, 'YYYY-MM-DD') AS date,
-              COUNT(*) AS count
+              COUNT(*) FILTER (WHERE request_path IS DISTINCT FROM $2) AS count,
+              COUNT(*) FILTER (WHERE request_path = $2) AS sync_count
        FROM request_logs
        WHERE tenant_id = $1 AND request_timestamp > NOW() - INTERVAL '30 days'
        GROUP BY 1 ORDER BY 1 DESC`,
-      [orgId]
+      [orgId, SWIFT_SYNC_REQUEST_PATH]
     );
     const topMembers = await client.query(
-      `SELECT rl.user_id, u.email, u.name, COUNT(*) AS count
+      `SELECT rl.user_id, u.email, u.name, COUNT(*) FILTER (WHERE rl.request_path IS DISTINCT FROM $2) AS count
        FROM request_logs rl
        LEFT JOIN "user" u ON u.id = rl.user_id
        WHERE rl.tenant_id = $1 AND rl.request_timestamp > NOW() - INTERVAL '30 days'
        GROUP BY rl.user_id, u.email, u.name
        ORDER BY 4 DESC LIMIT 10`,
-      [orgId]
+      [orgId, SWIFT_SYNC_REQUEST_PATH]
     );
     // 时区换算条件不可走索引范围扫描，先用 2 天窗口收敛再精确过滤
     const today = await client.query(
-      `SELECT COUNT(*) AS used
+      `SELECT COUNT(*) FILTER (WHERE request_path IS DISTINCT FROM $2) AS used,
+              COUNT(*) FILTER (WHERE request_path = $2) AS sync_count
        FROM request_logs
        WHERE tenant_id = $1
          AND request_timestamp > NOW() - INTERVAL '2 days'
          AND (request_timestamp AT TIME ZONE '${TZ}')::date = (NOW() AT TIME ZONE '${TZ}')::date`,
-      [orgId]
+      [orgId, SWIFT_SYNC_REQUEST_PATH]
     );
     const quota = await client.query(ORG_EFFECTIVE_QUOTA_SQL, [orgId]);
     const effectiveQuota = resolveOrgQuota(quota.rows[0]);
     return {
       daily: daily.rows.map((r) => ({ date: r.date, count: parseInt(r.count) })),
+      synchronization: {
+        today: Number(today.rows[0]?.sync_count ?? 0),
+        daily: daily.rows.map((r) => ({ date: r.date, count: Number(r.sync_count ?? 0) })),
+      },
       topMembers: topMembers.rows.map((r) => ({
         user_id: r.user_id,
         email: r.email,

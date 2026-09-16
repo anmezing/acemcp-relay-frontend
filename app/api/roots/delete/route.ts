@@ -5,9 +5,16 @@ import { getApiKey, initDB } from "@/lib/db";
 import { ensureOrgApiKey, getMemberRole } from "@/lib/org-db";
 import { getRelayConsoleHeaders } from "@/lib/relay-console";
 import { isRelayConnectionError, RELAY_UNAVAILABLE_RESPONSE } from "@/lib/relay-network-error";
+import { JsonBodyTooLargeError, readBoundedJson } from "@/lib/bounded-json";
 
 const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
 const DELETE_ROOT_TIMEOUT_MS = 10_000;
+
+async function deletionResponse(response: Response, maxBytes: number): Promise<Record<string, unknown>> {
+  const value = await readBoundedJson(response, maxBytes);
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new SyntaxError("Invalid deletion response");
+  return value as Record<string, unknown>;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,13 +43,15 @@ export async function GET(request: NextRequest) {
       signal: AbortSignal.timeout(DELETE_ROOT_TIMEOUT_MS),
       cache: "no-store",
     });
-    const data = await res.json().catch(() => ({}));
+    const data = await deletionResponse(res, 256 * 1024);
     return NextResponse.json(
       res.ok ? data : { error: data.error || "获取删除任务失败" },
       { status: res.status, headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
     console.error("获取删除任务失败:", error);
+    if (error instanceof JsonBodyTooLargeError || error instanceof SyntaxError)
+      return NextResponse.json({ error: "删除服务返回了无效响应" }, { status: 502 });
     if (isRelayConnectionError(error)) {
       return NextResponse.json(RELAY_UNAVAILABLE_RESPONSE, { status: 503 });
     }
@@ -76,6 +85,11 @@ export async function POST(request: Request) {
         ? body.org_id.trim()
         : "";
 
+    const retryJobId = body && typeof body === "object" && "retry_job_id" in body ? body.retry_job_id : undefined;
+    if (retryJobId !== undefined && (typeof retryJobId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(retryJobId))) {
+      return NextResponse.json({ error: "无效的 retry_job_id" }, { status: 400 });
+    }
+
     let apiKey: string;
     if (orgId) {
       const role = await getMemberRole(session.user.id, orgId);
@@ -103,11 +117,11 @@ export async function POST(request: Request) {
         ...getRelayConsoleHeaders(apiKey),
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ root_id: rootId }),
+      body: JSON.stringify({ root_id: rootId, ...(retryJobId !== undefined ? { retry_job_id: retryJobId } : {}) }),
       signal: AbortSignal.timeout(DELETE_ROOT_TIMEOUT_MS),
     });
 
-    const data = await res.json().catch(() => ({}));
+    const data = await deletionResponse(res, 16 * 1024);
 
     if (!res.ok) {
       return NextResponse.json(
@@ -119,6 +133,8 @@ export async function POST(request: Request) {
     return NextResponse.json(data, { status: res.status });
   } catch (error) {
     console.error("删除索引失败:", error);
+    if (error instanceof JsonBodyTooLargeError || error instanceof SyntaxError)
+      return NextResponse.json({ error: "删除服务返回了无效响应" }, { status: 502 });
     if (isRelayConnectionError(error)) {
       return NextResponse.json(RELAY_UNAVAILABLE_RESPONSE, { status: 503 });
     }

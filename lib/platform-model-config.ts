@@ -1,4 +1,5 @@
 import { getRelayAdminHeaders } from "@/lib/relay-console";
+import { readBoundedJson } from "@/lib/bounded-json";
 import { parsePromptEnhancerOptions, type PromptReasoningMode } from "@/lib/prompt-enhancer-options";
 
 const RELAY_URL = process.env.LCE_RELAY_URL || "http://relay:3009";
@@ -157,14 +158,9 @@ export async function fetchPlatformModelConfig(): Promise<PlatformModelConfigVie
     cache: "no-store",
     signal: AbortSignal.timeout(15_000),
   });
-  const text = await response.text();
-  if (Buffer.byteLength(text, "utf8") > MAX_RESPONSE_BYTES) {
-    throw new Error("模型配置响应过大");
-  }
-
   let data: unknown;
   try {
-    data = JSON.parse(text);
+    data = await readBoundedJson(response, MAX_RESPONSE_BYTES);
   } catch {
     throw new Error("模型配置服务返回了无效响应");
   }
