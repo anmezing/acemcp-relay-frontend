@@ -10,6 +10,10 @@ export default function PrivacyPage() {
         <p><I18nText id="privacyParagraph1" /></p>
         <p><I18nText id="privacyParagraph2" /></p>
         <p><I18nText id="privacyParagraph3" /></p>
+        <h2 className="text-xl font-semibold text-white"><I18nText id="privacyCodeUploadTitle" /></h2>
+        <p><I18nText id="privacyCodeUpload1" /></p>
+        <p><I18nText id="privacyCodeUpload2" /></p>
+        <p><I18nText id="privacyCodeUpload3" /></p>
       </article>
     </main>
   );
