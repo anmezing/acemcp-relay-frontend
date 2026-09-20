@@ -9,8 +9,8 @@ export default function TermsPage() {
         <h1 className="text-3xl font-semibold text-white"><I18nText id="termsTitle" /></h1>
         <p><I18nText id="termsParagraph1" /></p>
         <p><I18nText id="termsParagraph2" /></p>
-        <p><I18nText id="termsParagraph3" /></p>
         <p><I18nText id="termsParagraph4" /></p>
+        <p><I18nText id="termsParagraph3" /></p>
       </article>
     </main>
   );
