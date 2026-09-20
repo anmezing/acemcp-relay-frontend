@@ -10,6 +10,7 @@ export default function TermsPage() {
         <p><I18nText id="termsParagraph1" /></p>
         <p><I18nText id="termsParagraph2" /></p>
         <p><I18nText id="termsParagraph3" /></p>
+        <p><I18nText id="termsParagraph4" /></p>
       </article>
     </main>
   );
