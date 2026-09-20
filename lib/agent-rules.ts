@@ -10,7 +10,7 @@ const SERVER_TOOLS = [
 ] as const;
 
 export const NPM_LOCAL_TOOLS = [
-  { name: "codebase_git_context", location: "local", desc: "读取当前工作区的 Git 状态、diff、提交历史、blame 与分支上下文", descEn: "Read Git status, diffs, history, blame, and branch context from the current workspace" },
+  { name: "codebase_git_context", location: "local", desc: "本地执行，读取 Git 仓库的状态、diff、提交历史、blame 与分支上下文", descEn: "Executes locally — reads Git status, diffs, commit history, blame, and branch context" },
   { name: "codebase_review_changes", location: "local", desc: "基于本地变更生成风险、检索计划和测试计划，可按需联动云端检索", descEn: "Review local changes for risks, retrieval plans, and test plans, with optional cloud retrieval" },
 ] as const;
 
