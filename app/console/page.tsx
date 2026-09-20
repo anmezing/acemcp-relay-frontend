@@ -69,6 +69,7 @@ import {
   resolveRootIndexState,
   shouldShowRootsSection,
 } from "@/lib/index-root-status";
+import { topLanguages } from "@/lib/tenant-stats";
 import {
   resolveIndexFailurePresentation,
   type IndexFailureCode,
@@ -2012,7 +2013,7 @@ function ConsoleContent({ session, isPending }: {
                               <div className="mt-3 pt-3 border-t border-white/[0.04]">
                                 <p className="text-slate-500 text-xs mb-2">{t("languages")}</p>
                                 <div className="flex flex-wrap gap-1.5">
-                                  {Object.entries(tenantStats.languages).slice(0, 10).map(([lang, count]) => (
+                                  {topLanguages(tenantStats.languages).map(([lang, count]) => (
                                     <span key={lang} className="text-[11px] px-2 py-0.5 rounded bg-white/[0.04] text-slate-400">
                                       {lang} <span className="text-slate-600">{count}</span>
                                     </span>
