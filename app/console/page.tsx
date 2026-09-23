@@ -2997,15 +2997,18 @@ function RootManagementButtons({
           disabled={disabled || (isActiveRootDeletion(deletion) && !retryingDeletion)}
           className={cn(
             "h-8 text-slate-500 hover:bg-red-500/10 hover:text-red-400",
-            requiresRootReset ? "px-2" : "w-8 p-0",
+            requiresRootReset || retryingDeletion ? "px-2" : "w-8 p-0",
+            retryingDeletion && "text-red-400",
           )}
           aria-label={deleteLabel}
           title={deleteLabel}
         >
           {retryingDeletion
-            ? <RefreshCw className={cn("h-4 w-4", requiresRootReset && "mr-1")} />
+            ? <RefreshCw className="mr-1 h-4 w-4" />
             : <Trash2 className={cn("h-4 w-4", requiresRootReset && "mr-1")} />}
-          {requiresRootReset && <span className="text-[11px]">{t("resetCloudIndex")}</span>}
+          {retryingDeletion
+            ? <span className="text-[11px]">{t("retryDeletion")}</span>
+            : requiresRootReset && <span className="text-[11px]">{t("resetCloudIndex")}</span>}
         </Button>
       )}
     </div>
@@ -3125,8 +3128,9 @@ function RootsSection({
             <RootDeletionStatus deletion={job} />
           </div>
           {canRetryRootDeletion(job) && canManage && (
-            <Button variant="ghost" size="sm" disabled={managementDisabled || uncertainRoots.has(job.root_id)} onClick={() => onRetryDeletion(job)} title={t("retryDeletion")} aria-label={t("retryDeletion")} className="h-8 w-8 shrink-0 p-0 text-red-400">
-              <RefreshCw className="h-4 w-4" />
+            <Button variant="ghost" size="sm" disabled={managementDisabled || uncertainRoots.has(job.root_id)} onClick={() => onRetryDeletion(job)} title={t("retryDeletion")} aria-label={t("retryDeletion")} className="h-8 shrink-0 px-2 text-red-400">
+              <RefreshCw className="mr-1 h-4 w-4" />
+              <span className="text-[11px]">{t("retryDeletion")}</span>
             </Button>
           )}
         </div>
