@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { LceBrand } from "@/components/LceBrand";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { TopNav } from "@/components/TopNav";
+import { useNavigationAccess } from "@/lib/use-navigation-access";
 import type { AppLocale } from "@/i18n/config";
 import { useLocale, useTranslations } from "next-intl";
 
@@ -54,6 +56,7 @@ export default function LeaderboardPage() {
   const t = useTranslations("Leaderboard");
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
+  const navigationAccess = useNavigationAccess(session?.user.id);
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState(false);
   const dateOptions = useMemo(() => getDateOptions(locale), [locale]);
@@ -154,26 +157,7 @@ export default function LeaderboardPage() {
           <Link href="/" className="whitespace-nowrap" aria-label="LCE">
             <LceBrand iconSize={32} textClassName="text-lg sm:text-xl" priority />
           </Link>
-          <nav className="order-3 grid w-full grid-cols-3 sm:order-none sm:flex sm:w-auto sm:items-center sm:gap-1">
-            <Link
-              href="/console"
-              className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
-            >
-              {t("console")}
-            </Link>
-            <Link
-              href="/leaderboard"
-              className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-white border-b-2 border-cyan-400"
-            >
-              {t("leaderboard")}
-            </Link>
-            <Link
-              href="/status"
-              className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
-            >
-              {t("status")}
-            </Link>
-          </nav>
+          <TopNav active="top-leaderboard" access={navigationAccess} />
           <div className="flex items-center gap-1.5">
             <LanguageSwitcher />
             <Button

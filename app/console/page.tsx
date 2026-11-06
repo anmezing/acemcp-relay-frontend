@@ -53,7 +53,9 @@ import { PlansTab } from "@/components/PlansTab";
 import { AdminPlansTab } from "@/components/admin/AdminPlansTab";
 import { isCurrentIndexContext, type IndexOrganizationContext } from "@/lib/index-context";
 import { AdminMenuTab } from "@/components/admin/AdminMenuTab";
-import { DEFAULT_MENU_VISIBILITY, normalizeMenuVisibility, ConsoleMenuId } from "@/lib/menu-config";
+import { DEFAULT_MENU_VISIBILITY, ConsoleMenuId } from "@/lib/menu-config";
+import { useNavigationAccess } from "@/lib/use-navigation-access";
+import { TopNav } from "@/components/TopNav";
 import { LceBrand } from "@/components/LceBrand";
 import { authProviderLabel } from "@/lib/auth-provider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -103,12 +105,6 @@ interface SidebarSection {
   id: "personal" | "data" | "admin" | "system";
   admin?: boolean;
   items: { id: Tab; icon: React.ReactNode }[];
-}
-
-interface NavigationAccess {
-  userId: string;
-  isAdmin: boolean;
-  menuVisibility: Record<ConsoleMenuId, boolean>;
 }
 
 const ALL_SECTIONS: SidebarSection[] = [
@@ -506,7 +502,6 @@ function ConsoleContent({ session, isPending }: {
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [logDetail, setLogDetail] = useState<LogDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [navigationAccess, setNavigationAccess] = useState<NavigationAccess | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearLoading, setClearLoading] = useState(false);
   const [clearResult, setClearResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -843,30 +838,7 @@ function ConsoleContent({ session, isPending }: {
     };
   }, [activeTab, session?.user.id, rootsOrg, fetchRoots, fetchTenantStats, t]);
 
-  const fetchNavigationAccess = useCallback(async (userId: string, signal?: AbortSignal) => {
-    const [adminResult, menuResult] = await Promise.allSettled([
-      fetch("/api/admin/check", { signal }).then(async (res) => {
-        if (!res.ok) return false;
-        const data = await res.json();
-        return data.isAdmin === true;
-      }),
-      fetch("/api/menu-config", { signal }).then(async (res) => {
-        if (!res.ok) return DEFAULT_MENU_VISIBILITY;
-        const data = await res.json();
-        return normalizeMenuVisibility(data.visibility);
-      }),
-    ]);
-    if (signal?.aborted) return;
-    setNavigationAccess({
-      userId,
-      isAdmin: adminResult.status === "fulfilled" ? adminResult.value : false,
-      menuVisibility: menuResult.status === "fulfilled" ? menuResult.value : DEFAULT_MENU_VISIBILITY,
-    });
-  }, []);
-
-  const currentNavigationAccess = navigationAccess?.userId === session?.user.id
-    ? navigationAccess
-    : null;
+  const currentNavigationAccess = useNavigationAccess(session?.user.id);
   const navigationReady = currentNavigationAccess !== null;
   const isAdmin = currentNavigationAccess?.isAdmin ?? false;
   const menuVisibility = currentNavigationAccess?.menuVisibility ?? DEFAULT_MENU_VISIBILITY;
@@ -1054,19 +1026,16 @@ function ConsoleContent({ session, isPending }: {
     }
     if (!session) return;
 
-    const controller = new AbortController();
     const timeoutId = window.setTimeout(() => {
       void fetchUserInfo();
       void fetchKeyInfo();
       void fetchTenantStats();
-      void fetchNavigationAccess(session.user.id, controller.signal);
     }, 0);
 
     return () => {
       window.clearTimeout(timeoutId);
-      controller.abort();
     };
-  }, [isPending, session, router, fetchUserInfo, fetchKeyInfo, fetchTenantStats, fetchNavigationAccess]);
+  }, [isPending, session, router, fetchUserInfo, fetchKeyInfo, fetchTenantStats]);
 
   useEffect(() => {
     if (!mobileMenuOpen) return;
@@ -1220,42 +1189,7 @@ function ConsoleContent({ session, isPending }: {
           <Link href="/" className="whitespace-nowrap" aria-label="LCE">
             <LceBrand iconSize={32} textClassName="text-lg sm:text-xl" priority />
           </Link>
-          <nav className="order-3 flex w-full justify-center sm:order-none sm:w-auto sm:items-center sm:gap-1">
-            {!navigationReady ? (
-              <div aria-hidden="true" className="flex h-8 items-center gap-3 px-2">
-                <Skeleton className="h-3.5 w-12 bg-white/[0.06]" />
-                <Skeleton className="h-3.5 w-12 bg-white/[0.06]" />
-                <Skeleton className="h-3.5 w-12 bg-white/[0.06]" />
-              </div>
-            ) : (
-              <>
-            {(isAdmin || menuVisibility["top-console"] !== false) && (
-            <Link
-              href="/console"
-              className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-white border-b-2 border-cyan-400"
-            >
-              {t("console")}
-            </Link>
-            )}
-            {(isAdmin || menuVisibility["top-leaderboard"] !== false) && (
-            <Link
-              href="/leaderboard"
-              className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
-            >
-              {t("leaderboard")}
-            </Link>
-            )}
-            {(isAdmin || menuVisibility["top-status"] !== false) && (
-            <Link
-              href="/status"
-              className="px-2 sm:px-3 py-1.5 text-center text-xs sm:text-sm whitespace-nowrap text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition-colors"
-            >
-              {t("status")}
-            </Link>
-            )}
-              </>
-            )}
-          </nav>
+          <TopNav active="top-console" access={currentNavigationAccess} />
           <div className="flex items-center gap-1.5">
             <LanguageSwitcher />
             <Button
